@@ -111,11 +111,17 @@ export function App(props: AppProps): React.JSX.Element {
     await stream.send(raw)
   }, [props, session, stream, handleSlashEffect, exit])
 
+  useEffect(() => {
+    if (!primedQuit) return
+    const id = setTimeout(() => setPrimedQuit(false), 2000)
+    return () => clearTimeout(id)
+  }, [primedQuit])
+
   useInput((_input, key) => {
     if (key.escape) {
       if (stream.running) { stream.cancel(); return }
       if (primedQuit) { props.onExit(); exit() }
-      else { setPrimedQuit(true); setTimeout(() => setPrimedQuit(false), 2000) }
+      else { setPrimedQuit(true) }
     }
   })
 
