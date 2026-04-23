@@ -8,7 +8,6 @@ import { loadConfig } from './core/config/load'
 import { ProviderResolver } from './core/provider/resolver'
 import { SessionManager } from './core/session/manager'
 import { ToolRegistry } from './core/tools/registry'
-import { PermissionCache } from './core/permission/cache'
 import { PermissionChecker } from './core/permission/checker'
 import { PermissionBridge } from './core/permission/bridge'
 import { suggestPattern } from './core/permission/suggest'
@@ -67,7 +66,7 @@ async function main(): Promise<void> {
   const askUser = (call: PermissionCall) =>
     permBridge.ask({ call, suggestedPattern: suggestPattern(call) })
 
-  const permission = new PermissionChecker(new PermissionCache(), askUser)
+  const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
 
   const slash = new SlashRegistry()
   ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand].forEach(c => slash.register(c))

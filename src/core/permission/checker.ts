@@ -6,16 +6,16 @@ export type AskUser = (call: PermissionCall) => Promise<PermissionDecision>
 
 export class PermissionChecker {
   constructor(
-    private cache: PermissionCache,
+    private getCache: () => PermissionCache,
     private askUser: AskUser,
   ) {}
 
   async check(call: PermissionCall): Promise<PermissionDecision> {
     if (call.hint === 'none') return { allowed: true }
-    if (this.cache.isAllowed(call)) return { allowed: true }
+    if (this.getCache().isAllowed(call)) return { allowed: true }
     const decision = await this.askUser(call)
     if (decision.allowed && decision.remember) {
-      this.cache.add(decision.remember)
+      this.getCache().add(decision.remember)
     }
     return decision
   }

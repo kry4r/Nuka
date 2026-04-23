@@ -1,6 +1,6 @@
 // src/core/session/types.ts
 import type { Message, TokenUsage } from '../message/types'
-import type { PermissionRule } from '../permission/types'
+import type { PermissionCache } from '../permission/cache'
 import type { MessageQueue } from './queue'
 
 export type SessionMode = 'normal' | 'plan' | 'bypass'
@@ -12,7 +12,7 @@ export type Session = {
   model: string
   messages: Message[]
   totalUsage: TokenUsage
-  permissionCache: PermissionRule[]
+  permissionCache: PermissionCache
   queue: MessageQueue
   mode: SessionMode
   createdAt: number

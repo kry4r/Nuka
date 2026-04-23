@@ -6,7 +6,7 @@ import { PermissionCache } from '../../../src/core/permission/cache'
 describe('PermissionChecker', () => {
   it('auto-allows hint=none without prompting', async () => {
     const ask = vi.fn()
-    const checker = new PermissionChecker(new PermissionCache(), ask)
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
     const d = await checker.check({ toolName: 'Read', hint: 'none', input: {} })
     expect(d.allowed).toBe(true)
     expect(ask).not.toHaveBeenCalled()
@@ -16,7 +16,7 @@ describe('PermissionChecker', () => {
     const cache = new PermissionCache()
     cache.add({ scope: 'session', hint: 'write' })
     const ask = vi.fn()
-    const checker = new PermissionChecker(cache, ask)
+    const checker = new PermissionChecker(() => cache, ask)
     const d = await checker.check({ toolName: 'Write', hint: 'write', input: { path: 'a' } })
     expect(d.allowed).toBe(true)
     expect(ask).not.toHaveBeenCalled()
@@ -28,7 +28,7 @@ describe('PermissionChecker', () => {
       allowed: true,
       remember: { scope: 'session', hint: 'write' },
     })
-    const checker = new PermissionChecker(cache, ask)
+    const checker = new PermissionChecker(() => cache, ask)
     const d = await checker.check({ toolName: 'Write', hint: 'write', input: { path: 'a' } })
     expect(d.allowed).toBe(true)
     expect(ask).toHaveBeenCalledOnce()
@@ -37,7 +37,7 @@ describe('PermissionChecker', () => {
 
   it('propagates rejection', async () => {
     const ask = vi.fn().mockResolvedValue({ allowed: false, reason: 'no' })
-    const checker = new PermissionChecker(new PermissionCache(), ask)
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
     const d = await checker.check({ toolName: 'Bash', hint: 'exec', input: { command: 'x' } })
     expect(d.allowed).toBe(false)
     expect(d.reason).toBe('no')

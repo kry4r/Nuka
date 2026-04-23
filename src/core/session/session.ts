@@ -2,6 +2,7 @@
 import { ulid } from 'ulid'
 import type { Session } from './types'
 import { MessageQueue } from './queue'
+import { PermissionCache } from '../permission/cache'
 
 export function createSession(opts: { providerId: string; model: string }): Session {
   return {
@@ -10,7 +11,7 @@ export function createSession(opts: { providerId: string; model: string }): Sess
     model: opts.model,
     messages: [],
     totalUsage: { inputTokens: 0, outputTokens: 0 },
-    permissionCache: [],
+    permissionCache: new PermissionCache(),
     queue: new MessageQueue(),
     mode: 'normal',
     createdAt: Date.now(),
@@ -26,7 +27,10 @@ export function branchSession(parent: Session): Session {
   child.parentId = parent.id
   child.messages = JSON.parse(JSON.stringify(parent.messages))
   child.totalUsage = { ...parent.totalUsage }
-  child.permissionCache = parent.permissionCache.map(r => ({ ...r }))
+  // deep-copy permission rules from parent into a fresh cache instance
+  for (const rule of parent.permissionCache.list()) {
+    child.permissionCache.add(rule)
+  }
   child.mode = parent.mode
   return child
 }

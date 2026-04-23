@@ -97,7 +97,6 @@ export async function* runAgent(
         hint: tool.needsPermission(call.input),
         input: call.input,
       })
-      if (decision.remember) session.permissionCache.push(decision.remember)
       const result = decision.allowed
         ? await tool.run(call.input, { signal, cwd: process.cwd() })
         : { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
