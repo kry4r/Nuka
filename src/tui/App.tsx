@@ -16,6 +16,7 @@ import type { AgentEvent } from '../core/agent/events'
 import type { SlashRegistry } from '../slash/registry'
 import type { Session } from '../core/session/types'
 import type { PermissionCall, PermissionDecision } from '../core/permission/types'
+import type { PermissionBridge } from '../core/permission/bridge'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 
@@ -35,6 +36,7 @@ export type AppProps = {
   providers: ProviderResolver
   config: Config
   runAgent: (input: { text: string }, session: Session, signal: AbortSignal) => AsyncIterable<AgentEvent>
+  permissionBridge: PermissionBridge
   onExit: () => void
   onOpenEditor: () => void
   compactSession: (s: Session) => Promise<void>
@@ -52,18 +54,13 @@ export function App(props: AppProps): React.JSX.Element {
   const [primedQuit, setPrimedQuit] = useState(false)
 
   useEffect(() => {
-    ;(globalThis as any).__NUKA_PERM__ = (
-      payload: { call: any; suggestedPattern?: string },
-      resolve: (d: any) => void,
-    ) => {
+    props.permissionBridge.setHandler((payload, resolve) => {
       setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, resolve })
-    }
+    })
     return () => {
-      if ((globalThis as any).__NUKA_PERM__) {
-        delete (globalThis as any).__NUKA_PERM__
-      }
+      props.permissionBridge.setHandler(null)
     }
-  }, [])
+  }, [props.permissionBridge])
 
   const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
     props.runAgent(i, session, signal)

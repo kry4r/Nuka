@@ -5,6 +5,7 @@ import { App } from '../../src/tui/App'
 import { SessionManager } from '../../src/core/session/manager'
 import { SlashRegistry } from '../../src/slash/registry'
 import { HelpCommand } from '../../src/slash/help'
+import { PermissionBridge } from '../../src/core/permission/bridge'
 
 describe('App', () => {
   it('boots with welcome screen when no messages exist', () => {
@@ -20,6 +21,7 @@ describe('App', () => {
         providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
         config={{ providers: [], active: { providerId: 'p' } } as any}
         runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
         onExit={() => {}}
         onOpenEditor={() => {}}
         compactSession={async () => {}}

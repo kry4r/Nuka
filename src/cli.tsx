@@ -10,6 +10,7 @@ import { SessionManager } from './core/session/manager'
 import { ToolRegistry } from './core/tools/registry'
 import { PermissionCache } from './core/permission/cache'
 import { PermissionChecker } from './core/permission/checker'
+import { PermissionBridge } from './core/permission/bridge'
 import { suggestPattern } from './core/permission/suggest'
 import { SlashRegistry } from './slash/registry'
 import { ExitCommand } from './slash/exit'
@@ -34,7 +35,7 @@ import { compactSession } from './core/compact/compact'
 import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
-import type { PermissionCall, PermissionDecision } from './core/permission/types'
+import type { PermissionCall } from './core/permission/types'
 
 async function main(): Promise<void> {
   const cwd = process.cwd()
@@ -62,18 +63,9 @@ async function main(): Promise<void> {
   const tools = new ToolRegistry()
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool].forEach(t => tools.register(t as any))
 
-  // askUser is populated by App via a side channel; wire a promise-based bridge:
-  type PermQ = {
-    resolve: (d: PermissionDecision) => void
-    payload: { call: PermissionCall; suggestedPattern?: string }
-  }
-  const pendingPerm: { current: PermQ | null } = { current: null }
+  const permBridge = new PermissionBridge()
   const askUser = (call: PermissionCall) =>
-    new Promise<PermissionDecision>((resolve) => {
-      pendingPerm.current = { resolve, payload: { call, suggestedPattern: suggestPattern(call) } }
-      // Trigger App rerender by setting window global — replaced with a proper event bus on follow-up iteration.
-      ;(globalThis as any).__NUKA_PERM__?.(pendingPerm.current.payload, resolve)
-    })
+    permBridge.ask({ call, suggestedPattern: suggestPattern(call) })
 
   const permission = new PermissionChecker(new PermissionCache(), askUser)
 
@@ -102,6 +94,7 @@ async function main(): Promise<void> {
       providers={providers}
       config={config}
       runAgent={runAgent}
+      permissionBridge={permBridge}
       onExit={() => process.exit(0)}
       onOpenEditor={() => {
         const editor = process.env.EDITOR ?? 'vi'
