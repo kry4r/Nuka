@@ -1,28 +1,12 @@
 // src/tui/dialogs/ModelPicker.tsx
 import React, { useState, useRef, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
-// flushSyncFromReconciler forces state updates and the commit phase to run
-// synchronously, which is required so that tests using ink-testing-library's
-// stdin.write can observe DOM changes in the same tick.
-// @ts-ignore — ink's reconciler is an internal module used here to force
-// synchronous re-renders (via flushSyncFromReconciler) so that tests using
-// ink-testing-library can observe state changes after stdin.write() calls.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import reconciler from '../../../node_modules/ink/build/reconciler.js'
 import type { ProviderConfig } from '../../core/config/schema'
 import { defaultPalette as P } from '../theme'
 
 type View = { kind: 'root' } | { kind: 'models'; providerId: string }
 
 type MenuItem = { label: string; action: () => void | Promise<void> }
-
-// Wrap a setState call so the re-render is flushed synchronously.
-// This lets tests observe updated frames immediately after stdin.write().
-function syncSet(fn: () => void): void {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-  ;(reconciler as { flushSyncFromReconciler: (fn: () => void) => void }).flushSyncFromReconciler(fn)
-}
 
 export function ModelPicker(props: {
   providers: ProviderConfig[]
@@ -50,11 +34,9 @@ export function ModelPicker(props: {
           ...props.providers.map(p => ({
             label: `${p.name}    ${p.baseUrl}`,
             action: () => {
-              syncSet(() => {
-                setModels(p.models ?? [])
-                setView({ kind: 'models', providerId: p.id })
-                setCursor(0)
-              })
+              setModels(p.models ?? [])
+              setView({ kind: 'models', providerId: p.id })
+              setCursor(0)
             },
           })),
           { label: '[+] Add provider…', action: props.onAddProvider },
@@ -69,13 +51,15 @@ export function ModelPicker(props: {
               label: '[↻] Refresh from /v1/models',
               action: async () => {
                 const fresh = await props.onRefresh(currentProvider.id)
-                syncSet(() => { setModels(fresh); setCursor(0) })
+                setModels(fresh)
+                setCursor(0)
               },
             },
             {
               label: '[← Back]',
               action: () => {
-                syncSet(() => { setView({ kind: 'root' }); setCursor(0) })
+                setView({ kind: 'root' })
+                setCursor(0)
               },
             },
           ]
@@ -103,7 +87,8 @@ export function ModelPicker(props: {
       }
     } else if (key.escape) {
       if (currentView.kind === 'models') {
-        syncSet(() => { setView({ kind: 'root' }); setCursor(0) })
+        setView({ kind: 'root' })
+        setCursor(0)
       } else {
         props.onCancel()
       }
