@@ -1,0 +1,114 @@
+// src/core/agent/loop.ts
+import type { Session } from '../session/types'
+import type { AgentEvent } from './events'
+import type { ProviderEvent } from '../provider/types'
+import type { ProviderResolver } from '../provider/resolver'
+import type { ToolRegistry } from '../tools/registry'
+import type { PermissionChecker } from '../permission/checker'
+import { makeUserMessage, makeToolMessage, emptyAssistant } from '../message/factories'
+import { buildSystemPrompt } from './systemPrompt'
+import { addUsage } from '../session/telemetry'
+import type { AssistantMessage, ContentBlock } from '../message/types'
+
+export type RunAgentDeps = {
+  provider: ProviderResolver
+  tools: ToolRegistry
+  permission: PermissionChecker
+  systemPromptInput?: () => Parameters<typeof buildSystemPrompt>[0]
+}
+
+function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string; input: unknown }> {
+  return m.content.flatMap(b =>
+    b.type === 'tool_use' ? [{ id: b.id, name: b.name, input: b.input }] : [],
+  )
+}
+
+function applyToAssistant(m: AssistantMessage, ev: ProviderEvent): void {
+  if (ev.type === 'text_delta') {
+    const last = m.content[m.content.length - 1]
+    if (last && last.type === 'text') last.text += ev.text
+    else m.content.push({ type: 'text', text: ev.text } as ContentBlock)
+  } else if (ev.type === 'tool_use_start') {
+    m.content.push({ type: 'tool_use', id: ev.id, name: ev.name, input: {} })
+  } else if (ev.type === 'tool_use_stop') {
+    for (let i = m.content.length - 1; i >= 0; i--) {
+      const b = m.content[i]
+      if (!b) continue
+      if (b.type === 'tool_use' && b.id === ev.id) { b.input = ev.input; break }
+    }
+  } else if (ev.type === 'message_stop') {
+    m.usage = ev.usage
+    m.stopReason = ev.stopReason
+  }
+}
+
+export async function* runAgent(
+  input: { text: string },
+  session: Session,
+  deps: RunAgentDeps,
+  signal: AbortSignal,
+): AsyncIterable<AgentEvent> {
+  session.messages.push(makeUserMessage(input))
+
+  while (!signal.aborted) {
+    const { provider, model } = deps.provider.resolveFor(session)
+    const system = deps.systemPromptInput
+      ? buildSystemPrompt(deps.systemPromptInput())
+      : ''
+    const stream = provider.stream(
+      {
+        model,
+        system,
+        messages: session.messages,
+        tools: deps.tools.listSpecs(),
+      },
+      signal,
+    )
+
+    const assistant = emptyAssistant()
+    for await (const ev of stream) {
+      if (ev.type === 'text_delta') yield { type: 'text_delta', text: ev.text }
+      applyToAssistant(assistant, ev)
+    }
+    session.messages.push(assistant)
+    if (assistant.usage) session.totalUsage = addUsage(session.totalUsage, assistant.usage)
+
+    const calls = extractToolCalls(assistant)
+    if (calls.length === 0) {
+      yield {
+        type: 'turn_end',
+        stopReason: assistant.stopReason ?? 'end_turn',
+        usage: assistant.usage ?? { inputTokens: 0, outputTokens: 0 },
+      }
+      break
+    }
+
+    for (const call of calls) {
+      if (signal.aborted) break
+      const tool = deps.tools.find(call.name)
+      if (!tool) {
+        yield { type: 'tool_result', id: call.id, output: `Unknown tool: ${call.name}`, isError: true }
+        session.messages.push(makeToolMessage(call.id, { output: `Unknown tool: ${call.name}`, isError: true }))
+        continue
+      }
+      yield { type: 'tool_call', id: call.id, name: call.name, input: call.input }
+      const decision = await deps.permission.check({
+        toolName: tool.name,
+        hint: tool.needsPermission(call.input),
+        input: call.input,
+      })
+      if (decision.remember) session.permissionCache.push(decision.remember)
+      const result = decision.allowed
+        ? await tool.run(call.input, { signal, cwd: process.cwd() })
+        : { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
+      session.messages.push(makeToolMessage(call.id, result))
+      yield { type: 'tool_result', id: call.id, output: result.output, isError: result.isError }
+    }
+
+    const drained = session.queue.drain()
+    if (drained.length > 0) {
+      session.messages.push(makeUserMessage({ text: drained.join('\n\n') }))
+      yield { type: 'queued_message_flushed', count: drained.length }
+    }
+  }
+}
