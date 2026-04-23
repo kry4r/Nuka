@@ -1,23 +1,12 @@
 // scripts/build.mjs
 import { build } from 'esbuild'
-import { chmod } from 'node:fs/promises'
+import { chmod, readFile } from 'node:fs/promises'
 
-// Stub `react-devtools-core` — ink imports it only under isDev() which is
-// false in bundled production runs. Resolving it to an empty module avoids a
-// bundle-time error without pulling in the actual devtools package.
-const stubOptionalModulesPlugin = {
-  name: 'stub-optional-modules',
-  setup(build) {
-    build.onResolve({ filter: /^react-devtools-core$/ }, (args) => ({
-      path: args.path,
-      namespace: 'stub-empty',
-    }))
-    build.onLoad({ filter: /.*/, namespace: 'stub-empty' }, () => ({
-      contents: 'export default {}',
-      loader: 'js',
-    }))
-  },
-}
+// Read runtime dependencies from package.json and externalize them so esbuild
+// does not bundle them. When the CLI is installed via `npm i -g` (or npx),
+// these packages are present in node_modules and are resolved at runtime.
+const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+const external = [...Object.keys(pkg.dependencies ?? {}), 'fsevents']
 
 await build({
   entryPoints: ['src/cli.tsx'],
@@ -36,11 +25,7 @@ await build({
       'const require = __nuka_createRequire(import.meta.url);',
     ].join('\n'),
   },
-  external: [
-    // Native / optional deps that should resolve at runtime.
-    'fsevents',
-  ],
-  plugins: [stubOptionalModulesPlugin],
+  external,
   logLevel: 'info',
 })
 
