@@ -1,0 +1,58 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import path from 'node:path'
+import type { ProviderConfig } from './schema'
+import { ConfigSchema } from './schema'
+
+function globalConfigFile(home: string): string {
+  return path.join(home, '.nuka', 'config.yaml')
+}
+
+async function readConfig(home: string): Promise<any> {
+  try {
+    const text = await readFile(globalConfigFile(home), 'utf8')
+    return parseYaml(text) ?? {}
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw err
+  }
+}
+
+async function writeConfig(home: string, obj: unknown): Promise<void> {
+  await mkdir(path.join(home, '.nuka'), { recursive: true })
+  ConfigSchema.parse(obj) // validate before writing
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+}
+
+export async function saveActiveSelection(home: string, providerId: string): Promise<void> {
+  const obj = await readConfig(home)
+  obj.active = { providerId }
+  await writeConfig(home, obj)
+}
+
+export async function saveProviderSelectedModel(
+  home: string,
+  providerId: string,
+  model: string,
+): Promise<void> {
+  const obj = await readConfig(home)
+  const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
+  const p = list.find(x => x.id === providerId)
+  if (!p) throw new Error(`provider not found: ${providerId}`)
+  p.selectedModel = model
+  if (!p.models?.includes(model)) p.models = [...(p.models ?? []), model]
+  obj.providers = list
+  await writeConfig(home, obj)
+}
+
+export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
+  const obj = await readConfig(home)
+  const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
+  if (list.some(p => p.id === provider.id)) {
+    throw new Error(`provider id already exists: ${provider.id}`)
+  }
+  list.push(provider)
+  obj.providers = list
+  if (!obj.active) obj.active = { providerId: provider.id }
+  await writeConfig(home, obj)
+}

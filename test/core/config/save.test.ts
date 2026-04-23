@@ -1,0 +1,49 @@
+import { describe, it, expect } from 'vitest'
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import os from 'node:os'
+import { saveActiveSelection, saveProviderSelectedModel, addProvider } from '../../../src/core/config/save'
+
+function home(): string {
+  const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-'))
+  mkdirSync(join(h, '.nuka'))
+  writeFileSync(
+    join(h, '.nuka', 'config.yaml'),
+    `providers:
+  - id: p1
+    name: A
+    format: anthropic
+    baseUrl: https://api.anthropic.com
+    models: [claude-sonnet-4-6]
+    selectedModel: claude-sonnet-4-6
+active: { providerId: p1 }
+`,
+  )
+  return h
+}
+
+describe('config save', () => {
+  it('saveActiveSelection updates active.providerId', async () => {
+    const h = home()
+    await saveActiveSelection(h, 'p1')
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toMatch(/providerId:\s*p1/)
+  })
+
+  it('saveProviderSelectedModel updates selectedModel for a given provider', async () => {
+    const h = home()
+    await saveProviderSelectedModel(h, 'p1', 'opus-4-7')
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toMatch(/selectedModel:\s*opus-4-7/)
+  })
+
+  it('addProvider appends a new provider', async () => {
+    const h = home()
+    await addProvider(h, {
+      id: 'p2', name: 'X', format: 'openai', baseUrl: 'https://x', models: ['m1'],
+    })
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toContain('id: p2')
+    expect(txt).toContain('id: p1')
+  })
+})
