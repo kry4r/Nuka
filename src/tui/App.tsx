@@ -1,5 +1,5 @@
 // src/tui/App.tsx
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { Box, useApp, useInput } from 'ink'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
@@ -50,6 +50,20 @@ export function App(props: AppProps): React.JSX.Element {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
+
+  useEffect(() => {
+    ;(globalThis as any).__NUKA_PERM__ = (
+      payload: { call: any; suggestedPattern?: string },
+      resolve: (d: any) => void,
+    ) => {
+      setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, resolve })
+    }
+    return () => {
+      if ((globalThis as any).__NUKA_PERM__) {
+        delete (globalThis as any).__NUKA_PERM__
+      }
+    }
+  }, [])
 
   const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
     props.runAgent(i, session, signal)
