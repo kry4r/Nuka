@@ -219,6 +219,7 @@ export function App(props: AppProps): React.JSX.Element {
               items={session.messages}
               streaming={streamingMsg}
               resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
+              resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
             />}
       </Box>
 
