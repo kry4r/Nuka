@@ -13,6 +13,12 @@ export type ToolContext = {
   signal: AbortSignal
   cwd: string
   onProgress?: (msg: string) => void
+  /**
+   * Typed progress callback. Available when the tool declares
+   * progressType === 'object'. The payload is JSON-serialized and emitted
+   * as the text of a tool_progress event.
+   */
+  onProgressTyped?: <P extends Record<string, unknown>>(payload: P) => void
 }
 
 export interface Tool<I = unknown> {
@@ -52,6 +58,13 @@ export interface Tool<I = unknown> {
    * alias → the conflicting alias is skipped with a warning.
    */
   aliases?: string[]
+  /**
+   * Controls how progress is emitted:
+   * - 'line'   (default): tool uses onProgress(string) — unchanged behavior
+   * - 'object': tool uses onProgressTyped(payload) — payload is
+   *             JSON.stringify'd into the tool_progress event text field
+   */
+  progressType?: 'line' | 'object'
   needsPermission: (input: I) => PermissionHint
   run: (input: I, ctx: ToolContext) => Promise<ToolResult>
 }
