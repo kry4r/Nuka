@@ -37,6 +37,8 @@ import type { Session } from './core/session/types'
 import type { PermissionCall } from './core/permission/types'
 import { loadSkills } from './core/skill/loader'
 import { makeSkillTool } from './core/skill/skillTool'
+import { SessionStore, DebouncedMetaWriter } from './core/session/store'
+import { sessionsDir } from './core/session/paths'
 
 async function main(): Promise<void> {
   const cwd = process.cwd()
@@ -51,7 +53,9 @@ async function main(): Promise<void> {
   }
 
   const providers = new ProviderResolver(config)
-  const sessions = new SessionManager()
+  const store = new SessionStore({ dir: sessionsDir(os.homedir()) })
+  const metaWriter = new DebouncedMetaWriter(store)
+  const sessions = new SessionManager({ store, metaWriter })
   const firstProvider = config.providers[0]!
   const activeProviderId = config.active.providerId || firstProvider.id
   const activeProvider = config.providers.find(p => p.id === activeProviderId)
@@ -80,6 +84,10 @@ async function main(): Promise<void> {
   const platform = process.platform
   const gitBranch = currentGitBranch(cwd)
 
+  process.on('SIGINT', () => {
+    metaWriter.flush().finally(() => process.exit(0))
+  })
+
   const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) =>
     runAgentLoop(input, session, {
       provider: providers,
@@ -89,6 +97,7 @@ async function main(): Promise<void> {
         cwd, platform, shell, nodeVersion, gitBranch, skills,
       }),
       skills,
+      persist: sessions.persist,
     }, signal)
 
   render(

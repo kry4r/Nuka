@@ -8,7 +8,8 @@ import type { PermissionChecker } from '../permission/checker'
 import { makeUserMessage, makeToolMessage, emptyAssistant, makeSystemMessage } from '../message/factories'
 import { buildSystemPrompt } from './systemPrompt'
 import { addUsage } from '../session/telemetry'
-import type { AssistantMessage, ContentBlock } from '../message/types'
+import { appendMessage } from '../session/session'
+import type { AssistantMessage, ContentBlock, Message } from '../message/types'
 import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
 
@@ -18,6 +19,7 @@ export type RunAgentDeps = {
   permission: PermissionChecker
   systemPromptInput?: () => Parameters<typeof buildSystemPrompt>[0]
   skills?: Skill[]
+  persist?: (session: Session, msg: Message) => void
 }
 
 function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string; input: unknown }> {
@@ -54,10 +56,10 @@ export async function* runAgent(
   if (deps.skills && deps.skills.length > 0) {
     const matched = matchKeywordSkills(deps.skills, input.text)
     for (const skill of matched) {
-      session.messages.push(makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`))
+      appendMessage(session, makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`), deps.persist)
     }
   }
-  session.messages.push(makeUserMessage(input))
+  appendMessage(session, makeUserMessage(input), deps.persist)
 
   while (!signal.aborted) {
     const { provider, model } = deps.provider.resolveFor(session)
@@ -79,7 +81,7 @@ export async function* runAgent(
       if (ev.type === 'text_delta') yield { type: 'text_delta', text: ev.text }
       applyToAssistant(assistant, ev)
     }
-    session.messages.push(assistant)
+    appendMessage(session, assistant, deps.persist)
     if (assistant.usage) session.totalUsage = addUsage(session.totalUsage, assistant.usage)
 
     const calls = extractToolCalls(assistant)
@@ -97,7 +99,7 @@ export async function* runAgent(
       const tool = deps.tools.find(call.name)
       if (!tool) {
         yield { type: 'tool_result', id: call.id, output: `Unknown tool: ${call.name}`, isError: true }
-        session.messages.push(makeToolMessage(call.id, { output: `Unknown tool: ${call.name}`, isError: true }))
+        appendMessage(session, makeToolMessage(call.id, { output: `Unknown tool: ${call.name}`, isError: true }), deps.persist)
         continue
       }
       yield { type: 'tool_call', id: call.id, name: call.name, input: call.input }
@@ -109,13 +111,13 @@ export async function* runAgent(
       const result = decision.allowed
         ? await tool.run(call.input, { signal, cwd: process.cwd() })
         : { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
-      session.messages.push(makeToolMessage(call.id, result))
+      appendMessage(session, makeToolMessage(call.id, result), deps.persist)
       yield { type: 'tool_result', id: call.id, output: result.output, isError: result.isError }
     }
 
     const drained = session.queue.drain()
     if (drained.length > 0) {
-      session.messages.push(makeUserMessage({ text: drained.join('\n\n') }))
+      appendMessage(session, makeUserMessage({ text: drained.join('\n\n') }), deps.persist)
       yield { type: 'queued_message_flushed', count: drained.length }
     }
   }

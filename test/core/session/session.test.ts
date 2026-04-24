@@ -1,7 +1,8 @@
 // test/core/session/session.test.ts
-import { describe, it, expect } from 'vitest'
-import { createSession, branchSession } from '../../../src/core/session/session'
+import { describe, it, expect, vi } from 'vitest'
+import { createSession, branchSession, appendMessage } from '../../../src/core/session/session'
 import { PermissionCache } from '../../../src/core/permission/cache'
+import type { Message } from '../../../src/core/message/types'
 
 describe('session factory', () => {
   it('createSession initializes messages empty with given provider/model', () => {
@@ -47,5 +48,29 @@ describe('session factory', () => {
     // adding to child does not affect parent
     child.permissionCache.add({ scope: 'session', hint: 'exec' })
     expect(parent.permissionCache.list()).toHaveLength(1)
+  })
+})
+
+describe('appendMessage', () => {
+  it('pushes msg to session.messages, bumps updatedAt, and calls sink with session + msg', () => {
+    const session = createSession({ providerId: 'p1', model: 'x' })
+    const before = session.updatedAt
+    const msg: Message = { role: 'user', id: 'u1', ts: Date.now(), content: [{ type: 'text', text: 'hi' }] }
+    const sink = vi.fn()
+
+    appendMessage(session, msg, sink)
+
+    expect(session.messages).toHaveLength(1)
+    expect(session.messages[0]).toBe(msg)
+    expect(session.updatedAt).toBeGreaterThanOrEqual(before)
+    expect(sink).toHaveBeenCalledOnce()
+    expect(sink).toHaveBeenCalledWith(session, msg)
+  })
+
+  it('works without a sink', () => {
+    const session = createSession({ providerId: 'p1', model: 'x' })
+    const msg: Message = { role: 'user', id: 'u2', ts: Date.now(), content: [] }
+    expect(() => appendMessage(session, msg)).not.toThrow()
+    expect(session.messages).toHaveLength(1)
   })
 })

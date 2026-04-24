@@ -1,15 +1,25 @@
 // src/core/session/manager.ts
 import type { Session } from './types'
+import type { Message } from '../message/types'
 import { createSession, branchSession } from './session'
+import type { SessionStore, DebouncedMetaWriter } from './store'
 
 export class SessionManager {
   private sessions: Session[] = []
   private activeId: string | undefined
+  private store: SessionStore | undefined
+  private metaWriter: DebouncedMetaWriter | undefined
+
+  constructor(opts?: { store?: SessionStore; metaWriter?: DebouncedMetaWriter }) {
+    this.store = opts?.store
+    this.metaWriter = opts?.metaWriter
+  }
 
   start(opts: { providerId: string; model: string }): Session {
     const s = createSession(opts)
     this.sessions.push(s)
     this.activeId = s.id
+    this.metaWriter?.schedule(s)
     return s
   }
 
@@ -21,6 +31,7 @@ export class SessionManager {
     })
     this.sessions.push(s)
     this.activeId = s.id
+    this.metaWriter?.schedule(s)
     return s
   }
 
@@ -30,6 +41,7 @@ export class SessionManager {
     const forked = branchSession(base)
     this.sessions.push(forked)
     this.activeId = forked.id
+    this.metaWriter?.schedule(forked)
     return forked
   }
 
@@ -46,5 +58,14 @@ export class SessionManager {
 
   list(): Session[] {
     return [...this.sessions]
+  }
+
+  persist = (session: Session, msg: Message): void => {
+    if (this.store) {
+      this.store.appendMessage(session.id, msg).catch(err =>
+        console.warn('[SessionManager] appendMessage failed:', err),
+      )
+    }
+    this.metaWriter?.schedule(session)
   }
 }

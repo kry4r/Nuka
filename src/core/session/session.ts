@@ -1,6 +1,7 @@
 // src/core/session/session.ts
 import { ulid } from 'ulid'
 import type { Session } from './types'
+import type { Message } from '../message/types'
 import { MessageQueue } from './queue'
 import { PermissionCache } from '../permission/cache'
 
@@ -17,6 +18,16 @@ export function createSession(opts: { providerId: string; model: string }): Sess
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
+}
+
+export function appendMessage(
+  session: Session,
+  msg: Message,
+  sink?: (s: Session, m: Message) => void,
+): void {
+  session.messages.push(msg)
+  session.updatedAt = Date.now()
+  sink?.(session, msg)
 }
 
 export function branchSession(parent: Session): Session {
