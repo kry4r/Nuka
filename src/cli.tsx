@@ -58,6 +58,7 @@ import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
+import { validatePlugin, formatReport } from './core/plugin/validate'
 import type { McpServerConfig } from './core/mcp/types'
 
 const argv = process.argv.slice(2)
@@ -113,6 +114,24 @@ if (argv[0] === 'plugin' && argv[1] === 'list') {
       process.exit(1)
     }
   })()
+} else if (argv[0] === 'plugin' && argv[1] === 'validate' && argv[2]) {
+  const pluginDir = path.resolve(argv[2])
+  ;(async () => {
+    try {
+      const report = await validatePlugin(pluginDir)
+      const text = formatReport(report, pluginDir)
+      if (report.errors.length > 0) {
+        process.stderr.write(text + '\n')
+        process.exit(2)
+      } else {
+        process.stdout.write(text + '\n')
+        process.exit(0)
+      }
+    } catch (err) {
+      process.stderr.write(`plugin validate failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
 } else if (argv[0] === 'config' && argv[1] === 'show') {
   // nuka config show [--scope <enterprise|user|project|local>]
   ;(async () => {
@@ -134,7 +153,6 @@ if (argv[0] === 'plugin' && argv[1] === 'list') {
       const result = await loadScopedConfig({ projectCwd: process.cwd() })
 
       if (scopeArg !== undefined) {
-        // Print only the specified scope's contribution
         const scopeData = result.perScope[scopeArg]
         if (scopeData === null) {
           process.stdout.write(`# scope '${scopeArg}': no config found\n`)
@@ -143,7 +161,6 @@ if (argv[0] === 'plugin' && argv[1] === 'list') {
           process.stdout.write(JSON.stringify(scopeData, null, 2) + '\n')
         }
       } else {
-        // Print effective config with source annotations
         process.stdout.write('# effective config (merged from all scopes)\n')
         process.stdout.write(JSON.stringify(result.effective, null, 2) + '\n')
         if (Object.keys(result.sources).length > 0) {
