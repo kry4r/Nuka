@@ -2,7 +2,7 @@ import type { McpServerConfig, McpConnectionStatus, McpToolDescriptor, McpResour
 import { Client, StdioClientTransport, StreamableHTTPClientTransport } from './sdkBridge'
 import type { ContentBlock } from '../tools/content'
 import { mcpTmpDir, mimeToExt } from './paths'
-import { truncateMcpResult } from './truncate'
+import { truncateMcpResult, truncateDescription } from './truncate'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -40,6 +40,7 @@ export class McpClient {
   private maxResultChars: number
   private connectTimeoutMs: number
   private requestTimeoutMs: number
+  private serverInstructions_?: string
 
   constructor(opts: {
     name: string
@@ -59,6 +60,15 @@ export class McpClient {
 
   get status(): McpConnectionStatus {
     return this.status_
+  }
+
+  /**
+   * Server-provided instructions, if any. Captured from the SDK's
+   * `getInstructions()` once connected, and truncated to
+   * `MAX_MCP_DESCRIPTION_CHARS` to protect the system prompt.
+   */
+  get serverInstructions(): string | undefined {
+    return this.serverInstructions_
   }
 
   private emit(s: McpConnectionStatus): void {
@@ -90,6 +100,16 @@ export class McpClient {
         'connect',
       )
       this.sdk = client
+
+      // Capture server-supplied instructions (if any) and cap their length so
+      // a chatty server cannot balloon the system prompt.
+      const rawInstructions =
+        typeof (client as { getInstructions?: () => string | undefined }).getInstructions === 'function'
+          ? (client as { getInstructions: () => string | undefined }).getInstructions()
+          : undefined
+      this.serverInstructions_ = rawInstructions
+        ? truncateDescription(rawInstructions)
+        : undefined
 
       const tools = await this.listTools()
       const resources = await this.listResources()
@@ -249,6 +269,7 @@ export class McpClient {
     this.sdk = undefined
     this.toolsCache = undefined
     this.resourcesCache = undefined
+    this.serverInstructions_ = undefined
     this.status_ = { kind: 'idle' }
   }
 }

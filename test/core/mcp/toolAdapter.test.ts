@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mcpToolsFor } from '../../../src/core/mcp/toolAdapter'
 import type { McpToolDescriptor } from '../../../src/core/mcp/types'
+import { MAX_MCP_DESCRIPTION_CHARS } from '../../../src/core/mcp/truncate'
 
 function makeMockClient(
   name: string,
@@ -122,5 +123,13 @@ describe('mcpToolsFor', () => {
     const client = makeMockClient('srv', [{ name: 'plain' }])
     const tools = await mcpToolsFor(client)
     expect(tools[0]?.annotations).toBeUndefined()
+  })
+
+  it('truncates 5000-char descriptions to MAX_MCP_DESCRIPTION_CHARS with an ellipsis', async () => {
+    const huge = 'x'.repeat(5000)
+    const client = makeMockClient('srv', [{ name: 'foo', description: huge }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]!.description.length).toBe(MAX_MCP_DESCRIPTION_CHARS)
+    expect(tools[0]!.description.endsWith('…')).toBe(true)
   })
 })

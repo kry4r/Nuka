@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => {
     resources: [{ uri: 'res://a', name: 'a', mimeType: 'text/plain', description: 'resource a' }],
   }
 
+  let fakeInstructions: string | undefined = undefined
+
   const sdkInstances: Array<{
     connect: ReturnType<typeof vi.fn>
     listTools: ReturnType<typeof vi.fn>
@@ -25,6 +27,7 @@ const mocks = vi.hoisted(() => {
     callTool: ReturnType<typeof vi.fn>
     readResource: ReturnType<typeof vi.fn>
     close: ReturnType<typeof vi.fn>
+    getInstructions: ReturnType<typeof vi.fn>
   }> = []
 
   const FakeClient = vi.fn().mockImplementation(() => {
@@ -37,6 +40,7 @@ const mocks = vi.hoisted(() => {
       callTool: vi.fn().mockImplementation(async () => fakeCallToolResult),
       readResource: vi.fn().mockImplementation(async () => fakeReadResourceResult),
       close: vi.fn().mockResolvedValue(undefined),
+      getInstructions: vi.fn().mockImplementation(() => fakeInstructions),
     }
     sdkInstances.push(instance)
     return instance
@@ -53,6 +57,7 @@ const mocks = vi.hoisted(() => {
     setConnectError(e: Error | null) { fakeConnectError = e },
     setCallToolResult(r: { content: unknown[]; isError?: boolean }) { fakeCallToolResult = r },
     setReadResourceResult(r: { contents: unknown[] }) { fakeReadResourceResult = r },
+    setInstructions(s: string | undefined) { fakeInstructions = s },
     clearInstances() { sdkInstances.length = 0 },
   }
 })
@@ -226,6 +231,46 @@ describe('McpClient callTool', () => {
     await client.connect()
     const result = await client.callTool('foo', {})
     expect(result.isError).toBe(true)
+  })
+})
+
+describe('McpClient serverInstructions', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.setInstructions(undefined)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('captures instructions from the SDK after connect', async () => {
+    mocks.setInstructions('use this server wisely')
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    expect(client.serverInstructions).toBe('use this server wisely')
+  })
+
+  it('truncates instructions to MAX_MCP_DESCRIPTION_CHARS', async () => {
+    mocks.setInstructions('x'.repeat(5000))
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    const instructions = client.serverInstructions!
+    expect(instructions.length).toBe(2048)
+    expect(instructions.endsWith('…')).toBe(true)
+  })
+
+  it('leaves serverInstructions undefined when server provides none', async () => {
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    expect(client.serverInstructions).toBeUndefined()
   })
 })
 
