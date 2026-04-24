@@ -4,6 +4,7 @@ import { McpServerConfigSchema } from '../config/schema'
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>
 export type McpStdioServerConfig = Extract<McpServerConfig, { type: 'stdio' }>
 export type McpHttpServerConfig = Extract<McpServerConfig, { type: 'http' }>
+export type McpSseServerConfig = Extract<McpServerConfig, { type: 'sse' }>
 
 export type McpConnectionStatus =
   | { kind: 'idle' }

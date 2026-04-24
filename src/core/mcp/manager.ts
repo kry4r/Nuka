@@ -1,14 +1,29 @@
 import type { McpServerConfig, McpConnectionStatus } from './types'
+import type { PermissionBridge } from '../permission/bridge'
 import { McpClient } from './client'
 
 export class McpManager {
   private clients: McpClient[]
   private listeners: Array<() => void> = []
 
-  constructor(opts: { servers: Record<string, McpServerConfig> }) {
+  constructor(opts: {
+    servers: Record<string, McpServerConfig>
+    maxResultChars?: number
+    connectTimeoutMs?: number
+    requestTimeoutMs?: number
+    permissionBridge?: PermissionBridge
+  }) {
     this.clients = Object.entries(opts.servers).map(
       ([name, config]) =>
-        new McpClient({ name, config, onStatusChange: () => this.notify() }),
+        new McpClient({
+          name,
+          config,
+          onStatusChange: () => this.notify(),
+          maxResultChars: opts.maxResultChars,
+          connectTimeoutMs: opts.connectTimeoutMs,
+          requestTimeoutMs: opts.requestTimeoutMs,
+          permissionBridge: opts.permissionBridge,
+        }),
     )
   }
 

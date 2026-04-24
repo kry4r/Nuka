@@ -1,6 +1,7 @@
 import type { Tool } from '../tools/types'
 import type { McpClient } from './client'
 import { buildMcpToolName } from './names'
+import { truncateDescription } from './truncate'
 
 export async function mcpToolsFor(client: McpClient): Promise<Tool[]> {
   const descriptors = await client.listTools()
@@ -15,7 +16,7 @@ export async function mcpToolsFor(client: McpClient): Promise<Tool[]> {
 
     return {
       name: buildMcpToolName(client.name, d.name),
-      description: d.description ?? '',
+      description: truncateDescription(d.description ?? ''),
       parameters: d.inputSchema ?? { type: 'object', properties: {} },
       source: 'mcp' as const,
       annotations,

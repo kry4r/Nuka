@@ -8,9 +8,11 @@ import { Messages } from './Messages/Messages'
 import { PromptInput } from './PromptInput/PromptInput'
 import { StatusBar } from './StatusBar/StatusBar'
 import { PermissionDialog } from './dialogs/PermissionDialog'
+import { ElicitationDialog } from './dialogs/ElicitationDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
 import { ConfigEditor } from './dialogs/ConfigEditor'
 import { SessionPicker } from './dialogs/SessionPicker'
+import type { ElicitationPayload, ElicitationResult } from '../core/mcp/elicitation'
 import type { SessionMeta } from '../core/session/store'
 import { pickTip } from './Welcome/tips'
 import type { SessionManager } from '../core/session/manager'
@@ -34,6 +36,11 @@ type Dialog =
       call: PermissionCall
       suggestedPattern?: string
       resolve: (d: PermissionDecision) => void
+    }
+  | {
+      kind: 'elicitation'
+      payload: ElicitationPayload
+      resolve: (r: ElicitationResult) => void
     }
   | { kind: 'model-picker' }
   | { kind: 'config-editor' }
@@ -70,8 +77,12 @@ export function App(props: AppProps): React.JSX.Element {
     props.permissionBridge.setHandler((payload, resolve) => {
       setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, resolve })
     })
+    props.permissionBridge.setElicitationHandler((payload, resolve) => {
+      setDialog({ kind: 'elicitation', payload, resolve })
+    })
     return () => {
       props.permissionBridge.setHandler(null)
+      props.permissionBridge.setElicitationHandler(null)
     }
   }, [props.permissionBridge])
 
@@ -215,6 +226,12 @@ export function App(props: AppProps): React.JSX.Element {
           call={dialog.call}
           suggestedPattern={dialog.suggestedPattern}
           onDecide={d => { dialog.resolve(d); setDialog(null) }}
+        />
+      )}
+      {dialog?.kind === 'elicitation' && (
+        <ElicitationDialog
+          payload={dialog.payload}
+          onResolve={r => { dialog.resolve(r); setDialog(null) }}
         />
       )}
       {dialog?.kind === 'model-picker' && (

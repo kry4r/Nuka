@@ -74,10 +74,20 @@ export const McpServerConfigSchema = z.discriminatedUnion('type', [
     url: z.string().url(),
     headers: z.record(z.string(), z.string()).optional(),
   }),
+  z.object({
+    type: z.literal('sse'),
+    url: z.string().url(),
+    headers: z.record(z.string(), z.string()).optional(),
+  }),
 ])
 
 export const McpConfigSchema = z
-  .object({ servers: z.record(z.string(), McpServerConfigSchema).default({}) })
+  .object({
+    servers: z.record(z.string(), McpServerConfigSchema).default({}),
+    maxResultChars: z.number().int().positive().default(100_000),
+    connectTimeoutMs: z.number().int().positive().default(30_000),
+    requestTimeoutMs: z.number().int().positive().default(600_000),
+  })
   .optional()
 
 export const ConfigSchema = z.object({
