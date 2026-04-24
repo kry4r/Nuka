@@ -4,7 +4,8 @@ import type { ToolRegistry } from '../tools/registry'
 import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { Tool, ToolResult } from '../tools/types'
-import type { AssistantMessage, ContentBlock, TokenUsage } from '../message/types'
+import type { AssistantMessage, TokenUsage } from '../message/types'
+import type { ContentBlock as ToolContentBlock } from '../tools/content'
 import { ToolRegistry as ToolRegistryClass } from '../tools/registry'
 import { filterTools } from './toolFilter'
 import { createSession, appendMessage } from '../session/session'
@@ -32,7 +33,7 @@ export type DispatchAgentOpts = {
 }
 
 export type DispatchAgentResult = {
-  output: string | ContentBlock[]
+  output: string | ToolContentBlock[]
   isError: boolean
   turns: number
   usage: TokenUsage
@@ -217,14 +218,23 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   }
 }
 
-function finalOutput(assistant: AssistantMessage): string | ContentBlock[] {
-  // Collect text blocks; if any tool_use remained (shouldn't on a clean end_turn)
-  // return the full content blocks.
-  const onlyText = assistant.content.every(b => b.type === 'text')
-  if (onlyText) {
+function finalOutput(assistant: AssistantMessage): string | ToolContentBlock[] {
+  // Collect text blocks. message/types.ContentBlock (text|tool_use) is not the
+  // same union as tools/content.ContentBlock (text|image|resource), so we map
+  // into the tool-result shape: text → text block; any tool_use remnants are
+  // stringified to preserve information without importing unrelated fields.
+  const allText = assistant.content.every(b => b.type === 'text')
+  if (allText) {
     return assistant.content
       .map(b => (b.type === 'text' ? b.text : ''))
       .join('')
   }
-  return assistant.content
+  const blocks: ToolContentBlock[] = []
+  for (const b of assistant.content) {
+    if (b.type === 'text') blocks.push({ type: 'text', text: b.text })
+    else if (b.type === 'tool_use') {
+      blocks.push({ type: 'text', text: `[unfinished tool_use: ${b.name}]` })
+    }
+  }
+  return blocks
 }
