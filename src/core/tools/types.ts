@@ -2,6 +2,7 @@
 import type { ToolSpec } from '../provider/types'
 import type { ValidationResult } from './validate'
 import type { ContentBlock } from './content'
+import type { Session } from '../session/types'
 
 export type { ContentBlock } from './content'
 
@@ -25,6 +26,12 @@ export type ToolContext = {
    * their manifest.
    */
   pluginConfig?: Record<string, unknown>
+  /**
+   * The session this tool call is running in. Provided so tools can read
+   * session-scoped flags (e.g. `allowedAgentDispatch` for the recursion
+   * guard on `dispatch_agent`). Optional for backward compatibility.
+   */
+  session?: Session
 }
 
 export interface Tool<I = unknown> {

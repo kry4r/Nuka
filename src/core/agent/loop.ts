@@ -254,6 +254,7 @@ export async function* runAgent(
               cwd: process.cwd(),
               onProgress: pump.onProgress,
               onProgressTyped,
+              session,
             }).finally(pump.finish)
             // Drain pump into local buffer concurrently with tool execution
             const drainPromise = (async () => {
@@ -369,6 +370,7 @@ export async function* runAgent(
             cwd: process.cwd(),
             onProgress: pump.onProgress,
             onProgressTyped,
+            session,
           }).finally(pump.finish)
           for await (const msg of pump.drain()) {
             yield { type: 'tool_progress', id: call.id, text: msg }

@@ -22,4 +22,10 @@ export type Session = {
    * un-defer). Once in this set, the tool stays loaded for the session.
    */
   unDeferredToolNames: Set<string>
+  /**
+   * When explicitly `false`, this session is a dispatched sub-agent and
+   * calls to `dispatch_agent` are refused (recursion guard).
+   * Undefined / true means the session may dispatch agents.
+   */
+  allowedAgentDispatch?: boolean
 }
