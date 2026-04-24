@@ -15,6 +15,8 @@ import { matchKeywordSkills } from '../skill/activator'
 import { createProgressPump } from './progressPump'
 import type { AutoCompactOpts } from '../compact/auto'
 import { maybeAutoCompact } from '../compact/auto'
+import { validateWithJsonSchema } from '../tools/validate'
+import { serializeContentBlocks } from '../tools/content'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -112,13 +114,24 @@ export async function* runAgent(
         appendMessage(session, makeToolMessage(call.id, { output: `Unknown tool: ${call.name}`, isError: true }), deps.persist)
         continue
       }
+      // Validate input before permission prompt
+      const validation = tool.validateInput
+        ? tool.validateInput(call.input)
+        : validateWithJsonSchema(call.input, tool.parameters)
+      if (!validation.ok) {
+        const result = { output: `invalid input: ${validation.error}`, isError: true }
+        appendMessage(session, makeToolMessage(call.id, result), deps.persist)
+        yield { type: 'tool_result', id: call.id, output: result.output, isError: true }
+        continue
+      }
+
       yield { type: 'tool_call', id: call.id, name: call.name, input: call.input }
       const decision = await deps.permission.check({
         toolName: tool.name,
         hint: tool.needsPermission(call.input),
         input: call.input,
       })
-      let result: { output: string; isError: boolean }
+      let result: import('../tools/types').ToolResult
       if (!decision.allowed) {
         result = { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
       } else {
@@ -132,9 +145,25 @@ export async function* runAgent(
           yield { type: 'tool_progress', id: call.id, text: msg }
         }
         result = await toolPromise
+        // Apply per-tool result size cap (string output only; ContentBlock[] left alone)
+        if (
+          tool.maxResultSizeChars !== undefined &&
+          typeof result.output === 'string' &&
+          result.output.length > tool.maxResultSizeChars
+        ) {
+          const truncated = result.output.length - tool.maxResultSizeChars
+          result = {
+            output: result.output.slice(0, tool.maxResultSizeChars) + `...[truncated ${truncated} chars]...`,
+            isError: result.isError,
+          }
+        }
       }
       appendMessage(session, makeToolMessage(call.id, result), deps.persist)
-      yield { type: 'tool_result', id: call.id, output: result.output, isError: result.isError }
+      // tool_result event payload must be string (UI requirement)
+      const outputStr = typeof result.output === 'string'
+        ? result.output
+        : serializeContentBlocks(result.output)
+      yield { type: 'tool_result', id: call.id, output: outputStr, isError: result.isError }
     }
 
     const drained = session.queue.drain()

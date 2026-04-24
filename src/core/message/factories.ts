@@ -4,6 +4,7 @@ import type {
   AssistantMessage,
   ToolMessage,
   SystemMessage,
+  ToolContentBlock,
 } from './types'
 
 export function makeUserMessage(input: { text: string }): UserMessage {
@@ -17,7 +18,7 @@ export function makeUserMessage(input: { text: string }): UserMessage {
 
 export function makeToolMessage(
   toolUseId: string,
-  result: { output: string; isError: boolean },
+  result: { output: string | ToolContentBlock[]; isError: boolean },
 ): ToolMessage {
   return {
     role: 'tool',

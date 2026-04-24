@@ -2,6 +2,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
+import { formatMcpDisplayName } from '../../core/mcp/names'
 
 export function ToolCall(props: {
   name: string
@@ -19,11 +20,19 @@ export function ToolCall(props: {
     ? lines.slice(-10)
     : lines.slice(-5)
 
+  // For MCP tools, render as "server · tool" instead of "mcp__server__tool"
+  const displayName = props.source === 'mcp'
+    ? (() => {
+        const parsed = formatMcpDisplayName(props.name)
+        return parsed ? `${parsed.server} · ${parsed.tool}` : props.name
+      })()
+    : props.name
+
   return (
     <Box flexDirection="column">
       <Box>
         <Text color={P.accent}>⏺ </Text>
-        <Text color={P.fg} bold>{props.name} </Text>
+        <Text color={P.fg} bold>{displayName} </Text>
         {props.source && props.source !== 'builtin' && (
           <Text color={P.muted}>[{props.source}] </Text>
         )}

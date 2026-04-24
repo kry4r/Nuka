@@ -1,12 +1,13 @@
 // src/core/provider/anthropic.ts
 import Anthropic from '@anthropic-ai/sdk'
+import fs from 'node:fs'
 import type {
   LLMProvider,
   LLMRequest,
   ProviderEvent,
   ToolSpec,
 } from './types'
-import type { Message, StopReason } from '../message/types'
+import type { Message, StopReason, ToolContentBlock } from '../message/types'
 import { fetchRemoteModels } from './remoteModels'
 
 type AnthropicOpts = {
@@ -158,7 +159,9 @@ function toAnthropicMessages(messages: Message[]): unknown[] {
           {
             type: 'tool_result',
             tool_use_id: m.toolUseId,
-            content: m.content,
+            content: typeof m.content === 'string'
+              ? m.content
+              : toolContentBlocksToAnthropic(m.content),
             is_error: m.isError || undefined,
           },
         ],
@@ -182,4 +185,46 @@ function toAnthropicTool(spec: ToolSpec): unknown {
     description: spec.description,
     input_schema: spec.parameters,
   }
+}
+
+/** Map to MIME extension for base64 images. */
+const MIME_TO_ANTHROPIC_MEDIA: Record<string, string> = {
+  'image/png': 'image/png',
+  'image/jpeg': 'image/jpeg',
+  'image/gif': 'image/gif',
+  'image/webp': 'image/webp',
+}
+
+/**
+ * Convert tool ContentBlock[] to Anthropic API content list.
+ * text  → { type: 'text', text }
+ * image → { type: 'image', source: { type: 'base64', media_type, data } }
+ * resource → { type: 'text', text: `<uri>: <text>` }
+ */
+function toolContentBlocksToAnthropic(blocks: ToolContentBlock[]): unknown[] {
+  return blocks.map(b => {
+    if (b.type === 'text') {
+      return { type: 'text', text: b.text }
+    }
+    if (b.type === 'image') {
+      const mediaType = MIME_TO_ANTHROPIC_MEDIA[b.mimeType] ?? b.mimeType
+      let data = ''
+      try {
+        data = fs.readFileSync(b.path).toString('base64')
+      } catch {
+        // File unreadable — fall back to a text placeholder
+        return { type: 'text', text: `[image: ${b.mimeType} path=${b.path} (unreadable)]` }
+      }
+      return {
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data },
+      }
+    }
+    if (b.type === 'resource') {
+      const parts: string[] = [b.uri]
+      if (b.text) parts.push(b.text)
+      return { type: 'text', text: parts.join('\n') }
+    }
+    return { type: 'text', text: '[unknown content block]' }
+  })
 }

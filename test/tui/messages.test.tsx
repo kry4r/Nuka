@@ -39,7 +39,8 @@ describe('Messages', () => {
       />,
     )
     const f = lastFrame() ?? ''
-    expect(f).toContain('mcp__fs__read')
+    // MCP tools render as "server · tool" format
+    expect(f).toContain('fs · read')
     expect(f).toContain('[mcp]')
   })
 })

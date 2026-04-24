@@ -1,4 +1,8 @@
 // src/core/message/types.ts
+import type { ContentBlock as ToolContentBlock } from '../tools/content'
+
+export type { ToolContentBlock }
+
 export type TokenUsage = {
   inputTokens: number
   outputTokens: number
@@ -36,7 +40,7 @@ export type AssistantMessage = {
 export type ToolMessage = {
   role: 'tool'
   toolUseId: string
-  content: string
+  content: string | ToolContentBlock[]
   isError: boolean
   id: string
   ts: number

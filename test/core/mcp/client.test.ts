@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import os from 'node:os'
+import path from 'node:path'
 
 // Use vi.hoisted to declare mocks that will be referenced in vi.mock factory
 const mocks = vi.hoisted(() => {
@@ -157,11 +159,13 @@ describe('McpClient callTool', () => {
     mocks.clearInstances()
   })
 
-  it('translates mixed text + image content blocks to a string', async () => {
+  it('returns ContentBlock[] when response contains image blocks', async () => {
+    // PNG 1x1 pixel in base64
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
     mocks.setCallToolResult({
       content: [
         { type: 'text', text: 'line1' },
-        { type: 'image', mimeType: 'image/png', data: 'abc123' },
+        { type: 'image', mimeType: 'image/png', data: pngBase64 },
         { type: 'resource_link', uri: 'res://x' },
         { type: 'mystery' },
       ],
@@ -173,8 +177,41 @@ describe('McpClient callTool', () => {
     })
     await client.connect()
     const result = await client.callTool('foo', {})
-    expect(result.output).toBe('line1\n[binary: image/png len=6]\n[resource: res://x]\n[unknown content block]')
+    expect(Array.isArray(result.output)).toBe(true)
+    const blocks = result.output as import('../../../src/core/tools/content').ContentBlock[]
+    expect(blocks[0]).toMatchObject({ type: 'text', text: 'line1' })
+    expect(blocks[1]).toMatchObject({ type: 'image', mimeType: 'image/png' })
+    const imageBlock = blocks[1] as { type: 'image'; path: string; mimeType: string }
+    // File should have been written to ~/.nuka/tmp
+    const expectedDir = path.join(os.homedir(), '.nuka', 'tmp')
+    expect(imageBlock.path).toContain(expectedDir)
+    expect(imageBlock.path).toMatch(/\.png$/)
+    // File should exist on disk with correct binary content
+    const { readFileSync } = await import('node:fs')
+    const written = readFileSync(imageBlock.path)
+    expect(written).toEqual(Buffer.from(pngBase64, 'base64'))
+    expect(blocks[2]).toMatchObject({ type: 'resource', uri: 'res://x' })
+    expect(blocks[3]).toMatchObject({ type: 'text', text: '[unknown content block]' })
     expect(result.isError).toBe(false)
+  })
+
+  it('returns plain string when no image blocks are present', async () => {
+    mocks.setCallToolResult({
+      content: [
+        { type: 'text', text: 'line1' },
+        { type: 'resource_link', uri: 'res://x' },
+        { type: 'mystery' },
+      ],
+      isError: false,
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    const result = await client.callTool('foo', {})
+    expect(typeof result.output).toBe('string')
+    expect(result.output).toBe('line1\n[resource: res://x]\n[unknown content block]')
   })
 
   it('preserves isError: true from the SDK', async () => {

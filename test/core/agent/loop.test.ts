@@ -240,6 +240,128 @@ describe('runAgent', () => {
     expect(session.permissionCache.list()).toHaveLength(1)
   })
 
+  it('emits error tool_result and skips run when input validation fails', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    // Turn 1: tool call with invalid input (missing required 'x')
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'v1', name: 'Strict' },
+      { type: 'tool_use_stop', id: 'v1', input: {} }, // missing 'x'
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]
+    // Turn 2: ends plainly
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+    let runCalled = false
+    const strictTool: Tool = {
+      name: 'Strict',
+      description: 'needs x',
+      parameters: { type: 'object', required: ['x'], properties: { x: { type: 'string' } } },
+      source: 'builtin',
+      needsPermission: () => 'none',
+      run: async () => { runCalled = true; return { output: 'should not run', isError: false } },
+    }
+    tools.register(strictTool)
+    const permissionCalled: string[] = []
+    const permission = new PermissionChecker(
+      () => session.permissionCache,
+      async (req) => { permissionCalled.push(req.toolName); return { allowed: true } },
+    )
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'run strict' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    const toolResult = events.find(e => e.type === 'tool_result' && e.id === 'v1')
+    expect(toolResult).toBeDefined()
+    expect(toolResult.isError).toBe(true)
+    expect(toolResult.output).toMatch(/invalid input/)
+    // tool.run must NOT have been called
+    expect(runCalled).toBe(false)
+    // permission prompt must NOT have been shown
+    expect(permissionCalled).toHaveLength(0)
+    // no 'tool_call' event should have been emitted for this tool
+    expect(events.some(e => e.type === 'tool_call' && e.id === 'v1')).toBe(false)
+  })
+
+  it('accepts valid input and runs tool normally', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'v2', name: 'Strict' },
+      { type: 'tool_use_stop', id: 'v2', input: { x: 'hello' } },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+    let runCalled = false
+    tools.register({
+      name: 'Strict',
+      description: 'needs x',
+      parameters: { type: 'object', required: ['x'], properties: { x: { type: 'string' } } },
+      source: 'builtin',
+      needsPermission: () => 'none',
+      run: async () => { runCalled = true; return { output: 'ran', isError: false } },
+    })
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'go' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    expect(runCalled).toBe(true)
+    const toolResult = events.find(e => e.type === 'tool_result' && e.id === 'v2')
+    expect(toolResult?.isError).toBe(false)
+  })
+
+  it('truncates output when maxResultSizeChars is set and output exceeds the limit', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'trunc1', name: 'Big' },
+      { type: 'tool_use_stop', id: 'trunc1', input: {} },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+    const bigOutput = 'x'.repeat(500)
+    tools.register({
+      name: 'Big',
+      description: 'returns large output',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      maxResultSizeChars: 100,
+      needsPermission: () => 'none',
+      run: async () => ({ output: bigOutput, isError: false }),
+    })
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'big' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    const toolResult = events.find(e => e.type === 'tool_result' && e.id === 'trunc1')
+    expect(toolResult).toBeDefined()
+    expect(toolResult.output.length).toBeLessThan(500)
+    expect(toolResult.output).toContain('[truncated')
+    expect(toolResult.output).toContain('400 chars')
+  })
+
   it('yields auto_compacted event when totalUsage exceeds autoThreshold after a turn', async () => {
     const session = createSession({ providerId: 'p', model: 'm' })
     // Pre-populate enough turns so compactSession won't no-op
