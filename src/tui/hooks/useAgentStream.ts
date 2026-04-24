@@ -8,12 +8,14 @@ export type AgentStreamDeps = {
 
 export function useAgentStream(deps: AgentStreamDeps): {
   events: AgentEvent[]
+  progressByToolId: Record<string, string[]>
   running: boolean
   send: (text: string) => Promise<void>
   cancel: () => void
   reset: () => void
 } {
   const [events, setEvents] = useState<AgentEvent[]>([])
+  const [progressByToolId, setProgressByToolId] = useState<Record<string, string[]>>({})
   const [running, setRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -24,6 +26,12 @@ export function useAgentStream(deps: AgentStreamDeps): {
     try {
       for await (const ev of deps.runAgent({ text }, ac.signal)) {
         setEvents(prev => [...prev, ev])
+        if (ev.type === 'tool_progress') {
+          setProgressByToolId(prev => {
+            const existing = prev[ev.id] ?? []
+            return { ...prev, [ev.id]: [...existing, ev.text] }
+          })
+        }
       }
     } catch (err) {
       setEvents(prev => [...prev, { type: 'error', error: err as Error }])
@@ -33,7 +41,7 @@ export function useAgentStream(deps: AgentStreamDeps): {
   }, [deps])
 
   const cancel = useCallback(() => abortRef.current?.abort(), [])
-  const reset = useCallback(() => setEvents([]), [])
+  const reset = useCallback(() => { setEvents([]); setProgressByToolId({}) }, [])
 
-  return { events, running, send, cancel, reset }
+  return { events, progressByToolId, running, send, cancel, reset }
 }

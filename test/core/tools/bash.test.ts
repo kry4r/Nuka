@@ -34,4 +34,15 @@ describe('BashTool', () => {
     const r = await p
     expect(r.isError).toBe(true)
   })
+
+  it('calls onProgress with each output line', async () => {
+    const lines: string[] = []
+    const r = await BashTool.run(
+      { command: "sh -c 'echo one; echo two'" },
+      { ...ctx, onProgress: (msg) => lines.push(msg) },
+    )
+    expect(r.isError).toBe(false)
+    expect(lines.some(l => l === 'one')).toBe(true)
+    expect(lines.some(l => l === 'two')).toBe(true)
+  })
 })

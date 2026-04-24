@@ -12,6 +12,7 @@ import { appendMessage } from '../session/session'
 import type { AssistantMessage, ContentBlock, Message } from '../message/types'
 import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
+import { createProgressPump } from './progressPump'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -108,9 +109,21 @@ export async function* runAgent(
         hint: tool.needsPermission(call.input),
         input: call.input,
       })
-      const result = decision.allowed
-        ? await tool.run(call.input, { signal, cwd: process.cwd() })
-        : { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
+      let result: { output: string; isError: boolean }
+      if (!decision.allowed) {
+        result = { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
+      } else {
+        const pump = createProgressPump()
+        const toolPromise = tool.run(call.input, {
+          signal,
+          cwd: process.cwd(),
+          onProgress: pump.onProgress,
+        }).finally(pump.finish)
+        for await (const msg of pump.drain()) {
+          yield { type: 'tool_progress', id: call.id, text: msg }
+        }
+        result = await toolPromise
+      }
       appendMessage(session, makeToolMessage(call.id, result), deps.persist)
       yield { type: 'tool_result', id: call.id, output: result.output, isError: result.isError }
     }

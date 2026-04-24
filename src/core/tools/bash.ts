@@ -29,8 +29,21 @@ export const BashTool: Tool<BashInput> = {
       })
 
       let output = ''
-      proc.stdout?.on('data', (d: Buffer) => { output += d.toString() })
-      proc.stderr?.on('data', (d: Buffer) => { output += d.toString() })
+      let lineBuf = ''
+
+      const handleData = (d: Buffer) => {
+        const chunk = d.toString()
+        output += chunk
+        lineBuf += chunk
+        let idx: number
+        while ((idx = lineBuf.indexOf('\n')) !== -1) {
+          ctx.onProgress?.(lineBuf.slice(0, idx))
+          lineBuf = lineBuf.slice(idx + 1)
+        }
+      }
+
+      proc.stdout?.on('data', handleData)
+      proc.stderr?.on('data', handleData)
 
       let timedOut = false
       let aborted = false
@@ -53,6 +66,7 @@ export const BashTool: Tool<BashInput> = {
       proc.on('close', (code: number | null) => {
         clearTimeout(timer)
         ctx.signal?.removeEventListener('abort', onAbort)
+        if (lineBuf.length > 0) { ctx.onProgress?.(lineBuf); lineBuf = '' }
         if (timedOut) {
           resolve({ isError: true, output: `timed out after ${timeout}ms\n${output}` })
         } else if (aborted) {
