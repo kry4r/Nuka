@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from 'node:fs/promises'
+import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type LoadedPlugin } from './manifest'
@@ -35,8 +35,11 @@ export async function loadPlugins(opts: {
     const dir = join(pluginsDir, name)
 
     let isDir = false
+    let resolvedDir = dir
     try {
-      const s = await stat(dir)
+      // Follow symlinks — activateVersion creates symlinks pointing to versioned cache dirs
+      resolvedDir = await realpath(dir)
+      const s = await stat(resolvedDir)
       isDir = s.isDirectory()
     } catch {
       continue
@@ -47,7 +50,7 @@ export async function loadPlugins(opts: {
     let manifestFilename: string | undefined
     for (const filename of ['plugin.yaml', 'plugin.json']) {
       try {
-        raw = await readFile(join(dir, filename), 'utf8')
+        raw = await readFile(join(resolvedDir, filename), 'utf8')
         manifestFilename = filename
         break
       } catch {
@@ -79,7 +82,7 @@ export async function loadPlugins(opts: {
       continue
     }
 
-    plugins.push({ manifest, rootDir: dir, source: 'installed' })
+    plugins.push({ manifest, rootDir: resolvedDir, source: 'installed' })
   }
 
   if (opts.enabled !== undefined) {

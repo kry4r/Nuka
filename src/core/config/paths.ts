@@ -12,3 +12,7 @@ export function globalConfigPath(): string {
 export function projectConfigPath(cwd: string): string {
   return path.join(cwd, '.nuka', 'config.yaml')
 }
+
+export function marketplacesPath(home: string): string {
+  return path.join(home, '.nuka', 'marketplaces.json')
+}
