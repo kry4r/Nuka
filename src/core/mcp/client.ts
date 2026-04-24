@@ -21,6 +21,7 @@ import { parseElicitationParams } from './elicitation'
 import type { PermissionBridge } from '../permission/bridge'
 import { RingBuffer, DEFAULT_STDERR_BUFFER_BYTES } from './stderrBuffer'
 import { persistLargeOutput } from './outputPersist'
+import { sanitizeToolText } from './sanitize'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -341,7 +342,8 @@ export class McpClient {
       const blocks: ContentBlock[] = []
       for (const block of sdkContent) {
         if (block.type === 'text') {
-          blocks.push({ type: 'text', text: block.text ?? '' })
+          // M1.15: sanitize before returning to caller
+          blocks.push({ type: 'text', text: sanitizeToolText(block.text ?? '') })
         } else if (block.type === 'image') {
           const mimeType = block.mimeType ?? 'application/octet-stream'
           const ext = mimeToExt(mimeType)
@@ -364,7 +366,8 @@ export class McpClient {
     const lines: string[] = []
     for (const block of sdkContent) {
       if (block.type === 'text') {
-        lines.push(block.text ?? '')
+        // M1.15: sanitize BEFORE truncation
+        lines.push(sanitizeToolText(block.text ?? ''))
       } else if (block.type === 'resource_link') {
         // Auto-fetch the referenced resource inline so the model sees its
         // content, not just its URI. The result is kept as plain text
@@ -443,7 +446,8 @@ export class McpClient {
     for (const c of result.contents) {
       const item = c as { uri: string; mimeType?: string; text?: string; blob?: string }
       if (item.text !== undefined) {
-        lines.push(item.text)
+        // M1.15: sanitize text contents BEFORE truncation
+        lines.push(sanitizeToolText(item.text))
       } else if (item.blob !== undefined) {
         lines.push(`[blob: ${item.mimeType ?? 'unknown'} len=${item.blob.length}]`)
       }
