@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => {
     setRequestHandler: ReturnType<typeof vi.fn>
   }> = []
 
-  const FakeClient = vi.fn().mockImplementation(() => {
+  const defaultFactory = () => {
     const instance = {
       connect: vi.fn().mockImplementation(async () => {
         if (fakeConnectError) throw fakeConnectError
@@ -46,7 +46,9 @@ const mocks = vi.hoisted(() => {
     }
     sdkInstances.push(instance)
     return instance
-  })
+  }
+
+  const FakeClient = vi.fn().mockImplementation(defaultFactory)
 
   const FakeStdio = vi.fn().mockImplementation(() => ({}))
   const FakeHttp = vi.fn().mockImplementation(() => ({}))
@@ -65,6 +67,7 @@ const mocks = vi.hoisted(() => {
     setReadResourceResult(r: { contents: unknown[] }) { fakeReadResourceResult = r },
     setInstructions(s: string | undefined) { fakeInstructions = s },
     clearInstances() { sdkInstances.length = 0 },
+    restoreDefaultFactory() { FakeClient.mockImplementation(defaultFactory) },
   }
 })
 
@@ -488,6 +491,96 @@ describe('McpClient callTool truncation', () => {
     await client.connect()
     const result = await client.callTool('foo', {})
     expect(result.output).toBe('tiny')
+  })
+})
+
+describe('McpClient auto-reconnect', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+  afterEach(() => {
+    // Restore the default FakeClient factory so later describe blocks see
+    // the original behavior even though these tests swap in per-test
+    // implementations.
+    mocks.restoreDefaultFactory()
+  })
+
+  it('reconnects transparently after onclose and the next callTool succeeds', async () => {
+    // Two connect() invocations are expected: initial + reconnect.
+    // Both resolve; the first client will fire onclose after connect.
+    const instances: any[] = []
+    mocks.FakeClient.mockImplementation(() => {
+      const idx = instances.length
+      const instance: any = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: `ok-${idx}` }],
+          isError: false,
+        }),
+        readResource: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
+      }
+      instances.push(instance)
+      mocks.sdkInstances.push(instance)
+      return instance
+    })
+
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      reconnectPolicy: { maxAttempts: 3, baseDelayMs: 1, maxDelayMs: 2 },
+    })
+    await client.connect()
+    expect(client.status.kind).toBe('connected')
+
+    // Simulate transport-level disconnect.
+    instances[0].onclose()
+    expect(client.status.kind).toBe('error')
+    if (client.status.kind === 'error') {
+      expect(client.status.error).toBe('disconnected')
+    }
+
+    // Next callTool should reconnect and succeed using the new instance.
+    const res = await client.callTool('foo', {})
+    expect(res.isError).toBe(false)
+    expect(res.output).toBe('ok-1') // came from the second SDK instance
+    expect(instances.length).toBe(2)
+    expect(client.status.kind).toBe('connected')
+  })
+
+  it('stays in error state after reconnect exhausts maxAttempts', async () => {
+    let calls = 0
+    mocks.FakeClient.mockImplementation(() => {
+      calls += 1
+      const instance: any = {
+        connect: vi.fn().mockImplementation(async () => {
+          if (calls > 1) throw new Error('still down')
+        }),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }], isError: false }),
+        readResource: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
+      }
+      mocks.sdkInstances.push(instance)
+      return instance
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      reconnectPolicy: { maxAttempts: 2, baseDelayMs: 1, maxDelayMs: 2 },
+    })
+    await client.connect()
+    ;(mocks.sdkInstances[0] as any).onclose()
+    await expect(client.callTool('foo', {})).rejects.toThrow(/Not connected/)
   })
 })
 

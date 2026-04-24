@@ -10,6 +10,12 @@ import {
 import type { ContentBlock } from '../tools/content'
 import { mcpTmpDir, mimeToExt } from './paths'
 import { truncateMcpResult, truncateDescription } from './truncate'
+import {
+  reconnectWithBackoff,
+  isSessionExpiryError,
+  DEFAULT_RECONNECT_POLICY,
+  type ReconnectPolicy,
+} from './reconnect'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -48,6 +54,9 @@ export class McpClient {
   private connectTimeoutMs: number
   private requestTimeoutMs: number
   private serverInstructions_?: string
+  private reconnectPolicy: ReconnectPolicy
+  private deliberateClose = false
+  private reconnectFailed = false
 
   constructor(opts: {
     name: string
@@ -56,6 +65,7 @@ export class McpClient {
     maxResultChars?: number
     connectTimeoutMs?: number
     requestTimeoutMs?: number
+    reconnectPolicy?: ReconnectPolicy
   }) {
     this.name = opts.name
     this.config = opts.config
@@ -63,6 +73,7 @@ export class McpClient {
     this.maxResultChars = opts.maxResultChars ?? DEFAULT_MAX_RESULT_CHARS
     this.connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
     this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+    this.reconnectPolicy = opts.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY
   }
 
   get status(): McpConnectionStatus {
@@ -124,6 +135,17 @@ export class McpClient {
         'connect',
       )
       this.sdk = client
+      this.reconnectFailed = false
+      this.deliberateClose = false
+
+      // When the transport closes (remote goes away, stdin EOFs, etc.) the
+      // SDK fires `onclose` — invalidate our caches and enter the
+      // `disconnected` error state so the next tool call triggers a
+      // reconnect.
+      ;(client as unknown as { onclose?: () => void }).onclose = () => {
+        if (this.deliberateClose) return
+        this.handleDisconnect()
+      }
 
       // Capture server-supplied instructions (if any) and cap their length so
       // a chatty server cannot balloon the system prompt.
@@ -143,6 +165,34 @@ export class McpClient {
       const error = raw.startsWith('connect timed out') ? 'connect timeout' : raw
       this.emit({ kind: 'error', error })
     }
+  }
+
+  private handleDisconnect(): void {
+    this.sdk = undefined
+    this.toolsCache = undefined
+    this.resourcesCache = undefined
+    this.serverInstructions_ = undefined
+    this.emit({ kind: 'error', error: 'disconnected' })
+  }
+
+  /**
+   * Make sure the SDK is live before a request. When it's been flagged as
+   * disconnected (via `onclose` or a session-expiry error — HTTP 404 /
+   * JSON-RPC -32001), this attempts `reconnectWithBackoff`. Returns `true`
+   * when an SDK is available after the call.
+   */
+  private async ensureConnected(): Promise<boolean> {
+    if (this.sdk) return true
+    if (this.reconnectFailed) return false
+    const result = await reconnectWithBackoff(async () => {
+      await this.connect()
+      if (!this.sdk) throw new Error(this.status_.kind === 'error' ? this.status_.error : 'connect failed')
+    }, this.reconnectPolicy)
+    if (!result.ok) {
+      this.reconnectFailed = true
+      return false
+    }
+    return !!this.sdk
   }
 
   async listTools(): Promise<McpToolDescriptor[]> {
@@ -189,24 +239,44 @@ export class McpClient {
     input: unknown,
     signal?: AbortSignal,
   ): Promise<{ output: string | ContentBlock[]; isError: boolean }> {
-    if (!this.sdk) throw new Error('Not connected')
+    if (!(await this.ensureConnected())) {
+      throw new Error('Not connected')
+    }
     let result: Awaited<ReturnType<SdkClientHandle['callTool']>>
-    try {
-      result = await withTimeout(
-        this.sdk.callTool(
-          { name: rawName, arguments: input as Record<string, unknown> },
-          undefined,
-          { signal },
-        ),
-        this.requestTimeoutMs,
-        'callTool',
+    const doCall = (): ReturnType<SdkClientHandle['callTool']> =>
+      this.sdk!.callTool(
+        { name: rawName, arguments: input as Record<string, unknown> },
+        undefined,
+        { signal },
       )
+    try {
+      result = await withTimeout(doCall(), this.requestTimeoutMs, 'callTool')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.startsWith('callTool timed out')) {
         return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
       }
-      throw err
+      // Session-expiry (HTTP 404 or JSON-RPC -32001) is handled the same
+      // way as a transport `onclose`: mark disconnected, back off, retry
+      // once.
+      if (isSessionExpiryError(err)) {
+        this.handleDisconnect()
+        if (await this.ensureConnected()) {
+          try {
+            result = await withTimeout(doCall(), this.requestTimeoutMs, 'callTool')
+          } catch (retryErr) {
+            const m = retryErr instanceof Error ? retryErr.message : String(retryErr)
+            if (m.startsWith('callTool timed out')) {
+              return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
+            }
+            throw retryErr
+          }
+        } else {
+          throw err
+        }
+      } else {
+        throw err
+      }
     }
     const sdkContent = result.content as Array<{
       type: string
@@ -275,20 +345,37 @@ export class McpClient {
     uri: string,
     signal?: AbortSignal,
   ): Promise<{ output: string; isError: boolean }> {
-    if (!this.sdk) throw new Error('Not connected')
+    if (!(await this.ensureConnected())) {
+      throw new Error('Not connected')
+    }
     let result: Awaited<ReturnType<SdkClientHandle['readResource']>>
+    const doRead = (): ReturnType<SdkClientHandle['readResource']> =>
+      this.sdk!.readResource({ uri }, { signal })
     try {
-      result = await withTimeout(
-        this.sdk.readResource({ uri }, { signal }),
-        this.requestTimeoutMs,
-        'readResource',
-      )
+      result = await withTimeout(doRead(), this.requestTimeoutMs, 'readResource')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.startsWith('readResource timed out')) {
         return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
       }
-      throw err
+      if (isSessionExpiryError(err)) {
+        this.handleDisconnect()
+        if (await this.ensureConnected()) {
+          try {
+            result = await withTimeout(doRead(), this.requestTimeoutMs, 'readResource')
+          } catch (retryErr) {
+            const m = retryErr instanceof Error ? retryErr.message : String(retryErr)
+            if (m.startsWith('readResource timed out')) {
+              return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
+            }
+            throw retryErr
+          }
+        } else {
+          throw err
+        }
+      } else {
+        throw err
+      }
     }
     const lines: string[] = []
     for (const c of result.contents) {
@@ -304,6 +391,7 @@ export class McpClient {
   }
 
   async close(): Promise<void> {
+    this.deliberateClose = true
     await this.sdk?.close()
     this.sdk = undefined
     this.toolsCache = undefined
