@@ -11,10 +11,20 @@ export type McpConnectionStatus =
   | { kind: 'connected'; toolCount: number; resourceCount: number }
   | { kind: 'error'; error: string }
 
+export type McpToolAnnotations = {
+  /** Tool only reads data, does not mutate state. */
+  readOnlyHint?: boolean
+  /** Tool can perform destructive operations. */
+  destructiveHint?: boolean
+  /** Tool may contact external services (open world). */
+  openWorldHint?: boolean
+}
+
 export type McpToolDescriptor = {
   name: string
   description?: string
   inputSchema?: Record<string, unknown>
+  annotations?: McpToolAnnotations
 }
 
 export type McpResourceDescriptor = {

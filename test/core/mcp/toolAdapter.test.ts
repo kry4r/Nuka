@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mcpToolsFor } from '../../../src/core/mcp/toolAdapter'
+import type { McpToolDescriptor } from '../../../src/core/mcp/types'
 
 function makeMockClient(
   name: string,
-  tools: Array<{ name: string; description?: string; inputSchema?: Record<string, unknown> }>,
+  tools: McpToolDescriptor[],
   callToolResult: { output: string; isError: boolean } = { output: 'ok', isError: false },
 ) {
   return {
@@ -73,5 +74,53 @@ describe('mcpToolsFor', () => {
     const client = makeMockClient('my-server', [{ name: 'read-file' }])
     const tools = await mcpToolsFor(client)
     expect(tools[0]?.name).toBe('mcp__my_server__read_file')
+  })
+
+  it('maps readOnlyHint → annotations.readOnly', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'foo',
+      annotations: { readOnlyHint: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.annotations?.readOnly).toBe(true)
+    expect(tools[0]?.annotations?.destructive).toBeUndefined()
+    expect(tools[0]?.annotations?.openWorld).toBeUndefined()
+  })
+
+  it('maps destructiveHint → annotations.destructive', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'bar',
+      annotations: { destructiveHint: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.annotations?.destructive).toBe(true)
+    expect(tools[0]?.annotations?.readOnly).toBeUndefined()
+  })
+
+  it('maps openWorldHint → annotations.openWorld', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'baz',
+      annotations: { openWorldHint: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.annotations?.openWorld).toBe(true)
+  })
+
+  it('maps all three hints simultaneously', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'all',
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    const ann = tools[0]?.annotations
+    expect(ann?.readOnly).toBe(false)
+    expect(ann?.destructive).toBe(true)
+    expect(ann?.openWorld).toBe(true)
+  })
+
+  it('produces undefined annotations when descriptor has no annotations', async () => {
+    const client = makeMockClient('srv', [{ name: 'plain' }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.annotations).toBeUndefined()
   })
 })

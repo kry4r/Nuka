@@ -69,11 +69,24 @@ export class McpClient {
     if (this.toolsCache) return this.toolsCache
     if (!this.sdk) throw new Error('Not connected')
     const result = await this.sdk.listTools()
-    this.toolsCache = result.tools.map(t => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema as Record<string, unknown> | undefined,
-    }))
+    this.toolsCache = result.tools.map(t => {
+      const raw = t as {
+        name: string
+        description?: string
+        inputSchema?: Record<string, unknown>
+        annotations?: {
+          readOnlyHint?: boolean
+          destructiveHint?: boolean
+          openWorldHint?: boolean
+        }
+      }
+      return {
+        name: raw.name,
+        description: raw.description,
+        inputSchema: raw.inputSchema,
+        annotations: raw.annotations,
+      }
+    })
     return this.toolsCache
   }
 
