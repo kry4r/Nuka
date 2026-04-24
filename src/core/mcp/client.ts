@@ -6,6 +6,7 @@ import {
   StreamableHTTPClientTransport,
   SSEClientTransport,
   ListRootsRequestSchema,
+  ElicitRequestSchema,
 } from './sdkBridge'
 import type { ContentBlock } from '../tools/content'
 import { mcpTmpDir, mimeToExt } from './paths'
@@ -16,6 +17,8 @@ import {
   DEFAULT_RECONNECT_POLICY,
   type ReconnectPolicy,
 } from './reconnect'
+import { parseElicitationParams } from './elicitation'
+import type { PermissionBridge } from '../permission/bridge'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -57,6 +60,7 @@ export class McpClient {
   private reconnectPolicy: ReconnectPolicy
   private deliberateClose = false
   private reconnectFailed = false
+  private permissionBridge?: PermissionBridge
 
   constructor(opts: {
     name: string
@@ -66,6 +70,7 @@ export class McpClient {
     connectTimeoutMs?: number
     requestTimeoutMs?: number
     reconnectPolicy?: ReconnectPolicy
+    permissionBridge?: PermissionBridge
   }) {
     this.name = opts.name
     this.config = opts.config
@@ -74,6 +79,7 @@ export class McpClient {
     this.connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
     this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
     this.reconnectPolicy = opts.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY
+    this.permissionBridge = opts.permissionBridge
   }
 
   get status(): McpConnectionStatus {
@@ -128,6 +134,18 @@ export class McpClient {
       client.setRequestHandler(ListRootsRequestSchema, async () => ({
         roots: [{ uri: pathToFileURL(process.cwd()).href, name: 'cwd' }],
       }))
+
+      // If a permission bridge is attached, handle `elicitation/create`
+      // by opening the ElicitationDialog in the TUI and relaying the
+      // user's choice back to the server.
+      if (this.permissionBridge) {
+        const bridge = this.permissionBridge
+        client.setRequestHandler(ElicitRequestSchema, async (request) => {
+          const payload = parseElicitationParams((request as { params?: unknown }).params)
+          const result = await bridge.elicit(payload)
+          return result
+        })
+      }
 
       await withTimeout(
         client.connect(transport as Parameters<typeof client.connect>[0]),

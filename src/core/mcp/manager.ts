@@ -1,4 +1,5 @@
 import type { McpServerConfig, McpConnectionStatus } from './types'
+import type { PermissionBridge } from '../permission/bridge'
 import { McpClient } from './client'
 
 export class McpManager {
@@ -10,6 +11,7 @@ export class McpManager {
     maxResultChars?: number
     connectTimeoutMs?: number
     requestTimeoutMs?: number
+    permissionBridge?: PermissionBridge
   }) {
     this.clients = Object.entries(opts.servers).map(
       ([name, config]) =>
@@ -20,6 +22,7 @@ export class McpManager {
           maxResultChars: opts.maxResultChars,
           connectTimeoutMs: opts.connectTimeoutMs,
           requestTimeoutMs: opts.requestTimeoutMs,
+          permissionBridge: opts.permissionBridge,
         }),
     )
   }

@@ -7,3 +7,6 @@ export {
   ListRootsRequestSchema,
   ElicitRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
+export type {
+  ElicitResult,
+} from '@modelcontextprotocol/sdk/types.js'
