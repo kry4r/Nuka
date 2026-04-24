@@ -178,7 +178,7 @@ describe('validatePlugin — skills path check', () => {
 describe('validatePlugin — dependencies warning', () => {
   it('warns (not errors) for unresolvable dependency', async () => {
     await writeManifest(
-      'name: my-plugin\ndependencies: [totally-nonexistent-package-xyz-123]\n',
+      'name: my-plugin\ndependencies:\n  - name: totally-nonexistent-package-xyz-123\n',
     )
     const report = await validatePlugin(pluginDir)
     expect(report.errors).toHaveLength(0)
@@ -187,8 +187,7 @@ describe('validatePlugin — dependencies warning', () => {
   })
 
   it('no warning when dependency resolves', async () => {
-    // 'path' is a built-in module, always resolvable
-    await writeManifest('name: my-plugin\ndependencies: [path]\n')
+    await writeManifest('name: my-plugin\ndependencies:\n  - name: path\n')
     const report = await validatePlugin(pluginDir)
     expect(report.errors).toHaveLength(0)
     expect(report.warnings).toHaveLength(0)

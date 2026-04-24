@@ -166,7 +166,13 @@ export async function validatePlugin(pluginDir: string): Promise<ValidationRepor
   // -------------------------------------------------------------------------
   const rawData = data as Record<string, unknown> | null
   const dependencies: string[] = Array.isArray(rawData?.['dependencies'])
-    ? (rawData!['dependencies'] as unknown[]).filter((d): d is string => typeof d === 'string')
+    ? (rawData!['dependencies'] as unknown[]).flatMap((d): string[] => {
+        if (typeof d === 'string') return [d]
+        if (d !== null && typeof d === 'object' && typeof (d as { name?: unknown }).name === 'string') {
+          return [(d as { name: string }).name]
+        }
+        return []
+      })
     : []
 
   if (dependencies.length > 0) {
