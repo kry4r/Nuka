@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
+import type { PermissionPayload } from '../../../src/core/permission/bridge'
 
 describe('PermissionChecker', () => {
   it('auto-allows hint=none without prompting', async () => {
@@ -41,5 +42,64 @@ describe('PermissionChecker', () => {
     const d = await checker.check({ toolName: 'Bash', hint: 'exec', input: { command: 'x' } })
     expect(d.allowed).toBe(false)
     expect(d.reason).toBe('no')
+  })
+
+  it('populates read-only badge when call has readOnly annotation', async () => {
+    let captured: PermissionPayload | undefined
+    const ask = vi.fn(async (payload: PermissionPayload) => {
+      captured = payload
+      return { allowed: true }
+    })
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
+    await checker.check({
+      toolName: 'ReadFile',
+      hint: 'write',
+      input: {},
+      annotations: { readOnly: true },
+    })
+    expect(captured?.annotationBadges).toContain('read-only')
+  })
+
+  it('populates destructive badge when call has destructive annotation', async () => {
+    let captured: PermissionPayload | undefined
+    const ask = vi.fn(async (payload: PermissionPayload) => {
+      captured = payload
+      return { allowed: true }
+    })
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
+    await checker.check({
+      toolName: 'Delete',
+      hint: 'write',
+      input: {},
+      annotations: { destructive: true },
+    })
+    expect(captured?.annotationBadges).toContain('destructive')
+  })
+
+  it('populates network badge when call has openWorld annotation', async () => {
+    let captured: PermissionPayload | undefined
+    const ask = vi.fn(async (payload: PermissionPayload) => {
+      captured = payload
+      return { allowed: true }
+    })
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
+    await checker.check({
+      toolName: 'Fetch',
+      hint: 'network',
+      input: {},
+      annotations: { openWorld: true },
+    })
+    expect(captured?.annotationBadges).toContain('network')
+  })
+
+  it('no badges when call has no annotations', async () => {
+    let captured: PermissionPayload | undefined
+    const ask = vi.fn(async (payload: PermissionPayload) => {
+      captured = payload
+      return { allowed: true }
+    })
+    const checker = new PermissionChecker(() => new PermissionCache(), ask)
+    await checker.check({ toolName: 'Bash', hint: 'exec', input: {} })
+    expect(captured?.annotationBadges).toBeUndefined()
   })
 })

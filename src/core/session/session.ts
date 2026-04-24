@@ -17,6 +17,7 @@ export function createSession(opts: { providerId: string; model: string }): Sess
     mode: 'normal',
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    unDeferredToolNames: new Set(),
   }
 }
 

@@ -17,4 +17,9 @@ export type Session = {
   mode: SessionMode
   createdAt: number
   updatedAt: number
+  /**
+   * Tool names that have been un-deferred (via searchHint match or explicit
+   * un-defer). Once in this set, the tool stays loaded for the session.
+   */
+  unDeferredToolNames: Set<string>
 }

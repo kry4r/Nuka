@@ -43,7 +43,6 @@ import type { AutoCompactOpts } from './core/compact/auto'
 import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
-import type { PermissionCall } from './core/permission/types'
 import { loadSkills } from './core/skill/loader'
 import { makeSkillTool } from './core/skill/skillTool'
 import { SessionStore, DebouncedMetaWriter } from './core/session/store'
@@ -191,8 +190,8 @@ async function runInteractive(): Promise<void> {
     })()
   }
 
-  const askUser = (call: PermissionCall) =>
-    permBridge.ask({ call, suggestedPattern: suggestPattern(call) })
+  const askUser = (payload: import('./core/permission/bridge').PermissionPayload) =>
+    permBridge.ask({ ...payload, suggestedPattern: suggestPattern(payload.call) })
 
   const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
 

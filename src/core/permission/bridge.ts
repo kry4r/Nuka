@@ -2,9 +2,13 @@
 import type { PermissionCall, PermissionDecision } from './types'
 import type { ElicitationPayload, ElicitationResult } from '../mcp/elicitation'
 
+export type AnnotationBadge = 'read-only' | 'destructive' | 'network'
+
 export type PermissionPayload = {
   call: PermissionCall
   suggestedPattern?: string
+  /** Badges derived from the tool's annotations, shown in the permission UI. */
+  annotationBadges?: AnnotationBadge[]
 }
 
 export type PermissionHandler = (

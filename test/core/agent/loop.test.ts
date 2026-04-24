@@ -410,4 +410,212 @@ describe('runAgent', () => {
     expect(typeof compactedEv.before).toBe('number')
     expect(typeof compactedEv.after).toBe('number')
   })
+
+  // ── Parallel execution tests ──────────────────────────────────────────────
+
+  it('runs two readOnly tools in parallel (wall-time ~max, not sum)', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'par1', name: 'Fast' },
+      { type: 'tool_use_stop', id: 'par1', input: {} },
+      { type: 'tool_use_start', id: 'par2', name: 'Slow' },
+      { type: 'tool_use_stop', id: 'par2', input: {} },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+
+    const fastTool: Tool = {
+      name: 'Fast',
+      description: 'fast read-only tool',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => {
+        await new Promise<void>(r => setTimeout(r, 30))
+        return { output: 'fast', isError: false }
+      },
+    }
+    const slowTool: Tool = {
+      name: 'Slow',
+      description: 'slow read-only tool',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => {
+        await new Promise<void>(r => setTimeout(r, 60))
+        return { output: 'slow', isError: false }
+      },
+    }
+    tools.register(fastTool)
+    tools.register(slowTool)
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    const t0 = Date.now()
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'go' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+    const elapsed = Date.now() - t0
+
+    // Parallel: should take ~60ms not ~90ms
+    expect(elapsed).toBeLessThan(90)
+    // Both tool_result events present
+    const results = events.filter(e => e.type === 'tool_result')
+    expect(results).toHaveLength(2)
+  })
+
+  it('emits events in INPUT ORDER even when second tool completes first', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'first', name: 'SlowRead' },
+      { type: 'tool_use_stop', id: 'first', input: {} },
+      { type: 'tool_use_start', id: 'second', name: 'FastRead' },
+      { type: 'tool_use_stop', id: 'second', input: {} },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+
+    tools.register({
+      name: 'SlowRead',
+      description: 'slow',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => {
+        await new Promise<void>(r => setTimeout(r, 60))
+        return { output: 'slow', isError: false }
+      },
+    })
+    tools.register({
+      name: 'FastRead',
+      description: 'fast',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => {
+        await new Promise<void>(r => setTimeout(r, 10))
+        return { output: 'fast', isError: false }
+      },
+    })
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'go' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    const toolEvents = events.filter(e => e.type === 'tool_call' || e.type === 'tool_result')
+    // Should be: tool_call[first], tool_result[first], tool_call[second], tool_result[second]
+    expect(toolEvents[0]).toMatchObject({ type: 'tool_call', id: 'first' })
+    expect(toolEvents[1]).toMatchObject({ type: 'tool_result', id: 'first' })
+    expect(toolEvents[2]).toMatchObject({ type: 'tool_call', id: 'second' })
+    expect(toolEvents[3]).toMatchObject({ type: 'tool_result', id: 'second' })
+  })
+
+  it('falls back to serial when batch contains a non-readOnly tool', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'r1', name: 'ReadTool' },
+      { type: 'tool_use_stop', id: 'r1', input: {} },
+      { type: 'tool_use_start', id: 'w1', name: 'WriteTool' },
+      { type: 'tool_use_stop', id: 'w1', input: {} },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+    const runOrder: string[] = []
+
+    tools.register({
+      name: 'ReadTool',
+      description: 'read',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => { runOrder.push('ReadTool'); return { output: 'r', isError: false } },
+    })
+    tools.register({
+      name: 'WriteTool',
+      description: 'write',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      // NO readOnly annotation
+      needsPermission: () => 'write',
+      run: async () => { runOrder.push('WriteTool'); return { output: 'w', isError: false } },
+    })
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'go' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    // Serial order preserved: ReadTool first, WriteTool second
+    expect(runOrder).toEqual(['ReadTool', 'WriteTool'])
+  })
+
+  it('falls back to serial when batch has duplicate tool names', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'dup1', name: 'ReadTool' },
+      { type: 'tool_use_stop', id: 'dup1', input: {} },
+      { type: 'tool_use_start', id: 'dup2', name: 'ReadTool' },
+      { type: 'tool_use_stop', id: 'dup2', input: {} },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const provider = stubProvider([turn1, turn2])
+    const tools = new ToolRegistry()
+    let runCount = 0
+
+    tools.register({
+      name: 'ReadTool',
+      description: 'read',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      annotations: { readOnly: true },
+      needsPermission: () => 'none',
+      run: async () => { runCount++; return { output: `run${runCount}`, isError: false } },
+    })
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'go' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    // Both calls ran (serial fallback)
+    expect(runCount).toBe(2)
+    const results = events.filter(e => e.type === 'tool_result')
+    expect(results).toHaveLength(2)
+  })
 })

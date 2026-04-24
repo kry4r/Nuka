@@ -35,6 +35,7 @@ type Dialog =
       kind: 'permission'
       call: PermissionCall
       suggestedPattern?: string
+      annotationBadges?: import('../core/permission/bridge').AnnotationBadge[]
       resolve: (d: PermissionDecision) => void
     }
   | {
@@ -75,7 +76,7 @@ export function App(props: AppProps): React.JSX.Element {
 
   useEffect(() => {
     props.permissionBridge.setHandler((payload, resolve) => {
-      setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, resolve })
+      setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, annotationBadges: payload.annotationBadges, resolve })
     })
     props.permissionBridge.setElicitationHandler((payload, resolve) => {
       setDialog({ kind: 'elicitation', payload, resolve })
@@ -218,6 +219,7 @@ export function App(props: AppProps): React.JSX.Element {
               items={session.messages}
               streaming={streamingMsg}
               resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
+              resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
             />}
       </Box>
 
@@ -225,6 +227,7 @@ export function App(props: AppProps): React.JSX.Element {
         <PermissionDialog
           call={dialog.call}
           suggestedPattern={dialog.suggestedPattern}
+          annotationBadges={dialog.annotationBadges}
           onDecide={d => { dialog.resolve(d); setDialog(null) }}
         />
       )}

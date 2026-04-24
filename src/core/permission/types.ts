@@ -25,4 +25,10 @@ export type PermissionCall = {
   toolName: string
   hint: PermissionHint
   input: unknown
+  /** Optional tool annotations forwarded from the tool definition. */
+  annotations?: {
+    readOnly?: boolean
+    destructive?: boolean
+    openWorld?: boolean
+  }
 }

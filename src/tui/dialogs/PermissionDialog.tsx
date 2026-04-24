@@ -3,13 +3,24 @@ import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
 import type { PermissionCall, PermissionDecision } from '../../core/permission/types'
+import type { AnnotationBadge } from '../../core/permission/bridge'
+
+const BADGE_COLORS: Record<AnnotationBadge, string> = {
+  'read-only': P.success,
+  'destructive': P.error,
+  'network': P.warn,
+}
 
 export function PermissionDialog(props: {
   call: PermissionCall
   suggestedPattern?: string
+  annotationBadges?: AnnotationBadge[]
   onDecide: (d: PermissionDecision) => void
 }): React.JSX.Element {
-  const [cursor, setCursor] = useState(0)
+  const isDestructive = props.annotationBadges?.includes('destructive') ?? false
+  const isReadOnly = props.annotationBadges?.includes('read-only') ?? false
+
+  // Default cursor: 0 (Allow) for readOnly non-destructive; last option (No/Deny) for destructive
   const options: Array<{ label: string; decide: () => PermissionDecision }> = [
     { label: 'Yes, once', decide: () => ({ allowed: true }) },
     {
@@ -27,6 +38,9 @@ export function PermissionDialog(props: {
       : []),
     { label: 'No', decide: () => ({ allowed: false, reason: 'user denied' }) },
   ]
+
+  const defaultCursor = isDestructive ? options.length - 1 : 0
+  const [cursor, setCursor] = useState(defaultCursor)
 
   useInput((input, key) => {
     if (key.upArrow) setCursor(c => Math.max(0, c - 1))
@@ -46,10 +60,23 @@ export function PermissionDialog(props: {
   })
 
   const inputSummary = JSON.stringify(props.call.input).slice(0, 120)
+  const badges = props.annotationBadges ?? []
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={P.warn} paddingX={1}>
-      <Text color={P.warn} bold>{props.call.toolName} · {props.call.hint}</Text>
+    <Box flexDirection="column" borderStyle="round" borderColor={isDestructive ? P.error : P.warn} paddingX={1}>
+      {isDestructive && (
+        <Box>
+          <Text color={P.error} bold>⚠ WARNING: destructive operation — review carefully</Text>
+        </Box>
+      )}
+      {badges.length > 0 && (
+        <Box>
+          {badges.map(badge => (
+            <Text key={badge} color={BADGE_COLORS[badge]}>[{badge}] </Text>
+          ))}
+        </Box>
+      )}
+      <Text color={isDestructive ? P.error : P.warn} bold>{props.call.toolName} · {props.call.hint}</Text>
       <Text color={P.muted}>{inputSummary}</Text>
       <Box height={1} />
       {options.map((o, i) => (

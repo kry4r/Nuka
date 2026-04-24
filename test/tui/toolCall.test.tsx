@@ -113,4 +113,33 @@ describe('ToolCall', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('[skill]')
   })
+
+  it('renders (network) suffix when annotations.openWorld is true', () => {
+    const { lastFrame } = render(
+      <ToolCall
+        name="WebSearch"
+        argSummary="{}"
+        status="ok"
+        annotations={{ openWorld: true }}
+      />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('(network)')
+  })
+
+  it('does not render (network) suffix when annotations.openWorld is false/absent', () => {
+    const { lastFrame } = render(
+      <ToolCall name="ReadFile" argSummary="{}" status="ok" annotations={{ readOnly: true }} />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).not.toContain('(network)')
+  })
+
+  it('does not render (network) suffix when annotations prop is absent', () => {
+    const { lastFrame } = render(
+      <ToolCall name="Bash" argSummary="echo hi" status="ok" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).not.toContain('(network)')
+  })
 })

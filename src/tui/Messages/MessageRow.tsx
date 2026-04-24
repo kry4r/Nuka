@@ -15,6 +15,7 @@ function summarize(input: unknown): string {
 export function MessageRow(props: {
   m: Message
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined
+  resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
 }): React.JSX.Element | null {
   const { m } = props
   if (m.role === 'system') return null
@@ -53,6 +54,7 @@ export function MessageRow(props: {
                   argSummary={summarize(b.input)}
                   status="ok"
                   source={props.resolveToolSource?.(b.name)}
+                  annotations={props.resolveToolAnnotations?.(b.name)}
                 />
               )
             }
