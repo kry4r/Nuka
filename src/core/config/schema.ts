@@ -53,11 +53,21 @@ export const CompactSchema = z
   })
   .optional()
 
+export const SearchSchema = z
+  .object({
+    endpoint: z.string().url(),
+    apiKey: z.string().optional(),
+    authHeader: z.string().default('Authorization'),
+    authPrefix: z.string().default('Bearer '),
+  })
+  .optional()
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
   theme: ThemeSchema,
   welcome: WelcomeSchema,
   compact: CompactSchema,
+  search: SearchSchema,
 })
 export type Config = z.infer<typeof ConfigSchema>

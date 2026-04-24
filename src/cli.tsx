@@ -31,6 +31,9 @@ import { EditTool } from './core/tools/edit'
 import { BashTool } from './core/tools/bash'
 import { GlobTool } from './core/tools/glob'
 import { GrepTool } from './core/tools/grep'
+import { WebFetchTool } from './core/tools/webFetch'
+import { createTodoStore, makeTodoWriteTool } from './core/tools/todoWrite'
+import { makeWebSearchTool } from './core/tools/webSearch'
 import { currentGitBranch } from './core/session/telemetry'
 import { runAgent as runAgentLoop } from './core/agent/loop'
 import { compactSession } from './core/compact/compact'
@@ -96,8 +99,11 @@ async function main(): Promise<void> {
     sessions.start({ providerId: activeProvider!.id, model: activeModel })
   }
 
+  const todoStore = createTodoStore()
   const tools = new ToolRegistry()
-  ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool].forEach(t => tools.register(t as any))
+  ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool, WebFetchTool].forEach(t => tools.register(t as any))
+  tools.register(makeTodoWriteTool(todoStore) as any)
+  tools.register(makeWebSearchTool(config.search) as any)
   tools.register(makeSkillTool(skills) as any)
 
   const permBridge = new PermissionBridge()

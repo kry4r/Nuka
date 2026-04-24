@@ -7,7 +7,9 @@
   "bin": {
     "nuka": "dist/cli.js"
   },
-  "engines": { "node": ">=18.0.0" },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "tsx src/cli.tsx",
     "build": "node scripts/build.mjs",
@@ -18,36 +20,38 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "openai": "^4.90.0",
-    "ink": "^6.8.0",
-    "react": "^19.2.0",
-    "zod": "^4.3.0",
-    "yaml": "^2.8.0",
-    "execa": "^9.6.0",
-    "picomatch": "^4.0.4",
-    "marked": "^17.0.0",
+    "chalk": "^5.6.0",
     "cli-highlight": "^2.1.11",
     "diff": "^8.0.0",
+    "execa": "^9.6.0",
+    "ink": "^6.8.0",
+    "marked": "^17.0.0",
+    "openai": "^4.90.0",
+    "picomatch": "^4.0.4",
+    "react": "^19.2.0",
+    "strip-ansi": "^7.2.0",
+    "turndown": "^7.2.4",
     "ulid": "^2.3.0",
-    "chalk": "^5.6.0",
-    "strip-ansi": "^7.2.0"
+    "yaml": "^2.8.0",
+    "zod": "^4.3.0"
   },
   "overrides": {
     "zod": "^4.3.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.0.0",
     "@types/diff": "^7.0.0",
+    "@types/node": "^22.0.0",
     "@types/picomatch": "^4.0.0",
-    "typescript": "^5.6.0",
-    "tsx": "^4.19.0",
+    "@types/react": "^19.0.0",
+    "@types/turndown": "^5.0.6",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "esbuild": "^0.27.0",
-    "vitest": "^2.1.0",
+    "eslint": "^9.0.0",
     "ink-testing-library": "^4.0.0",
     "msw": "^2.7.0",
-    "eslint": "^9.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }
