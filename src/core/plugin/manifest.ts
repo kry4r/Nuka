@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { McpServerConfigSchema } from '../config/schema'
+import { AgentDefSchema } from '../agents/types'
 
 export const PluginManifestSchema = z.object({
   name: z
@@ -43,6 +44,12 @@ export const PluginManifestSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * Specialist agents declared by this plugin. Each agent is registered as
+   * `<plugin-name>:<agent-name>` and can be dispatched via the `dispatch_agent`
+   * tool (see Phase 5 M5-agents).
+   */
+  agents: z.array(AgentDefSchema).optional(),
   /**
    * User-configurable fields that must be supplied at first launch.
    * Persisted to ~/.nuka/plugins/<name>/.userconfig.json.
