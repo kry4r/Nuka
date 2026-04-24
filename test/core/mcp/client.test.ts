@@ -209,7 +209,6 @@ describe('McpClient callTool', () => {
     mocks.setCallToolResult({
       content: [
         { type: 'text', text: 'line1' },
-        { type: 'resource_link', uri: 'res://x' },
         { type: 'mystery' },
       ],
       isError: false,
@@ -221,7 +220,28 @@ describe('McpClient callTool', () => {
     await client.connect()
     const result = await client.callTool('foo', {})
     expect(typeof result.output).toBe('string')
-    expect(result.output).toBe('line1\n[resource: res://x]\n[unknown content block]')
+    expect(result.output).toBe('line1\n[unknown content block]')
+  })
+
+  it('inlines resource_link content (auto-fetch) in callTool output', async () => {
+    mocks.setCallToolResult({
+      content: [
+        { type: 'text', text: 'prefix' },
+        { type: 'resource_link', uri: 'res://doc' },
+      ],
+      isError: false,
+    })
+    mocks.setReadResourceResult({
+      contents: [{ uri: 'res://doc', text: 'the doc body' }],
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    const result = await client.callTool('foo', {})
+    expect(result.output).toBe('prefix\nthe doc body')
+    expect(result.output).not.toContain('[resource: res://doc]')
   })
 
   it('preserves isError: true from the SDK', async () => {

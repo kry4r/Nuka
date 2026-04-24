@@ -239,7 +239,22 @@ export class McpClient {
       if (block.type === 'text') {
         lines.push(block.text ?? '')
       } else if (block.type === 'resource_link') {
-        lines.push(`[resource: ${block.uri}]`)
+        // Auto-fetch the referenced resource inline so the model sees its
+        // content, not just its URI. The result is kept as plain text
+        // (joined into the lines array) rather than a structured
+        // ContentBlock — see M1.5 rationale: avoids cross-worktree
+        // coupling with M2's ContentBlock shape until that work lands.
+        if (block.uri) {
+          try {
+            const fetched = await this.readResource(block.uri, signal)
+            lines.push(fetched.output)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            lines.push(`[resource fetch failed: ${block.uri} — ${msg}]`)
+          }
+        } else {
+          lines.push('[resource_link: missing uri]')
+        }
       } else {
         lines.push('[unknown content block]')
       }
