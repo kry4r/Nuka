@@ -2,6 +2,8 @@
 import React from 'react'
 import { render } from 'ink'
 import os from 'node:os'
+import path from 'node:path'
+import readline from 'node:readline'
 import { spawn } from 'node:child_process'
 import { App } from './tui/App'
 import { loadConfig } from './core/config/load'
@@ -51,9 +53,44 @@ import { mcpToolsFor } from './core/mcp/toolAdapter'
 import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/resourceTools'
 import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
+import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import type { McpServerConfig } from './core/mcp/types'
 
-async function main(): Promise<void> {
+const argv = process.argv.slice(2)
+if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
+  const source = argv[2]
+  const force = argv.includes('--force')
+  ;(async () => {
+    try {
+      const manifest = await readManifestFrom(path.resolve(source))
+      process.stdout.write(`About to install plugin '${manifest.name}' into ~/.nuka/plugins/${manifest.name}\n`)
+      process.stdout.write(`  tools: ${manifest.tools.length}  slash: ${manifest.slashCommands.length}  skills: ${manifest.skills.length}  mcp: ${Object.keys(manifest.mcpServers).length}\n`)
+      const confirm = async (): Promise<boolean> => {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+        const answer: string = await new Promise(res => rl.question('Proceed? [y/N] ', res))
+        rl.close()
+        return answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes'
+      }
+      const result = await installPluginFromPath({ source: path.resolve(source), home: os.homedir(), force, confirm })
+      process.stdout.write(`installed '${result.name}' → ${result.targetDir}\n`)
+      process.stdout.write(`  tools: ${result.toolsCount}, slash: ${result.slashCount}, skills: ${result.skillsCount}, mcp: ${result.mcpCount}\n`)
+      if (!result.mcpCount && !result.toolsCount && !result.slashCount && !result.skillsCount) {
+        process.stdout.write('(plugin contributes no tools/slash/skills/mcp — verify manifest)\n')
+      }
+      process.exit(0)
+    } catch (err) {
+      process.stderr.write(`plugin install failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else {
+  runInteractive().catch(err => {
+    console.error(err)
+    process.exit(1)
+  })
+}
+
+async function runInteractive(): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig({ home: os.homedir(), cwd })
   const skills = await loadSkills({ home: os.homedir(), cwd })
@@ -212,7 +249,3 @@ async function main(): Promise<void> {
   )
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
