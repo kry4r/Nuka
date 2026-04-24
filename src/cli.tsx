@@ -153,12 +153,13 @@ async function runInteractive(): Promise<void> {
 
   const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
+  const hooks: import('./core/hooks/types').HookEntry[] = []
   for (const p of plugins) {
-    const result = await wirePlugin(p, { tools, slash, skills, mcpServers })
+    const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
-    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded}`)
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded}`)
   }
 
   // Register skill tool after all skill-loading (including plugin skills) finishes
@@ -230,6 +231,7 @@ async function runInteractive(): Promise<void> {
       skills,
       persist: sessions.persist,
       autoCompact,
+      hooks,
     }, signal)
 
   render(

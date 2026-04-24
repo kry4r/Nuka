@@ -17,6 +17,8 @@ import type { AutoCompactOpts } from '../compact/auto'
 import { maybeAutoCompact } from '../compact/auto'
 import { validateWithJsonSchema } from '../tools/validate'
 import { serializeContentBlocks } from '../tools/content'
+import type { HookEntry } from '../hooks/types'
+import { runHooks } from '../hooks/runner'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -26,6 +28,7 @@ export type RunAgentDeps = {
   skills?: Skill[]
   persist?: (session: Session, msg: Message) => void
   autoCompact?: AutoCompactOpts
+  hooks?: HookEntry[]
 }
 
 function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string; input: unknown }> {
@@ -97,10 +100,23 @@ export async function* runAgent(
         stopReason: assistant.stopReason ?? 'end_turn',
         usage: assistant.usage ?? { inputTokens: 0, outputTokens: 0 },
       }
+      // afterTurn hook — non-cancelable, swallow failures
+      if (deps.hooks && deps.hooks.length > 0) {
+        await runHooks(deps.hooks, 'afterTurn', { event: 'afterTurn', stopReason: assistant.stopReason ?? 'end_turn' })
+      }
       if (deps.autoCompact) {
-        const result = await maybeAutoCompact(session, deps.autoCompact)
-        if (result.compacted) {
-          yield { type: 'auto_compacted', before: result.before, after: result.after }
+        // beforeAutoCompact hook — veto cancels compaction
+        let skipCompact = false
+        if (deps.hooks && deps.hooks.length > 0) {
+          const beforeTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
+          const veto = await runHooks(deps.hooks, 'beforeAutoCompact', { event: 'beforeAutoCompact', tokensBefore: beforeTokens })
+          if (veto.cancel) skipCompact = true
+        }
+        if (!skipCompact) {
+          const result = await maybeAutoCompact(session, deps.autoCompact)
+          if (result.compacted) {
+            yield { type: 'auto_compacted', before: result.before, after: result.after }
+          }
         }
       }
       break
@@ -126,13 +142,25 @@ export async function* runAgent(
       }
 
       yield { type: 'tool_call', id: call.id, name: call.name, input: call.input }
+      // beforeToolCall hook — veto skips tool execution
+      let hookVetoed = false
+      let hookVetoReason: string | undefined
+      if (deps.hooks && deps.hooks.length > 0) {
+        const veto = await runHooks(deps.hooks, 'beforeToolCall', { event: 'beforeToolCall', tool: call.name, input: call.input }, { tool: call.name })
+        if (veto.cancel) {
+          hookVetoed = true
+          hookVetoReason = veto.reason
+        }
+      }
       const decision = await deps.permission.check({
         toolName: tool.name,
         hint: tool.needsPermission(call.input),
         input: call.input,
       })
       let result: import('../tools/types').ToolResult
-      if (!decision.allowed) {
+      if (hookVetoed) {
+        result = { output: `Cancelled by hook: ${hookVetoReason ?? 'hook returned cancel=true'}`, isError: true }
+      } else if (!decision.allowed) {
         result = { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
       } else {
         const pump = createProgressPump()
@@ -164,6 +192,10 @@ export async function* runAgent(
         ? result.output
         : serializeContentBlocks(result.output)
       yield { type: 'tool_result', id: call.id, output: outputStr, isError: result.isError }
+      // afterToolCall hook — non-cancelable, swallow failures
+      if (deps.hooks && deps.hooks.length > 0) {
+        await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: result.isError }, { tool: call.name })
+      }
     }
 
     const drained = session.queue.drain()

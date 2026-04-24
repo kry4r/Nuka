@@ -9,6 +9,8 @@ import type { SlashRegistry } from '../../slash/registry'
 import type { Skill } from '../skill/types'
 import { parseSkill } from '../skill/loader'
 import type { McpServerConfig } from '../mcp/types'
+import { loadHooks } from '../hooks/loader'
+import type { HookEntry } from '../hooks/types'
 
 function isToolLike(v: unknown): v is Tool {
   if (!v || typeof v !== 'object') return false
@@ -50,18 +52,21 @@ export async function wirePlugin(
     slash: SlashRegistry
     skills: Skill[]
     mcpServers: Record<string, McpServerConfig>
+    hooks?: HookEntry[]
   },
 ): Promise<{
   toolsAdded: number
   slashAdded: number
   skillsAdded: number
   mcpAdded: number
+  hooksAdded: number
   errors: string[]
 }> {
   let toolsAdded = 0
   let slashAdded = 0
   let skillsAdded = 0
   let mcpAdded = 0
+  let hooksAdded = 0
   const errors: string[] = []
 
   // Tools
@@ -144,5 +149,13 @@ export async function wirePlugin(
     mcpAdded++
   }
 
-  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, errors }
+  // Hooks
+  if (plugin.manifest.hooks !== undefined && deps.hooks !== undefined) {
+    const hooksPath = resolve(plugin.rootDir, plugin.manifest.hooks)
+    const entries = await loadHooks(hooksPath)
+    deps.hooks.push(...entries)
+    hooksAdded = entries.length
+  }
+
+  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, errors }
 }
