@@ -1,16 +1,20 @@
+import { alwaysOnSkills } from '../skill/activator'
+import type { Skill } from '../skill/types'
+
 export type SystemPromptInput = {
   cwd: string
   platform: string
   shell: string
   nodeVersion: string
   gitBranch: { branch: string; dirty: boolean } | null
+  skills?: Skill[]
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
   const git = input.gitBranch
     ? `git: ${input.gitBranch.branch}${input.gitBranch.dirty ? ' (dirty)' : ''}`
     : 'git: (not a git repository)'
-  return [
+  const lines = [
     'You are Nuka, a terminal coding agent. Be concise. Act. Ask before destructive changes.',
     '',
     'Environment:',
@@ -25,5 +29,17 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     '  - Prefer Edit for targeted changes; Write when creating new files.',
     '  - Announce destructive shell commands before executing them.',
     '  - Report results briefly; let the user review diffs and outputs.',
-  ].join('\n')
+  ]
+
+  if (input.skills && input.skills.length > 0) {
+    const active = alwaysOnSkills(input.skills)
+    if (active.length > 0) {
+      lines.push('', 'Skills:')
+      for (const skill of active) {
+        lines.push('', `# ${skill.name}`, '', skill.body)
+      }
+    }
+  }
+
+  return lines.join('\n')
 }

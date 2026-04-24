@@ -5,16 +5,19 @@ import type { ProviderEvent } from '../provider/types'
 import type { ProviderResolver } from '../provider/resolver'
 import type { ToolRegistry } from '../tools/registry'
 import type { PermissionChecker } from '../permission/checker'
-import { makeUserMessage, makeToolMessage, emptyAssistant } from '../message/factories'
+import { makeUserMessage, makeToolMessage, emptyAssistant, makeSystemMessage } from '../message/factories'
 import { buildSystemPrompt } from './systemPrompt'
 import { addUsage } from '../session/telemetry'
 import type { AssistantMessage, ContentBlock } from '../message/types'
+import type { Skill } from '../skill/types'
+import { matchKeywordSkills } from '../skill/activator'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
   tools: ToolRegistry
   permission: PermissionChecker
   systemPromptInput?: () => Parameters<typeof buildSystemPrompt>[0]
+  skills?: Skill[]
 }
 
 function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string; input: unknown }> {
@@ -48,6 +51,12 @@ export async function* runAgent(
   deps: RunAgentDeps,
   signal: AbortSignal,
 ): AsyncIterable<AgentEvent> {
+  if (deps.skills && deps.skills.length > 0) {
+    const matched = matchKeywordSkills(deps.skills, input.text)
+    for (const skill of matched) {
+      session.messages.push(makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`))
+    }
+  }
   session.messages.push(makeUserMessage(input))
 
   while (!signal.aborted) {

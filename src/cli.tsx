@@ -35,10 +35,13 @@ import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
 import type { PermissionCall } from './core/permission/types'
+import { loadSkills } from './core/skill/loader'
+import { makeSkillTool } from './core/skill/skillTool'
 
 async function main(): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig({ home: os.homedir(), cwd })
+  const skills = await loadSkills({ home: os.homedir(), cwd })
 
   if (config.providers.length === 0) {
     console.error(
@@ -61,6 +64,7 @@ async function main(): Promise<void> {
 
   const tools = new ToolRegistry()
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool].forEach(t => tools.register(t as any))
+  tools.register(makeSkillTool(skills) as any)
 
   const permBridge = new PermissionBridge()
   const askUser = (call: PermissionCall) =>
@@ -82,8 +86,9 @@ async function main(): Promise<void> {
       tools,
       permission,
       systemPromptInput: () => ({
-        cwd, platform, shell, nodeVersion, gitBranch,
+        cwd, platform, shell, nodeVersion, gitBranch, skills,
       }),
+      skills,
     }, signal)
 
   render(

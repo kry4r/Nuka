@@ -3,6 +3,7 @@ import type {
   UserMessage,
   AssistantMessage,
   ToolMessage,
+  SystemMessage,
 } from './types'
 
 export function makeUserMessage(input: { text: string }): UserMessage {
@@ -35,4 +36,8 @@ export function emptyAssistant(): AssistantMessage {
     id: ulid(),
     ts: Date.now(),
   }
+}
+
+export function makeSystemMessage(content: string): SystemMessage {
+  return { role: 'system', content }
 }

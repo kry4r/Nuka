@@ -132,6 +132,39 @@ describe('runAgent', () => {
     expect(events.some(e => e.type === 'queued_message_flushed' && e.count === 1)).toBe(true)
   })
 
+  it('injects keyword skill as system message before user message when keyword matches', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const provider = stubProvider([[
+      { type: 'text_delta', text: 'ok' },
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]])
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const skill = {
+      name: 'deploy-skill',
+      when: { keyword: ['deploy'] } as const,
+      body: 'Always run tests before deploying.',
+      source: 'global' as const,
+      path: '/fake/deploy.md',
+    }
+
+    for await (const _ of runAgent(
+      { text: 'please deploy the app' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission, skills: [skill] },
+      new AbortController().signal,
+    )) { /* drain */ }
+
+    const systemMsg = session.messages.find((m) => m.role === 'system')
+    expect(systemMsg).toBeDefined()
+    expect((systemMsg as any).content).toContain('[Skill: deploy-skill]')
+    expect((systemMsg as any).content).toContain('Always run tests before deploying.')
+    // system message must appear before the user message
+    const sysIdx = session.messages.indexOf(systemMsg!)
+    const userIdx = session.messages.findIndex((m) => m.role === 'user')
+    expect(sysIdx).toBeLessThan(userIdx)
+  })
+
   it('stores a remembered rule exactly once in session.permissionCache (no duplicate push)', async () => {
     const session = createSession({ providerId: 'p', model: 'm' })
     const turn1: ProviderEvent[] = [
