@@ -54,6 +54,8 @@ import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
+import { AgentRegistry } from './core/agents/registry'
+import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import type { McpServerConfig } from './core/mcp/types'
 
 const argv = process.argv.slice(2)
@@ -200,6 +202,7 @@ async function runInteractive(): Promise<void> {
   })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   const hooks: import('./core/hooks/types').HookEntry[] = []
+  const agents = new AgentRegistry()
 
   // Wire plugins that are ready (have config or don't need it)
   const pendingPlugins = plugins.filter(p => p.needsUserConfig)
@@ -207,13 +210,13 @@ async function runInteractive(): Promise<void> {
   for (const p of readyPlugins) {
     const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
     const result = await wirePlugin(p, {
-      tools, slash, skills, mcpServers, hooks,
+      tools, slash, skills, mcpServers, hooks, agents,
       pluginConfig: pluginConfig ?? undefined,
     })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
-    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded}`)
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded}`)
   }
 
   // Register skill tool after all skill-loading (including plugin skills) finishes
@@ -249,6 +252,17 @@ async function runInteractive(): Promise<void> {
     permBridge.ask({ ...payload, suggestedPattern: suggestPattern(payload.call) })
 
   const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
+
+  // Register the dispatch_agent tool after all plugins have wired their agents
+  // (so the tool's description enumerates every <plugin>:<agent> pair).
+  tools.register(
+    makeDispatchAgentTool({
+      agents,
+      registry: tools,
+      providerResolver: providers,
+      permission,
+    }) as any,
+  )
 
   const nodeVersion = process.version
   const shell = process.env.SHELL ?? '/bin/sh'
@@ -324,7 +338,7 @@ async function runInteractive(): Promise<void> {
         const config = await permBridge.promptPluginConfig({ plugin: p, fields })
         if (config !== null) {
           await writeUserConfig(os.homedir(), p.manifest.name, config)
-          const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks, pluginConfig: config })
+          const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks, agents, pluginConfig: config })
           if (result.errors.length > 0) {
             for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
           }

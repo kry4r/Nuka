@@ -60,4 +60,102 @@ describe('PluginManifestSchema', () => {
       expect(result.keywords).toEqual([])
     })
   })
+
+  describe('agents field', () => {
+    it('parses a well-formed agents array with inline systemPrompt', () => {
+      const result = PluginManifestSchema.parse({
+        name: 'multi',
+        agents: [
+          {
+            name: 'reviewer',
+            description: 'reviews code',
+            systemPrompt: 'You are a reviewer.',
+          },
+          {
+            name: 'tester',
+            description: 'runs tests',
+            systemPromptPath: 'prompts/tester.md',
+          },
+        ],
+      })
+      expect(result.agents).toHaveLength(2)
+      expect(result.agents![0]!.name).toBe('reviewer')
+      expect(result.agents![0]!.maxTurns).toBe(20) // default
+      expect(result.agents![1]!.systemPromptPath).toBe('prompts/tester.md')
+    })
+
+    it('defaults maxTurns to 20 when omitted', () => {
+      const result = PluginManifestSchema.parse({
+        name: 'd',
+        agents: [{ name: 'a', description: 'd', systemPrompt: 'p' }],
+      })
+      expect(result.agents![0]!.maxTurns).toBe(20)
+    })
+
+    it('rejects an agent with both systemPrompt and systemPromptPath', () => {
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [
+            {
+              name: 'a',
+              description: 'd',
+              systemPrompt: 'inline',
+              systemPromptPath: 'file.md',
+            },
+          ],
+        }),
+      ).toThrow(/exactly one of systemPrompt/)
+    })
+
+    it('rejects an agent with neither systemPrompt nor systemPromptPath', () => {
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [{ name: 'a', description: 'd' }],
+        }),
+      ).toThrow(/exactly one of systemPrompt/)
+    })
+
+    it('rejects an agent name that starts with a digit or has uppercase', () => {
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [{ name: '1bad', description: 'd', systemPrompt: 'p' }],
+        }),
+      ).toThrow()
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [{ name: 'Bad', description: 'd', systemPrompt: 'p' }],
+        }),
+      ).toThrow()
+    })
+
+    it('rejects temperature outside 0..1', () => {
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [
+            { name: 'a', description: 'd', systemPrompt: 'p', temperature: 1.5 },
+          ],
+        }),
+      ).toThrow()
+    })
+
+    it('requires both name and description on each agent', () => {
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [{ name: 'a', systemPrompt: 'p' } as unknown],
+        }),
+      ).toThrow()
+      expect(() =>
+        PluginManifestSchema.parse({
+          name: 'x',
+          agents: [{ description: 'd', systemPrompt: 'p' } as unknown],
+        }),
+      ).toThrow()
+    })
+  })
 })

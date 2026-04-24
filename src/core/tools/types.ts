@@ -2,6 +2,7 @@
 import type { ToolSpec } from '../provider/types'
 import type { ValidationResult } from './validate'
 import type { ContentBlock } from './content'
+import type { Session } from '../session/types'
 
 export type { ContentBlock } from './content'
 
@@ -25,6 +26,12 @@ export type ToolContext = {
    * their manifest.
    */
   pluginConfig?: Record<string, unknown>
+  /**
+   * The session this tool call is running in. Provided so tools can read
+   * session-scoped flags (e.g. `allowedAgentDispatch` for the recursion
+   * guard on `dispatch_agent`). Optional for backward compatibility.
+   */
+  session?: Session
 }
 
 export interface Tool<I = unknown> {
@@ -41,6 +48,14 @@ export interface Tool<I = unknown> {
     readOnly?: boolean
     destructive?: boolean
     openWorld?: boolean
+    /**
+     * When true, the main agent loop may parallelize two calls to this
+     * tool even when they share the same tool name. This is only safe
+     * when each invocation is fully independent (no shared state).
+     * Used by `dispatch_agent` — sibling sub-agent dispatches hold their
+     * own isolated session and tool registry.
+     */
+    parallelSafe?: boolean
   }
   /**
    * Keywords that trigger eager loading when matched against the first user

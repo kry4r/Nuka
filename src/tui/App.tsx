@@ -31,6 +31,26 @@ import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
 import { makeUserMessage } from '../core/message/factories'
+import { DISPATCH_AGENT_TOOL_NAME } from '../core/agents/dispatchTool'
+
+/**
+ * Scan messages (newest first) for the last assistant `dispatch_agent`
+ * tool_use call id. Returns undefined if no such call exists.
+ * Exported for tests.
+ */
+export function findLatestDispatchAgentCallId(messages: readonly import('../core/message/types').Message[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (!m || m.role !== 'assistant') continue
+    for (let j = m.content.length - 1; j >= 0; j--) {
+      const b = m.content[j]
+      if (b && b.type === 'tool_use' && b.name === DISPATCH_AGENT_TOOL_NAME) {
+        return b.id
+      }
+    }
+  }
+  return undefined
+}
 
 type Dialog =
   | {
@@ -190,11 +210,26 @@ export function App(props: AppProps): React.JSX.Element {
     return () => clearTimeout(id)
   }, [primedQuit])
 
-  useInput((_input, key) => {
+  const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
+
+  useInput((inputKey, key) => {
     if (key.escape) {
       if (stream.running) { stream.cancel(); return }
       if (primedQuit) { props.onExit(); exit() }
       else { setPrimedQuit(true) }
+      return
+    }
+    // Ctrl+A: toggle expansion of the most-recent dispatch_agent call.
+    if (key.ctrl && inputKey === 'a') {
+      const latestId = findLatestDispatchAgentCallId(session.messages)
+      if (latestId) {
+        setExpandedAgentCallIds(prev => {
+          const next = new Set(prev)
+          if (next.has(latestId)) next.delete(latestId)
+          else next.add(latestId)
+          return next
+        })
+      }
     }
   })
 
@@ -232,6 +267,7 @@ export function App(props: AppProps): React.JSX.Element {
           : <Messages
               items={session.messages}
               streaming={streamingMsg}
+              expandedAgentCallIds={expandedAgentCallIds}
               resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
               resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
             />}

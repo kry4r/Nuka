@@ -37,7 +37,9 @@ export type RunAgentDeps = {
  * Returns true when ALL calls in the batch can safely run in parallel:
  * - At least 2 calls
  * - Every resolved tool has annotations.readOnly === true
- * - No duplicate tool names
+ * - No duplicate tool names UNLESS the tool declares
+ *   annotations.parallelSafe === true (e.g. `dispatch_agent`, whose
+ *   invocations hold fully isolated sub-sessions)
  * - Every tool name is found in the registry
  */
 function canParallelize(
@@ -50,7 +52,7 @@ function canParallelize(
     const tool = registry.find(call.name)
     if (!tool) return false
     if (!tool.annotations?.readOnly) return false
-    if (seen.has(call.name)) return false
+    if (seen.has(call.name) && !tool.annotations.parallelSafe) return false
     seen.add(call.name)
   }
   return true
@@ -254,6 +256,7 @@ export async function* runAgent(
               cwd: process.cwd(),
               onProgress: pump.onProgress,
               onProgressTyped,
+              session,
             }).finally(pump.finish)
             // Drain pump into local buffer concurrently with tool execution
             const drainPromise = (async () => {
@@ -369,6 +372,7 @@ export async function* runAgent(
             cwd: process.cwd(),
             onProgress: pump.onProgress,
             onProgressTyped,
+            session,
           }).finally(pump.finish)
           for await (const msg of pump.drain()) {
             yield { type: 'tool_progress', id: call.id, text: msg }
