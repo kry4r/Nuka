@@ -1,5 +1,11 @@
 import type { McpServerConfig, McpConnectionStatus, McpToolDescriptor, McpResourceDescriptor } from './types'
-import { Client, StdioClientTransport, StreamableHTTPClientTransport } from './sdkBridge'
+import { pathToFileURL } from 'node:url'
+import {
+  Client,
+  StdioClientTransport,
+  StreamableHTTPClientTransport,
+  ListRootsRequestSchema,
+} from './sdkBridge'
 import type { ContentBlock } from '../tools/content'
 import { mcpTmpDir, mimeToExt } from './paths'
 import { truncateMcpResult, truncateDescription } from './truncate'
@@ -93,7 +99,17 @@ export class McpClient {
         })
       }
 
-      const client = new Client({ name: 'nuka', version: '0.1' }, { capabilities: {} })
+      const client = new Client(
+        { name: 'nuka', version: '0.1' },
+        { capabilities: { roots: { listChanged: false } } },
+      )
+
+      // Advertise the cwd as a single root so servers that ask for
+      // `roots/list` get a sensible answer instead of an error.
+      client.setRequestHandler(ListRootsRequestSchema, async () => ({
+        roots: [{ uri: pathToFileURL(process.cwd()).href, name: 'cwd' }],
+      }))
+
       await withTimeout(
         client.connect(transport as Parameters<typeof client.connect>[0]),
         this.connectTimeoutMs,

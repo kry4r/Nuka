@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
     readResource: ReturnType<typeof vi.fn>
     close: ReturnType<typeof vi.fn>
     getInstructions: ReturnType<typeof vi.fn>
+    setRequestHandler: ReturnType<typeof vi.fn>
   }> = []
 
   const FakeClient = vi.fn().mockImplementation(() => {
@@ -41,6 +42,7 @@ const mocks = vi.hoisted(() => {
       readResource: vi.fn().mockImplementation(async () => fakeReadResourceResult),
       close: vi.fn().mockResolvedValue(undefined),
       getInstructions: vi.fn().mockImplementation(() => fakeInstructions),
+      setRequestHandler: vi.fn(),
     }
     sdkInstances.push(instance)
     return instance
@@ -48,11 +50,13 @@ const mocks = vi.hoisted(() => {
 
   const FakeStdio = vi.fn().mockImplementation(() => ({}))
   const FakeHttp = vi.fn().mockImplementation(() => ({}))
+  const FakeListRootsRequestSchema = { __schema: 'ListRootsRequestSchema' }
 
   return {
     FakeClient,
     FakeStdio,
     FakeHttp,
+    FakeListRootsRequestSchema,
     sdkInstances,
     setConnectError(e: Error | null) { fakeConnectError = e },
     setCallToolResult(r: { content: unknown[]; isError?: boolean }) { fakeCallToolResult = r },
@@ -66,6 +70,7 @@ vi.mock('../../../src/core/mcp/sdkBridge', () => ({
   Client: mocks.FakeClient,
   StdioClientTransport: mocks.FakeStdio,
   StreamableHTTPClientTransport: mocks.FakeHttp,
+  ListRootsRequestSchema: mocks.FakeListRootsRequestSchema,
 }))
 
 import { McpClient } from '../../../src/core/mcp/client'
@@ -234,6 +239,54 @@ describe('McpClient callTool', () => {
   })
 })
 
+describe('McpClient roots handler', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('declares the roots capability on Client construction', async () => {
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    expect(mocks.FakeClient).toHaveBeenCalledTimes(1)
+    const [, capsArg] = mocks.FakeClient.mock.calls[0]!
+    expect(capsArg).toEqual({ capabilities: { roots: { listChanged: false } } })
+  })
+
+  it('registers a ListRoots handler exactly once per connect', async () => {
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    const sdkInstance = mocks.sdkInstances[0]!
+    const calls = sdkInstance.setRequestHandler.mock.calls.filter(
+      ([schema]) => schema === mocks.FakeListRootsRequestSchema,
+    )
+    expect(calls.length).toBe(1)
+  })
+
+  it('returns the cwd as a file:// root when the handler is invoked', async () => {
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    const sdkInstance = mocks.sdkInstances[0]!
+    const [, handler] = sdkInstance.setRequestHandler.mock.calls.find(
+      ([schema]) => schema === mocks.FakeListRootsRequestSchema,
+    )!
+    const result = await (handler as () => Promise<{ roots: Array<{ uri: string; name: string }> }>)()
+    expect(result.roots).toHaveLength(1)
+    expect(result.roots[0]!.name).toBe('cwd')
+    expect(result.roots[0]!.uri.startsWith('file://')).toBe(true)
+  })
+})
+
 describe('McpClient serverInstructions', () => {
   beforeEach(() => {
     mocks.setConnectError(null)
@@ -291,6 +344,8 @@ describe('McpClient timeouts', () => {
         callTool: vi.fn(),
         readResource: vi.fn(),
         close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
       }
       mocks.sdkInstances.push(instance as any)
       return instance
@@ -316,6 +371,8 @@ describe('McpClient timeouts', () => {
         callTool: vi.fn().mockImplementation(() => new Promise(() => {})),
         readResource: vi.fn(),
         close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
       }
       mocks.sdkInstances.push(instance as any)
       return instance
@@ -340,6 +397,8 @@ describe('McpClient timeouts', () => {
         callTool: vi.fn(),
         readResource: vi.fn().mockImplementation(() => new Promise(() => {})),
         close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
       }
       mocks.sdkInstances.push(instance as any)
       return instance
