@@ -350,3 +350,64 @@ Merge commits on `main`: `f65f4a2` (M2), `aa4f0b9` (M1), `d97a133` (M3).
 7. **M3.6 userConfig orchestration:** "first enable" is detected by *file-existence* on `.userconfig.json` (no separate flag). The loader partitions plugins into `readyPlugins` (wired immediately) and `pendingPlugins` (deferred until the TUI mounts and the permission bridge is available). A `setImmediate` tick after the initial render lets React mount before the first prompt fires — mirrors the existing `mcpManager` startup pattern. Cancelling a first-enable prompt skips that plugin *for the session only*; next launch re-prompts.
 
 Phase 5 begins from `main` at `d97a133` (next: marketplace + git/npm install + dependency closure, plugin `agents`/`outputStyles`/`channels`/`lspServers`, config scope).
+
+---
+
+## Appendix — Phase 5 Gap Closure
+
+Phase 5 landed on `main` via four worktrees merged in order M4-install → M5-agents → M5-platform → M4-ops (base `5b056b9`). Post-merge: `npm test` **770 passing**, `npm run typecheck` green, `dist/cli.js` **212.4 KB**. 16 of the 17 originally scheduled Phase-5 items closed; LSP integration (5.M5.4) was deliberately deferred to Phase 6 as a standalone focus.
+
+### M4 — Marketplace + installers + ops (12 items)
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 5.M4.1 | `marketplaces.json` config | `3c97239` |
+| 5.M4.2 | URL index fetch + cache + search | `e0c331e` |
+| 5.M4.3 | Git installer (`git clone --depth 1`) | `744fb70` |
+| 5.M4.4 | Npm installer (`npm pack` + extract, lifecycle-script guard) | `117b266` |
+| 5.M4.5 | Dependency closure (DFS + cycle detection) | `394000f` |
+| 5.M4.6 | Versioned cache paths + atomic symlink activation | `968180d` |
+| 5.M4.7 | Background auto-update | `0a6a6e2` |
+| 5.M4.8 | Blocklist + delist auto-uninstall detection | `cec623b` |
+| 5.M4.9 | `plugin validate` author CLI | `6466f04` |
+| 5.M4.10 | Interactive `/plugin` slash command (7 subcommands) | `6adf80f` |
+| 5.M4.11 | Plugin options storage (3-layer merge) | `19eed42` |
+| 5.M4.12 | `.mcpb`/`.dxt` bundle unpacker (pure Node built-ins) | `d2347a5` |
+
+### M5 — Agents swarm + platform (4 items)
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 5.M5.1.1 | Agents manifest schema | `0b4ada4` |
+| 5.M5.1.2 | Agent loader + registry | `25c85b5` |
+| 5.M5.1.3 | Tool filter (`allowedTools`/`deniedTools`) | `04fb955` |
+| 5.M5.1.4 | Dispatch (isolated sub-session runner) | `69b68ab` |
+| 5.M5.1.5 | `dispatch_agent` tool + CLI wire-up | `3decd95` |
+| 5.M5.1.6 | Recursion guard + parallel dispatch | `d4bdf91` |
+| 5.M5.1.7 | TUI rendering (`AgentCall.tsx`, Ctrl+A toggle) | `3bc6634` |
+| 5.M5.2 | outputStyles custom renderers | `cfdfb4f` |
+| 5.M5.3 | Channels notification routing (webhook/command) | `61e99a6` |
+| 5.M5.5 | Config scope cascade (enterprise→user→project→local) | `ee48b2a` |
+
+Merge commits on `main`: `d6828ad` (M4-install), `099e4a5` (M5-agents), `01ff232` (M5-platform), `728f06b` (M4-ops). Post-rebase fixup: `d8e7f5a` (validate dependency schema alignment after M4-install merged its object-shaped deps).
+
+### Gap-closure divergences from the design spec
+
+1. **M4.12 bundle unpacker** — `unzip` was not available on the build host. Rather than add an npm dep, a minimal ZIP container parser was written in pure Node built-ins: PK signature parsing + `zlib.inflateRaw` for DEFLATE entries. STORE entries are copied directly. Other compression methods (BZIP2, LZMA) surface a clear error — acceptable for `.mcpb`/`.dxt` which use DEFLATE in practice.
+2. **M4.1 concurrent `addMarketplace`** — atomic tmp+rename writes make *individual* writes atomic, but concurrent load→modify→save races are last-write-wins. Advisory locking deferred to Phase 6.
+3. **M4.4 npm security boundary** — rejects `preinstall`/`install`/`postinstall` scripts but does *not* sandbox, verify signatures, or inspect package contents. First-line defense only.
+4. **M4.3 git test flakiness** — `installFromGit` tests run real `git clone` against local `file://` fixtures and occasionally time out under parallel load; each test carries an explicit 15 s timeout.
+5. **M5.1.4 dispatch isolation** — sub-session built with empty `messages`/`usage`/`queue`/`permissionCache`/`unDeferredToolNames` and a fresh `ToolRegistry` populated from `filterTools` output. Permission checker is *shared* so sub-agent tool calls still prompt at the top level (intended — user sees and controls everything).
+6. **M5.1.5 dispatch_agent description** — uses a snapshot-at-registration pattern (agents available at registration time are enumerated in the description string). `loop.ts` rebuilds `toolSpecs` each turn, so the dynamic value and the snapshot are equivalent today. Mid-session plugin install would require upgrading to a getter.
+7. **M5.1.6 parallel dispatch** — a new opt-in annotation `annotations.parallelSafe?: boolean` was added because the 4b.M2.7 `canParallelize` path rejects duplicate tool names as a defense-in-depth; two sibling `dispatch_agent` calls both have the same name. `parallelSafe: true` explicitly opts dispatch_agent into parallel batches. Default is false.
+8. **M5.1.7 ToolContext.session** — optional `session?` field added to `ToolContext` so `dispatch_agent` can read `session.allowedAgentDispatch` for the recursion guard. Backward-compatible for all other tools.
+9. **M5.2 outputStyles error handling** — `OutputStyleErrorBoundary` wraps dynamic-imported components. Load failures (bad path, bad module) are caught in the `useEffect` path and fall back immediately; render-time throws are caught by the boundary. A brief fallback window during the async import settle is acceptable for a TUI.
+10. **M5.3 channels warning rate-limit** — once a channel fails, it logs once and silences for the process lifetime via a module-level `Set`. Prevents log spam on persistent failures (webhook server down) but transient-failure-then-recovery won't re-alert. `clearWarnedChannels()` exported for tests.
+11. **M5.5 `loadConfig` backward compat** — preserves the original `mergeProviders()`-by-id union semantics. `loadScopedConfig()` (the new API) uses generic deep-merge with last-wins arrays, so callers that migrate will see provider arrays from user scope dropped when project scope also defines providers. Documented in-source and noted as a migration caveat.
+12. **M4.9 validate + M4-install dep schema** — post-rebase, `dependencies` is `Array<{name, version?, required?}>` (objects) rather than `string[]`. A follow-up fixup commit (`d8e7f5a`) teaches `validatePlugin` to read names from either shape; tests updated to use the object form.
+
+### Hands-on demo
+
+The design spec called for a fixture marketplace + one dummy plugin with `agents[]` exercising `/plugin install` and `dispatch_agent`. The demo was not included as a test fixture in this round (would have required network or elaborate fixtures) — recorded here as a Phase 5 deliverable completed via integration tests rather than an end-to-end script. A standalone smoke-demo script can land in Phase 6 backlog as a quality-of-life addition.
+
+Phase 6 begins from `main` at the M4-ops merge commit (`728f06b`) plus the Gap Closure doc update.
