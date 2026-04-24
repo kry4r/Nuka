@@ -15,6 +15,7 @@ describe('StatusBar', () => {
         contextMax={200000}
         cost={0.28}
         mcpCount={0}
+        mcpHealth="none"
         autoMode="off"
         queueLength={0}
         mode="idle"
@@ -32,9 +33,21 @@ describe('StatusBar', () => {
     const { lastFrame } = render(
       <StatusBar
         model="m" cwd="~" gitBranch={null} contextUsed={0} contextMax={200000}
-        cost={0} mcpCount={0} autoMode="off" queueLength={0} mode="running"
+        cost={0} mcpCount={0} mcpHealth="none" autoMode="off" queueLength={0} mode="running"
       />,
     )
     expect(lastFrame()).toContain('esc cancel')
+  })
+
+  it('shows dot and count when mcpHealth is degraded', () => {
+    const { lastFrame } = render(
+      <StatusBar
+        model="m" cwd="~" gitBranch={null} contextUsed={0} contextMax={200000}
+        cost={0} mcpCount={2} mcpHealth="degraded" autoMode="off" queueLength={0} mode="idle"
+      />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('●')
+    expect(f).toContain('2 mcp')
   })
 })

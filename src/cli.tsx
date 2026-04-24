@@ -46,6 +46,9 @@ import { loadSkills } from './core/skill/loader'
 import { makeSkillTool } from './core/skill/skillTool'
 import { SessionStore, DebouncedMetaWriter } from './core/session/store'
 import { sessionsDir } from './core/session/paths'
+import { McpManager } from './core/mcp/manager'
+import { mcpToolsFor } from './core/mcp/toolAdapter'
+import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/resourceTools'
 
 async function main(): Promise<void> {
   const cwd = process.cwd()
@@ -106,6 +109,24 @@ async function main(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
   tools.register(makeSkillTool(skills) as any)
 
+  const mcpServers = config.mcp?.servers ?? {}
+  const mcpManager = Object.keys(mcpServers).length > 0 ? new McpManager({ servers: mcpServers }) : null
+
+  if (mcpManager) {
+    tools.register(makeListMcpResourcesTool(mcpManager) as any)
+    tools.register(makeReadMcpResourceTool(mcpManager) as any)
+
+    void (async () => {
+      await mcpManager.startAll()
+      for (const c of mcpManager.listClients()) {
+        if (c.status.kind === 'connected') {
+          const mcpTools = await mcpToolsFor(c)
+          mcpTools.forEach(t => tools.register(t as any))
+        }
+      }
+    })()
+  }
+
   const permBridge = new PermissionBridge()
   const askUser = (call: PermissionCall) =>
     permBridge.ask({ call, suggestedPattern: suggestPattern(call) })
@@ -121,7 +142,8 @@ async function main(): Promise<void> {
   const gitBranch = currentGitBranch(cwd)
 
   process.on('SIGINT', () => {
-    metaWriter.flush().finally(() => process.exit(0))
+    const cleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
+    cleanup.finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
   // Build auto-compact opts. Use compact.model with the active session's provider when set;
@@ -171,6 +193,7 @@ async function main(): Promise<void> {
       cwd={cwd}
       gitBranch={gitBranch}
       version={MACRO_VERSION}
+      mcpManager={mcpManager ?? undefined}
     />,
   )
 }

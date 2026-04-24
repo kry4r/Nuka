@@ -21,6 +21,7 @@ import type { SlashRegistry } from '../slash/registry'
 import type { Session } from '../core/session/types'
 import type { PermissionCall, PermissionDecision } from '../core/permission/types'
 import type { PermissionBridge } from '../core/permission/bridge'
+import type { McpManager } from '../core/mcp/manager'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
@@ -50,6 +51,7 @@ export type AppProps = {
   cwd: string
   gitBranch: { branch: string; dirty: boolean } | null
   version: string
+  mcpManager?: McpManager
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -59,6 +61,7 @@ export function App(props: AppProps): React.JSX.Element {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
+  const [mcpTick, setMcpTick] = useState(0)
   const pendingAttachments = useRef<string[]>([])
 
   useEffect(() => {
@@ -69,6 +72,11 @@ export function App(props: AppProps): React.JSX.Element {
       props.permissionBridge.setHandler(null)
     }
   }, [props.permissionBridge])
+
+  useEffect(() => {
+    if (!props.mcpManager) return
+    return props.mcpManager.onChange(() => setMcpTick(t => t + 1))
+  }, [props.mcpManager])
 
   const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
     props.runAgent(i, session, signal)
@@ -171,6 +179,14 @@ export function App(props: AppProps): React.JSX.Element {
   const hintMode: 'idle' | 'running' | 'awaiting-user' | 'primed-quit' =
     dialog ? 'awaiting-user' : stream.running ? 'running' : primedQuit ? 'primed-quit' : 'idle'
 
+  void mcpTick // consumed to trigger re-render on MCP status changes
+  const mcpStatuses = props.mcpManager?.status() ?? []
+  const mcpCount = mcpStatuses.filter(s => s.status.kind === 'connected').length
+  const mcpHealth: 'ok' | 'degraded' | 'none' =
+    mcpStatuses.length === 0 ? 'none'
+    : mcpStatuses.every(s => s.status.kind === 'connected') ? 'ok'
+    : 'degraded'
+
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" flexGrow={1}>
@@ -250,7 +266,8 @@ export function App(props: AppProps): React.JSX.Element {
         contextUsed={contextUsed}
         contextMax={contextMax}
         cost={cost}
-        mcpCount={0}
+        mcpCount={mcpCount}
+        mcpHealth={mcpHealth}
         autoMode="off"
         queueLength={session.queue.size()}
         mode={hintMode}

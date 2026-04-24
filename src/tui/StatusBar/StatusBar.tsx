@@ -14,6 +14,7 @@ export type StatusBarProps = {
   contextMax: number
   cost: number
   mcpCount: number
+  mcpHealth: 'ok' | 'degraded' | 'none'
   autoMode: 'off' | `on(${number})`
   queueLength: number
   mode: HintMode
@@ -30,7 +31,7 @@ export function StatusBar(p: StatusBarProps): React.JSX.Element {
         <CostSeg cost={p.cost} />
       </Box>
       <Box>
-        <McpSeg count={p.mcpCount} /><Sep />
+        <McpSeg count={p.mcpCount} health={p.mcpHealth} /><Sep />
         <AutoSeg mode={p.autoMode} />
         {p.queueLength > 0 && <><Sep /><QueueSeg n={p.queueLength} /></>}
         <Box flexGrow={1} />

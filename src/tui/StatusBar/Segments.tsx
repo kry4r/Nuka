@@ -33,9 +33,10 @@ export function CostSeg({ cost }: { cost: number }): React.JSX.Element {
   return <Text color={P.primary}>${cost.toFixed(2)}</Text>
 }
 
-export function McpSeg({ count }: { count: number }): React.JSX.Element {
-  if (count === 0) return <Text color={P.muted}>✓ no mcp</Text>
-  return <Text color={P.success}>● {count} mcp</Text>
+export function McpSeg({ count, health }: { count: number; health: 'ok' | 'degraded' | 'none' }): React.JSX.Element {
+  if (count === 0 && health === 'none') return <Text color={P.muted}>✓ no mcp</Text>
+  const color = health === 'ok' ? P.success : P.warn
+  return <Text color={color}>● {count} mcp</Text>
 }
 
 export function AutoSeg({ mode }: { mode: 'off' | `on(${number})` }): React.JSX.Element {
