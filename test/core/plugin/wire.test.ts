@@ -79,7 +79,7 @@ describe('wirePlugin', () => {
 
     const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
 
-    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, errors: [] })
+    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, errors: [] })
 
     const t = tools.find('plugin__demo__Hello')
     expect(t).toBeDefined()

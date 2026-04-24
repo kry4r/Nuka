@@ -15,6 +15,8 @@ export const PluginManifestSchema = z.object({
   slashCommands: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([]),
   mcpServers: z.record(z.string(), McpServerConfigSchema).default({}),
+  /** Relative path to a hooks.json file within the plugin directory */
+  hooks: z.string().optional(),
 })
 export type PluginManifest = z.infer<typeof PluginManifestSchema>
 

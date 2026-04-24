@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type LoadedPlugin } from './manifest'
 
-export async function loadPlugins(opts: { home: string }): Promise<LoadedPlugin[]> {
+export async function loadPlugins(opts: { home: string; enabled?: string[] }): Promise<LoadedPlugin[]> {
   const pluginsDir = join(opts.home, '.nuka', 'plugins')
 
   let entries: string[]
@@ -30,16 +30,24 @@ export async function loadPlugins(opts: { home: string }): Promise<LoadedPlugin[
     if (!isDir) continue
 
     let raw: string | undefined
+    let manifestFilename: string | undefined
     for (const filename of ['plugin.yaml', 'plugin.json']) {
       try {
         raw = await readFile(join(dir, filename), 'utf8')
+        manifestFilename = filename
         break
       } catch {
         // try next
       }
     }
 
-    if (raw === undefined) continue
+    if (raw === undefined || manifestFilename === undefined) continue
+
+    if (manifestFilename === 'plugin.yaml') {
+      console.warn(
+        `[nuka] plugin '${name}' uses plugin.yaml; note YAML is Nuka-specific and not portable to Nuka-Code. See docs/plugins.md`,
+      )
+    }
 
     let data: unknown
     try {
@@ -58,6 +66,11 @@ export async function loadPlugins(opts: { home: string }): Promise<LoadedPlugin[
     }
 
     plugins.push({ manifest, rootDir: dir })
+  }
+
+  if (opts.enabled !== undefined) {
+    const allowed = new Set(opts.enabled)
+    return plugins.filter(p => allowed.has(p.manifest.name))
   }
 
   return plugins
