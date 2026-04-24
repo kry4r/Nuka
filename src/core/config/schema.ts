@@ -106,5 +106,11 @@ export const ConfigSchema = z.object({
   search: SearchSchema,
   mcp: McpConfigSchema,
   plugins: PluginsConfigSchema,
+  /**
+   * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
+   * Declared in the enterprise config; ignored if declared in other scopes.
+   * e.g. ["providers.openai.apiKey", "mcp"]
+   */
+  locked: z.array(z.string()).optional(),
 })
 export type Config = z.infer<typeof ConfigSchema>

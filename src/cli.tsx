@@ -6,7 +6,9 @@ import path from 'node:path'
 import readline from 'node:readline'
 import { spawn } from 'node:child_process'
 import { App } from './tui/App'
-import { loadConfig } from './core/config/load'
+import { loadConfig, loadScopedConfig } from './core/config/load'
+import type { ConfigScope } from './core/config/scopeMerge'
+import { SCOPE_ORDER } from './core/config/scopeMerge'
 import { ProviderResolver } from './core/provider/resolver'
 import { SessionManager } from './core/session/manager'
 import { ToolRegistry } from './core/tools/registry'
@@ -108,6 +110,58 @@ if (argv[0] === 'plugin' && argv[1] === 'list') {
       process.exit(0)
     } catch (err) {
       process.stderr.write(`plugin install failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'config' && argv[1] === 'show') {
+  // nuka config show [--scope <enterprise|user|project|local>]
+  ;(async () => {
+    try {
+      const scopeIdx = argv.indexOf('--scope')
+      const scopeArg: ConfigScope | undefined =
+        scopeIdx !== -1 && argv[scopeIdx + 1]
+          ? (argv[scopeIdx + 1] as ConfigScope)
+          : undefined
+
+      const validScopes: string[] = SCOPE_ORDER
+      if (scopeArg !== undefined && !validScopes.includes(scopeArg)) {
+        process.stderr.write(
+          `Unknown scope '${scopeArg}'. Valid scopes: ${validScopes.join(', ')}\n`,
+        )
+        process.exit(1)
+      }
+
+      const result = await loadScopedConfig({ projectCwd: process.cwd() })
+
+      if (scopeArg !== undefined) {
+        // Print only the specified scope's contribution
+        const scopeData = result.perScope[scopeArg]
+        if (scopeData === null) {
+          process.stdout.write(`# scope '${scopeArg}': no config found\n`)
+        } else {
+          process.stdout.write(`# scope: ${scopeArg}\n`)
+          process.stdout.write(JSON.stringify(scopeData, null, 2) + '\n')
+        }
+      } else {
+        // Print effective config with source annotations
+        process.stdout.write('# effective config (merged from all scopes)\n')
+        process.stdout.write(JSON.stringify(result.effective, null, 2) + '\n')
+        if (Object.keys(result.sources).length > 0) {
+          process.stdout.write('\n# sources:\n')
+          for (const [key, scope] of Object.entries(result.sources).sort()) {
+            process.stdout.write(`#   ${key}: ${scope}\n`)
+          }
+        }
+        if (result.locked.length > 0) {
+          process.stdout.write('\n# enterprise-locked paths:\n')
+          for (const p of result.locked) {
+            process.stdout.write(`#   ${p}\n`)
+          }
+        }
+      }
+      process.exit(0)
+    } catch (err) {
+      process.stderr.write(`config show failed: ${(err as Error).message}\n`)
       process.exit(1)
     }
   })()

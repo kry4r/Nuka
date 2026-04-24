@@ -13,6 +13,8 @@ import { loadHooks } from '../hooks/loader'
 import type { HookEntry } from '../hooks/types'
 import type { AgentRegistry } from '../agents/registry'
 import { resolveAgentDef } from '../agents/loader'
+import { registerOutputStyle } from './outputStyles'
+import { registerChannel } from '../notifications/channelRegistry'
 
 function isToolLike(v: unknown): v is Tool {
   if (!v || typeof v !== 'object') return false
@@ -185,6 +187,17 @@ export async function wirePlugin(
         errors.push(`agent '${agentDef.name}': ${(err as Error).message}`)
       }
     }
+  }
+
+  // Output styles — resolve componentPath relative to plugin root and register globally
+  for (const styleDef of plugin.manifest.outputStyles ?? []) {
+    const absComponentPath = resolve(plugin.rootDir, styleDef.componentPath)
+    registerOutputStyle({ ...styleDef, componentPath: absComponentPath })
+  }
+
+  // Channels — register globally for agent-loop dispatch
+  for (const channelDef of plugin.manifest.channels ?? []) {
+    registerChannel(channelDef)
   }
 
   return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, agentsAdded, errors }
