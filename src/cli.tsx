@@ -245,6 +245,7 @@ async function runInteractive(): Promise<void> {
       gitBranch={gitBranch}
       version={MACRO_VERSION}
       mcpManager={mcpManager ?? undefined}
+      tools={tools}
     />,
   )
 }

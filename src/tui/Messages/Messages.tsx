@@ -7,13 +7,22 @@ import type { Message } from '../../core/message/types'
 export function Messages(props: {
   items: Message[]
   streaming: Message | null
+  resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined
 }): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Static items={props.items}>
-        {(m, i) => <MessageRow key={'id' in m ? m.id : i} m={m} />}
+        {(m, i) => (
+          <MessageRow
+            key={'id' in m ? m.id : i}
+            m={m}
+            resolveToolSource={props.resolveToolSource}
+          />
+        )}
       </Static>
-      {props.streaming && <MessageRow m={props.streaming} />}
+      {props.streaming && (
+        <MessageRow m={props.streaming} resolveToolSource={props.resolveToolSource} />
+      )}
     </Box>
   )
 }

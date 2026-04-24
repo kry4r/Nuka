@@ -22,6 +22,7 @@ import type { Session } from '../core/session/types'
 import type { PermissionCall, PermissionDecision } from '../core/permission/types'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
+import type { ToolRegistry } from '../core/tools/registry'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
@@ -52,6 +53,7 @@ export type AppProps = {
   gitBranch: { branch: string; dirty: boolean } | null
   version: string
   mcpManager?: McpManager
+  tools?: ToolRegistry
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -201,7 +203,11 @@ export function App(props: AppProps): React.JSX.Element {
               version={props.version}
               tip={tip}
             />
-          : <Messages items={session.messages} streaming={streamingMsg} />}
+          : <Messages
+              items={session.messages}
+              streaming={streamingMsg}
+              resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
+            />}
       </Box>
 
       {dialog?.kind === 'permission' && (

@@ -19,4 +19,27 @@ describe('Messages', () => {
     expect(f).toContain('you')
     expect(f).toContain('nuka')
   })
+
+  it('renders ToolCall for tool_use content blocks', () => {
+    const items: Message[] = [
+      {
+        role: 'assistant',
+        id: 'a2',
+        ts: 3,
+        content: [
+          { type: 'tool_use', id: 'tu1', name: 'mcp__fs__read', input: { path: '/tmp/x' } },
+        ],
+      },
+    ]
+    const { lastFrame } = render(
+      <Messages
+        items={items}
+        streaming={null}
+        resolveToolSource={() => 'mcp'}
+      />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('mcp__fs__read')
+    expect(f).toContain('[mcp]')
+  })
 })

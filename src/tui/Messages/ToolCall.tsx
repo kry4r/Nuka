@@ -9,6 +9,7 @@ export function ToolCall(props: {
   status: 'running' | 'ok' | 'error'
   durationMs?: number
   progressLines?: string[]
+  source?: 'builtin' | 'skill' | 'mcp' | 'plugin'
 }): React.JSX.Element {
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
   const iconColor = props.status === 'error' ? P.error : P.success
@@ -23,6 +24,9 @@ export function ToolCall(props: {
       <Box>
         <Text color={P.accent}>⏺ </Text>
         <Text color={P.fg} bold>{props.name} </Text>
+        {props.source && props.source !== 'builtin' && (
+          <Text color={P.muted}>[{props.source}] </Text>
+        )}
         <Text color={P.muted}>{props.argSummary}</Text>
         {props.durationMs != null && (
           <Text color={P.muted}>  {(props.durationMs / 1000).toFixed(1)}s</Text>

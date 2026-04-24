@@ -53,4 +53,45 @@ describe('ToolCall', () => {
     // No border characters from the progress box
     expect(f).not.toContain('─')
   })
+
+  it('renders [mcp] badge when source is mcp', () => {
+    const { lastFrame } = render(
+      <ToolCall name="mcp__fs__read" argSummary="{}" status="ok" source="mcp" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('[mcp]')
+    expect(f).toContain('mcp__fs__read')
+  })
+
+  it('renders no badge when source is undefined', () => {
+    const { lastFrame } = render(
+      <ToolCall name="Bash" argSummary="cmd" status="ok" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).not.toContain('[')
+  })
+
+  it('renders no badge when source is builtin', () => {
+    const { lastFrame } = render(
+      <ToolCall name="Read" argSummary="file.ts" status="ok" source="builtin" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).not.toContain('[builtin]')
+  })
+
+  it('renders [plugin] badge when source is plugin', () => {
+    const { lastFrame } = render(
+      <ToolCall name="plugin__demo__doThing" argSummary="{}" status="ok" source="plugin" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('[plugin]')
+  })
+
+  it('renders [skill] badge when source is skill', () => {
+    const { lastFrame } = render(
+      <ToolCall name="RunSkill" argSummary="{}" status="ok" source="skill" />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('[skill]')
+  })
 })
