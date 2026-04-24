@@ -1,5 +1,6 @@
 // src/core/tools/types.ts
 import type { ToolSpec } from '../provider/types'
+import type { ValidationResult } from './validate'
 
 export type PermissionHint = 'none' | 'write' | 'exec' | 'network'
 
@@ -16,6 +17,16 @@ export interface Tool<I = unknown> {
   description: string
   parameters: Record<string, unknown>
   source: 'builtin' | 'skill' | 'mcp' | 'plugin'
+  /** Optional custom validator; if absent, validateWithJsonSchema is used. */
+  validateInput?: (input: unknown) => ValidationResult<I>
+  /** Optional per-tool result size cap (string output only). */
+  maxResultSizeChars?: number
+  /** Optional annotations about tool behavior. */
+  annotations?: {
+    readOnly?: boolean
+    destructive?: boolean
+    openWorld?: boolean
+  }
   needsPermission: (input: I) => PermissionHint
   run: (input: I, ctx: ToolContext) => Promise<ToolResult>
 }
