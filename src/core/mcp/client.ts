@@ -20,6 +20,7 @@ import {
 import { parseElicitationParams } from './elicitation'
 import type { PermissionBridge } from '../permission/bridge'
 import { RingBuffer, DEFAULT_STDERR_BUFFER_BYTES } from './stderrBuffer'
+import { persistLargeOutput } from './outputPersist'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -63,6 +64,7 @@ export class McpClient {
   private reconnectFailed = false
   private permissionBridge?: PermissionBridge
   private stderrBuf: RingBuffer
+  private persistThresholdChars: number
 
   constructor(opts: {
     name: string
@@ -74,6 +76,7 @@ export class McpClient {
     reconnectPolicy?: ReconnectPolicy
     permissionBridge?: PermissionBridge
     stderrBufferBytes?: number
+    persistThresholdChars?: number
   }) {
     this.name = opts.name
     this.config = opts.config
@@ -84,6 +87,7 @@ export class McpClient {
     this.reconnectPolicy = opts.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY
     this.permissionBridge = opts.permissionBridge
     this.stderrBuf = new RingBuffer(opts.stderrBufferBytes ?? DEFAULT_STDERR_BUFFER_BYTES)
+    this.persistThresholdChars = opts.persistThresholdChars ?? 500_000
   }
 
   get status(): McpConnectionStatus {
@@ -382,8 +386,21 @@ export class McpClient {
         lines.push('[unknown content block]')
       }
     }
+    const fullText = lines.join('\n')
     const truncated = truncateMcpResult(lines, this.maxResultChars)
-    return { output: truncated.text, isError: (result.isError as boolean) ?? false }
+    // M1.14: If the original (pre-truncation) output exceeds the threshold,
+    // write it to disk and append the path to the returned (truncated) text.
+    // Only applies to string (non-image) outputs.
+    let output = truncated.text
+    if (fullText.length > this.persistThresholdChars) {
+      try {
+        const persisted = await persistLargeOutput({ fullText })
+        output = `${output}\n...[full output at ${persisted.path}]`
+      } catch {
+        // Persistence failure is non-fatal: the truncated output is still useful.
+      }
+    }
+    return { output, isError: (result.isError as boolean) ?? false }
   }
 
   async readResource(

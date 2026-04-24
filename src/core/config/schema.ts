@@ -87,6 +87,7 @@ export const McpConfigSchema = z
     maxResultChars: z.number().int().positive().default(100_000),
     connectTimeoutMs: z.number().int().positive().default(30_000),
     requestTimeoutMs: z.number().int().positive().default(600_000),
+    persistThresholdChars: z.number().int().positive().default(500_000),
   })
   .optional()
 

@@ -694,3 +694,55 @@ describe('McpClient stderr buffer', () => {
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// M1.14 — Large-output persistence
+// ---------------------------------------------------------------------------
+describe('McpClient large-output persistence', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('appends path notice and writes file when output exceeds persistThresholdChars', async () => {
+    const bigText = 'Z'.repeat(1_000_000)
+    mocks.setCallToolResult({ content: [{ type: 'text', text: bigText }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+      persistThresholdChars: 500_000,
+    })
+    await client.connect()
+    const result = await client.callTool('big_tool', {})
+    expect(typeof result.output).toBe('string')
+    const out = result.output as string
+    // Must contain the path notice
+    expect(out).toMatch(/\.\.\.\[full output at .+mcp-out-.+\.txt\]/)
+    // The referenced file must exist and contain the full text
+    const match = out.match(/\.\.\.\[full output at (.+)\]/)
+    expect(match).not.toBeNull()
+    const filePath = match![1]!
+    const { readFileSync, unlinkSync } = await import('node:fs')
+    const written = readFileSync(filePath, 'utf8')
+    expect(written).toBe(bigText)
+    // Clean up
+    unlinkSync(filePath)
+  })
+
+  it('does NOT persist output below persistThresholdChars', async () => {
+    const smallText = 'tiny output'
+    mocks.setCallToolResult({ content: [{ type: 'text', text: smallText }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+      persistThresholdChars: 500_000,
+    })
+    await client.connect()
+    const result = await client.callTool('small_tool', {})
+    expect(result.output).toBe(smallText)
+    expect(result.output).not.toContain('mcp-out-')
+  })
+})
