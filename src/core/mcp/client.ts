@@ -1,5 +1,9 @@
 import type { McpServerConfig, McpConnectionStatus, McpToolDescriptor, McpResourceDescriptor } from './types'
 import { Client, StdioClientTransport, StreamableHTTPClientTransport } from './sdkBridge'
+import type { ContentBlock } from '../tools/content'
+import { mcpTmpDir, mimeToExt } from './paths'
+import fs from 'node:fs'
+import crypto from 'node:crypto'
 
 type SdkClientHandle = InstanceType<typeof Client>
 
@@ -91,26 +95,51 @@ export class McpClient {
     rawName: string,
     input: unknown,
     signal?: AbortSignal,
-  ): Promise<{ output: string; isError: boolean }> {
+  ): Promise<{ output: string | ContentBlock[]; isError: boolean }> {
     if (!this.sdk) throw new Error('Not connected')
     const result = await this.sdk.callTool(
       { name: rawName, arguments: input as Record<string, unknown> },
       undefined,
       { signal },
     )
-    const lines: string[] = []
-    const content = result.content as Array<{
+    const sdkContent = result.content as Array<{
       type: string
       text?: string
       mimeType?: string
       data?: string
       uri?: string
     }>
-    for (const block of content) {
+
+    // Check if any block is rich (image); if so return ContentBlock[]
+    const hasRichBlock = sdkContent.some(b => b.type === 'image')
+    if (hasRichBlock) {
+      const blocks: ContentBlock[] = []
+      for (const block of sdkContent) {
+        if (block.type === 'text') {
+          blocks.push({ type: 'text', text: block.text ?? '' })
+        } else if (block.type === 'image') {
+          const mimeType = block.mimeType ?? 'application/octet-stream'
+          const ext = mimeToExt(mimeType)
+          const id = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+          const dir = mcpTmpDir()
+          const filePath = `${dir}/${id}${ext}`
+          const rawData = block.data ?? ''
+          fs.writeFileSync(filePath, Buffer.from(rawData, 'base64'))
+          blocks.push({ type: 'image', path: filePath, mimeType })
+        } else if (block.type === 'resource_link') {
+          blocks.push({ type: 'resource', uri: block.uri ?? '' })
+        } else {
+          blocks.push({ type: 'text', text: '[unknown content block]' })
+        }
+      }
+      return { output: blocks, isError: (result.isError as boolean) ?? false }
+    }
+
+    // No rich blocks — return plain string for backward compat
+    const lines: string[] = []
+    for (const block of sdkContent) {
       if (block.type === 'text') {
         lines.push(block.text ?? '')
-      } else if (block.type === 'image') {
-        lines.push(`[binary: ${block.mimeType} len=${block.data?.length ?? 0}]`)
       } else if (block.type === 'resource_link') {
         lines.push(`[resource: ${block.uri}]`)
       } else {
