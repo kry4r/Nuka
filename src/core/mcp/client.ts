@@ -4,6 +4,7 @@ import {
   Client,
   StdioClientTransport,
   StreamableHTTPClientTransport,
+  SSEClientTransport,
   ListRootsRequestSchema,
 } from './sdkBridge'
 import type { ContentBlock } from '../tools/content'
@@ -85,13 +86,20 @@ export class McpClient {
   async connect(signal?: AbortSignal): Promise<void> {
     this.emit({ kind: 'connecting' })
     try {
-      let transport: InstanceType<typeof StdioClientTransport> | InstanceType<typeof StreamableHTTPClientTransport>
+      let transport:
+        | InstanceType<typeof StdioClientTransport>
+        | InstanceType<typeof StreamableHTTPClientTransport>
+        | InstanceType<typeof SSEClientTransport>
       if (this.config.type === 'stdio') {
         const { command, args, env } = this.config
         transport = new StdioClientTransport({
           command,
           args: args ?? [],
           env: { ...process.env, ...(env ?? {}) } as Record<string, string>,
+        })
+      } else if (this.config.type === 'sse') {
+        transport = new SSEClientTransport(new URL(this.config.url), {
+          requestInit: { headers: this.config.headers },
         })
       } else {
         transport = new StreamableHTTPClientTransport(new URL(this.config.url), {

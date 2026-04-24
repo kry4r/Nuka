@@ -74,6 +74,11 @@ export const McpServerConfigSchema = z.discriminatedUnion('type', [
     url: z.string().url(),
     headers: z.record(z.string(), z.string()).optional(),
   }),
+  z.object({
+    type: z.literal('sse'),
+    url: z.string().url(),
+    headers: z.record(z.string(), z.string()).optional(),
+  }),
 ])
 
 export const McpConfigSchema = z

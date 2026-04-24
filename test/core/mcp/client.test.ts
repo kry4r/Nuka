@@ -50,12 +50,14 @@ const mocks = vi.hoisted(() => {
 
   const FakeStdio = vi.fn().mockImplementation(() => ({}))
   const FakeHttp = vi.fn().mockImplementation(() => ({}))
+  const FakeSse = vi.fn().mockImplementation(() => ({}))
   const FakeListRootsRequestSchema = { __schema: 'ListRootsRequestSchema' }
 
   return {
     FakeClient,
     FakeStdio,
     FakeHttp,
+    FakeSse,
     FakeListRootsRequestSchema,
     sdkInstances,
     setConnectError(e: Error | null) { fakeConnectError = e },
@@ -70,6 +72,7 @@ vi.mock('../../../src/core/mcp/sdkBridge', () => ({
   Client: mocks.FakeClient,
   StdioClientTransport: mocks.FakeStdio,
   StreamableHTTPClientTransport: mocks.FakeHttp,
+  SSEClientTransport: mocks.FakeSse,
   ListRootsRequestSchema: mocks.FakeListRootsRequestSchema,
 }))
 
@@ -136,6 +139,24 @@ describe('McpClient status transitions', () => {
     await client.connect()
     expect(mocks.FakeHttp).toHaveBeenCalledOnce()
     expect(mocks.FakeStdio).not.toHaveBeenCalled()
+    expect(mocks.FakeSse).not.toHaveBeenCalled()
+  })
+
+  it('uses sse transport for sse config', async () => {
+    mocks.FakeStdio.mockClear()
+    mocks.FakeHttp.mockClear()
+    mocks.FakeSse.mockClear()
+    const client = new McpClient({
+      name: 'streaming',
+      config: { type: 'sse', url: 'http://localhost:4000/sse', headers: { 'x-token': 'abc' } },
+    })
+    await client.connect()
+    expect(mocks.FakeSse).toHaveBeenCalledOnce()
+    expect(mocks.FakeStdio).not.toHaveBeenCalled()
+    expect(mocks.FakeHttp).not.toHaveBeenCalled()
+    const [urlArg, optsArg] = mocks.FakeSse.mock.calls[0]!
+    expect((urlArg as URL).href).toBe('http://localhost:4000/sse')
+    expect(optsArg).toEqual({ requestInit: { headers: { 'x-token': 'abc' } } })
   })
 })
 
