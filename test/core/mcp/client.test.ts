@@ -621,3 +621,128 @@ describe('McpClient readResource', () => {
     expect(result.output).toBe('[blob: application/octet-stream len=6]')
   })
 })
+
+// ---------------------------------------------------------------------------
+// M1.13 — stderr ring buffer
+// ---------------------------------------------------------------------------
+describe('McpClient stderr buffer', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.FakeStdio.mockClear()
+    mocks.clearInstances()
+  })
+  afterEach(() => {
+    mocks.restoreDefaultFactory()
+  })
+
+  it('stderr() returns empty string before any data is emitted', async () => {
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+    })
+    await client.connect()
+    expect(client.stderr()).toBe('')
+  })
+
+  it('includes stderr tail in error status on connect failure', async () => {
+    const { EventEmitter } = await import('node:events')
+
+    // Capture the stderr emitter created inside the FakeStdio constructor.
+    let capturedStderr: EventEmitter | null = null
+
+    // FakeStdio returns a transport-like object with a `.stderr` readable.
+    // FakeClient.connect() emits stderr data *after* the listener is wired up
+    // (inside client.connect()) and then throws, so the ring buffer sees it.
+    mocks.FakeStdio.mockImplementationOnce(() => {
+      capturedStderr = new EventEmitter() as EventEmitter
+      return { stderr: capturedStderr }
+    })
+
+    mocks.FakeClient.mockImplementationOnce(() => {
+      const instance = {
+        connect: vi.fn().mockImplementation(async () => {
+          // Emit stderr data now — listener has been attached by client.connect().
+          capturedStderr?.emit('data', Buffer.from('server crashed: ENOMEM\n'))
+          throw new Error('spawn failed')
+        }),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn(),
+        readResource: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+        getInstructions: vi.fn().mockReturnValue(undefined),
+        setRequestHandler: vi.fn(),
+      }
+      mocks.sdkInstances.push(instance as any)
+      return instance
+    })
+
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      stderrBufferBytes: 4096,
+    })
+
+    await client.connect()
+
+    const s = client.status
+    expect(s.kind).toBe('error')
+    if (s.kind === 'error') {
+      expect(s.error).toContain('spawn failed')
+      expect(s.error).toContain('server crashed: ENOMEM')
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// M1.14 — Large-output persistence
+// ---------------------------------------------------------------------------
+describe('McpClient large-output persistence', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('appends path notice and writes file when output exceeds persistThresholdChars', async () => {
+    const bigText = 'Z'.repeat(1_000_000)
+    mocks.setCallToolResult({ content: [{ type: 'text', text: bigText }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+      persistThresholdChars: 500_000,
+    })
+    await client.connect()
+    const result = await client.callTool('big_tool', {})
+    expect(typeof result.output).toBe('string')
+    const out = result.output as string
+    // Must contain the path notice
+    expect(out).toMatch(/\.\.\.\[full output at .+mcp-out-.+\.txt\]/)
+    // The referenced file must exist and contain the full text
+    const match = out.match(/\.\.\.\[full output at (.+)\]/)
+    expect(match).not.toBeNull()
+    const filePath = match![1]!
+    const { readFileSync, unlinkSync } = await import('node:fs')
+    const written = readFileSync(filePath, 'utf8')
+    expect(written).toBe(bigText)
+    // Clean up
+    unlinkSync(filePath)
+  })
+
+  it('does NOT persist output below persistThresholdChars', async () => {
+    const smallText = 'tiny output'
+    mocks.setCallToolResult({ content: [{ type: 'text', text: smallText }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+      persistThresholdChars: 500_000,
+    })
+    await client.connect()
+    const result = await client.callTool('small_tool', {})
+    expect(result.output).toBe(smallText)
+    expect(result.output).not.toContain('mcp-out-')
+  })
+})

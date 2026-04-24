@@ -26,6 +26,10 @@ export type McpToolDescriptor = {
   description?: string
   inputSchema?: Record<string, unknown>
   annotations?: McpToolAnnotations
+  _meta?: {
+    searchHint?: string[]
+    alwaysLoad?: boolean
+  }
 }
 
 export type McpResourceDescriptor = {

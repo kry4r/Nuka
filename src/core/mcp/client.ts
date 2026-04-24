@@ -19,6 +19,9 @@ import {
 } from './reconnect'
 import { parseElicitationParams } from './elicitation'
 import type { PermissionBridge } from '../permission/bridge'
+import { RingBuffer, DEFAULT_STDERR_BUFFER_BYTES } from './stderrBuffer'
+import { persistLargeOutput } from './outputPersist'
+import { sanitizeToolText } from './sanitize'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -61,6 +64,8 @@ export class McpClient {
   private deliberateClose = false
   private reconnectFailed = false
   private permissionBridge?: PermissionBridge
+  private stderrBuf: RingBuffer
+  private persistThresholdChars: number
 
   constructor(opts: {
     name: string
@@ -71,6 +76,8 @@ export class McpClient {
     requestTimeoutMs?: number
     reconnectPolicy?: ReconnectPolicy
     permissionBridge?: PermissionBridge
+    stderrBufferBytes?: number
+    persistThresholdChars?: number
   }) {
     this.name = opts.name
     this.config = opts.config
@@ -80,6 +87,8 @@ export class McpClient {
     this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
     this.reconnectPolicy = opts.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY
     this.permissionBridge = opts.permissionBridge
+    this.stderrBuf = new RingBuffer(opts.stderrBufferBytes ?? DEFAULT_STDERR_BUFFER_BYTES)
+    this.persistThresholdChars = opts.persistThresholdChars ?? 500_000
   }
 
   get status(): McpConnectionStatus {
@@ -93,6 +102,14 @@ export class McpClient {
    */
   get serverInstructions(): string | undefined {
     return this.serverInstructions_
+  }
+
+  /**
+   * Returns the current contents of the stderr ring buffer.
+   * For stdio transports, this captures the child process's stderr output.
+   */
+  stderr(): string {
+    return this.stderrBuf.read()
   }
 
   private emit(s: McpConnectionStatus): void {
@@ -109,11 +126,20 @@ export class McpClient {
         | InstanceType<typeof SSEClientTransport>
       if (this.config.type === 'stdio') {
         const { command, args, env } = this.config
-        transport = new StdioClientTransport({
+        const stdioTransport = new StdioClientTransport({
           command,
           args: args ?? [],
           env: { ...process.env, ...(env ?? {}) } as Record<string, string>,
+          stderr: 'pipe',
         })
+        // Wire the child process's stderr into our ring buffer.
+        const stderrStream = (stdioTransport as unknown as { stderr?: NodeJS.ReadableStream | null }).stderr
+        if (stderrStream) {
+          stderrStream.on('data', (chunk: Buffer | string) => {
+            this.stderrBuf.write(chunk)
+          })
+        }
+        transport = stdioTransport
       } else if (this.config.type === 'sse') {
         transport = new SSEClientTransport(new URL(this.config.url), {
           requestInit: { headers: this.config.headers },
@@ -180,7 +206,13 @@ export class McpClient {
       this.emit({ kind: 'connected', toolCount: tools.length, resourceCount: resources.length })
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
-      const error = raw.startsWith('connect timed out') ? 'connect timeout' : raw
+      const base = raw.startsWith('connect timed out') ? 'connect timeout' : raw
+      // Append last ~2 KB of stderr (if any) to aid debugging.
+      const stderrSnippet = this.stderrBuf.read()
+      const tail = stderrSnippet.length > 0
+        ? stderrSnippet.slice(-2048)
+        : ''
+      const error = tail.length > 0 ? `${base}\n${tail}` : base
       this.emit({ kind: 'error', error })
     }
   }
@@ -227,12 +259,18 @@ export class McpClient {
           destructiveHint?: boolean
           openWorldHint?: boolean
         }
+        _meta?: {
+          searchHint?: string[]
+          alwaysLoad?: boolean
+        }
       }
       return {
         name: raw.name,
         description: raw.description,
         inputSchema: raw.inputSchema,
         annotations: raw.annotations,
+        // M1.16: carry _meta through so toolAdapter can map to Tool fields
+        _meta: raw._meta,
       }
     })
     return this.toolsCache
@@ -310,7 +348,8 @@ export class McpClient {
       const blocks: ContentBlock[] = []
       for (const block of sdkContent) {
         if (block.type === 'text') {
-          blocks.push({ type: 'text', text: block.text ?? '' })
+          // M1.15: sanitize before returning to caller
+          blocks.push({ type: 'text', text: sanitizeToolText(block.text ?? '') })
         } else if (block.type === 'image') {
           const mimeType = block.mimeType ?? 'application/octet-stream'
           const ext = mimeToExt(mimeType)
@@ -333,7 +372,8 @@ export class McpClient {
     const lines: string[] = []
     for (const block of sdkContent) {
       if (block.type === 'text') {
-        lines.push(block.text ?? '')
+        // M1.15: sanitize BEFORE truncation
+        lines.push(sanitizeToolText(block.text ?? ''))
       } else if (block.type === 'resource_link') {
         // Auto-fetch the referenced resource inline so the model sees its
         // content, not just its URI. The result is kept as plain text
@@ -355,8 +395,21 @@ export class McpClient {
         lines.push('[unknown content block]')
       }
     }
+    const fullText = lines.join('\n')
     const truncated = truncateMcpResult(lines, this.maxResultChars)
-    return { output: truncated.text, isError: (result.isError as boolean) ?? false }
+    // M1.14: If the original (pre-truncation) output exceeds the threshold,
+    // write it to disk and append the path to the returned (truncated) text.
+    // Only applies to string (non-image) outputs.
+    let output = truncated.text
+    if (fullText.length > this.persistThresholdChars) {
+      try {
+        const persisted = await persistLargeOutput({ fullText })
+        output = `${output}\n...[full output at ${persisted.path}]`
+      } catch {
+        // Persistence failure is non-fatal: the truncated output is still useful.
+      }
+    }
+    return { output, isError: (result.isError as boolean) ?? false }
   }
 
   async readResource(
@@ -399,7 +452,8 @@ export class McpClient {
     for (const c of result.contents) {
       const item = c as { uri: string; mimeType?: string; text?: string; blob?: string }
       if (item.text !== undefined) {
-        lines.push(item.text)
+        // M1.15: sanitize text contents BEFORE truncation
+        lines.push(sanitizeToolText(item.text))
       } else if (item.blob !== undefined) {
         lines.push(`[blob: ${item.mimeType ?? 'unknown'} len=${item.blob.length}]`)
       }
