@@ -194,6 +194,7 @@ export async function* runAgent(
           toolName: tool.name,
           hint: tool.needsPermission(call.input),
           input: call.input,
+          annotations: tool.annotations,
         })
         if (!decision.allowed) {
           preflight.push({ kind: 'denied', result: { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true } })
@@ -324,6 +325,7 @@ export async function* runAgent(
           toolName: tool.name,
           hint: tool.needsPermission(call.input),
           input: call.input,
+          annotations: tool.annotations,
         })
         let result: ToolResult
         if (hookVetoed) {
