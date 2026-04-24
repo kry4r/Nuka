@@ -259,12 +259,18 @@ export class McpClient {
           destructiveHint?: boolean
           openWorldHint?: boolean
         }
+        _meta?: {
+          searchHint?: string[]
+          alwaysLoad?: boolean
+        }
       }
       return {
         name: raw.name,
         description: raw.description,
         inputSchema: raw.inputSchema,
         annotations: raw.annotations,
+        // M1.16: carry _meta through so toolAdapter can map to Tool fields
+        _meta: raw._meta,
       }
     })
     return this.toolsCache

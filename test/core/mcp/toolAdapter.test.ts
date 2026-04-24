@@ -132,4 +132,50 @@ describe('mcpToolsFor', () => {
     expect(tools[0]!.description.length).toBe(MAX_MCP_DESCRIPTION_CHARS)
     expect(tools[0]!.description.endsWith('…')).toBe(true)
   })
+
+  // M1.16 — _meta → Tool field mapping
+  it('maps _meta.searchHint to Tool.searchHint', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'foo',
+      _meta: { searchHint: ['git', 'version-control'] },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.searchHint).toEqual(['git', 'version-control'])
+  })
+
+  it('maps _meta.alwaysLoad to Tool.alwaysLoad', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'foo',
+      _meta: { alwaysLoad: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.alwaysLoad).toBe(true)
+  })
+
+  it('maps both _meta fields simultaneously', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'foo',
+      _meta: { searchHint: ['git'], alwaysLoad: true },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.searchHint).toEqual(['git'])
+    expect(tools[0]?.alwaysLoad).toBe(true)
+  })
+
+  it('leaves searchHint and alwaysLoad undefined when _meta is absent', async () => {
+    const client = makeMockClient('srv', [{ name: 'foo' }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.searchHint).toBeUndefined()
+    expect(tools[0]?.alwaysLoad).toBeUndefined()
+  })
+
+  it('leaves alwaysLoad undefined when only searchHint is in _meta', async () => {
+    const client = makeMockClient('srv', [{
+      name: 'foo',
+      _meta: { searchHint: ['search'] },
+    }])
+    const tools = await mcpToolsFor(client)
+    expect(tools[0]?.alwaysLoad).toBeUndefined()
+    expect(tools[0]?.searchHint).toEqual(['search'])
+  })
 })

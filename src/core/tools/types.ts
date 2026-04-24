@@ -39,12 +39,12 @@ export interface Tool<I = unknown> {
   /**
    * Keywords that trigger eager loading when matched against the first user
    * message. Once matched, the tool stays loaded for the session.
-   * Shape kept identical to M1 (cross-stream merge safety).
+   * For MCP tools, populated from the server's `_meta.searchHint`.
    */
   searchHint?: string[]
   /**
    * If true, always include this tool in every provider call.
-   * Shape kept identical to M1 (cross-stream merge safety).
+   * For MCP tools, populated from the server's `_meta.alwaysLoad`.
    */
   alwaysLoad?: boolean
   /**
@@ -54,15 +54,13 @@ export interface Tool<I = unknown> {
   shouldDefer?: (input: { text: string }) => boolean
   /**
    * Alternate names for this tool. The registry will map each alias to
-   * this tool so find(alias) works. Collision with an existing name or
-   * alias → the conflicting alias is skipped with a warning.
+   * this tool so find(alias) works.
    */
   aliases?: string[]
   /**
    * Controls how progress is emitted:
-   * - 'line'   (default): tool uses onProgress(string) — unchanged behavior
-   * - 'object': tool uses onProgressTyped(payload) — payload is
-   *             JSON.stringify'd into the tool_progress event text field
+   * - 'line'   (default): tool uses onProgress(string)
+   * - 'object': tool uses onProgressTyped(payload)
    */
   progressType?: 'line' | 'object'
   needsPermission: (input: I) => PermissionHint
