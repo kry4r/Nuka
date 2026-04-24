@@ -19,3 +19,12 @@ export function parseMcpToolName(name: string): { server: string; tool: string }
   if (!server || !tool) return null
   return { server, tool }
 }
+
+/**
+ * Format a namespaced MCP tool name for user-facing display.
+ * `mcp__github__listRepos` → `{ server: 'github', tool: 'listRepos' }`
+ * Returns `null` for non-MCP names.
+ */
+export function formatMcpDisplayName(namespaced: string): { server: string; tool: string } | null {
+  return parseMcpToolName(namespaced)
+}
