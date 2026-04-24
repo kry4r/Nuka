@@ -95,17 +95,40 @@ export async function* runAgent(
   }
   appendMessage(session, makeUserMessage(input), deps.persist)
 
+  // M2.9: Un-defer tools whose searchHint keywords appear in the first user message.
+  // Matching happens once (on this message) and the result persists for the session.
+  for (const tool of deps.tools.list()) {
+    if (tool.searchHint && tool.searchHint.length > 0) {
+      const lowerText = input.text.toLowerCase()
+      const matches = tool.searchHint.some(hint => lowerText.includes(hint.toLowerCase()))
+      if (matches) {
+        session.unDeferredToolNames.add(tool.name)
+      }
+    }
+  }
+
   while (!signal.aborted) {
     const { provider, model } = deps.provider.resolveFor(session)
     const system = deps.systemPromptInput
       ? buildSystemPrompt(deps.systemPromptInput())
       : ''
+
+    // M2.9: Filter tool specs: alwaysLoad tools always included; shouldDefer
+    // tools excluded unless already un-deferred via searchHint or manual unlock.
+    const toolSpecs = deps.tools.list().flatMap(tool => {
+      if (tool.alwaysLoad) return [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
+      if (tool.shouldDefer?.(input)) {
+        if (!session.unDeferredToolNames.has(tool.name)) return []
+      }
+      return [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
+    })
+
     const stream = provider.stream(
       {
         model,
         system,
         messages: session.messages,
-        tools: deps.tools.listSpecs(),
+        tools: toolSpecs,
       },
       signal,
     )

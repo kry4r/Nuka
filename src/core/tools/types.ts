@@ -30,6 +30,22 @@ export interface Tool<I = unknown> {
     destructive?: boolean
     openWorld?: boolean
   }
+  /**
+   * Keywords that trigger eager loading when matched against the first user
+   * message. Once matched, the tool stays loaded for the session.
+   * Shape kept identical to M1 (cross-stream merge safety).
+   */
+  searchHint?: string[]
+  /**
+   * If true, always include this tool in every provider call.
+   * Shape kept identical to M1 (cross-stream merge safety).
+   */
+  alwaysLoad?: boolean
+  /**
+   * Return true to defer this tool (exclude from provider call) unless
+   * it has been un-deferred via searchHint matching or manual un-defer.
+   */
+  shouldDefer?: (input: { text: string }) => boolean
   needsPermission: (input: I) => PermissionHint
   run: (input: I, ctx: ToolContext) => Promise<ToolResult>
 }

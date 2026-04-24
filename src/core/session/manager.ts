@@ -88,6 +88,7 @@ export class SessionManager {
       mode: meta.mode,
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
+      unDeferredToolNames: new Set(),
     }
     this.sessions.push(s)
     this.activeId = s.id
