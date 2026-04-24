@@ -65,7 +65,7 @@ export async function loadPlugins(opts: { home: string; enabled?: string[] }): P
       continue
     }
 
-    plugins.push({ manifest, rootDir: dir })
+    plugins.push({ manifest, rootDir: dir, source: 'installed' })
   }
 
   if (opts.enabled !== undefined) {

@@ -56,7 +56,33 @@ import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import type { McpServerConfig } from './core/mcp/types'
 
 const argv = process.argv.slice(2)
-if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
+if (argv[0] === 'plugin' && argv[1] === 'list') {
+  ;(async () => {
+    try {
+      const plugins = await loadPlugins({ home: os.homedir() })
+      if (plugins.length === 0) {
+        process.stdout.write('No plugins installed.\n')
+        process.exit(0)
+      }
+      for (const p of plugins) {
+        const m = p.manifest
+        process.stdout.write(`${m.name}@${m.version ?? 'unversioned'}\n`)
+        if (m.description) process.stdout.write(`  description: ${m.description}\n`)
+        if (m.author)      process.stdout.write(`  author:      ${m.author}\n`)
+        if (m.homepage)    process.stdout.write(`  homepage:    ${m.homepage}\n`)
+        if (m.repository)  process.stdout.write(`  repository:  ${m.repository}\n`)
+        if (m.license)     process.stdout.write(`  license:     ${m.license}\n`)
+        if (m.keywords && m.keywords.length > 0) {
+          process.stdout.write(`  keywords:    ${m.keywords.join(', ')}\n`)
+        }
+      }
+      process.exit(0)
+    } catch (err) {
+      process.stderr.write(`plugin list failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
   const source = argv[2]
   const force = argv.includes('--force')
   ;(async () => {
