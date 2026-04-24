@@ -19,6 +19,7 @@ import {
 } from './reconnect'
 import { parseElicitationParams } from './elicitation'
 import type { PermissionBridge } from '../permission/bridge'
+import { RingBuffer, DEFAULT_STDERR_BUFFER_BYTES } from './stderrBuffer'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
@@ -61,6 +62,7 @@ export class McpClient {
   private deliberateClose = false
   private reconnectFailed = false
   private permissionBridge?: PermissionBridge
+  private stderrBuf: RingBuffer
 
   constructor(opts: {
     name: string
@@ -71,6 +73,7 @@ export class McpClient {
     requestTimeoutMs?: number
     reconnectPolicy?: ReconnectPolicy
     permissionBridge?: PermissionBridge
+    stderrBufferBytes?: number
   }) {
     this.name = opts.name
     this.config = opts.config
@@ -80,6 +83,7 @@ export class McpClient {
     this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
     this.reconnectPolicy = opts.reconnectPolicy ?? DEFAULT_RECONNECT_POLICY
     this.permissionBridge = opts.permissionBridge
+    this.stderrBuf = new RingBuffer(opts.stderrBufferBytes ?? DEFAULT_STDERR_BUFFER_BYTES)
   }
 
   get status(): McpConnectionStatus {
@@ -93,6 +97,14 @@ export class McpClient {
    */
   get serverInstructions(): string | undefined {
     return this.serverInstructions_
+  }
+
+  /**
+   * Returns the current contents of the stderr ring buffer.
+   * For stdio transports, this captures the child process's stderr output.
+   */
+  stderr(): string {
+    return this.stderrBuf.read()
   }
 
   private emit(s: McpConnectionStatus): void {
@@ -109,11 +121,20 @@ export class McpClient {
         | InstanceType<typeof SSEClientTransport>
       if (this.config.type === 'stdio') {
         const { command, args, env } = this.config
-        transport = new StdioClientTransport({
+        const stdioTransport = new StdioClientTransport({
           command,
           args: args ?? [],
           env: { ...process.env, ...(env ?? {}) } as Record<string, string>,
+          stderr: 'pipe',
         })
+        // Wire the child process's stderr into our ring buffer.
+        const stderrStream = (stdioTransport as unknown as { stderr?: NodeJS.ReadableStream | null }).stderr
+        if (stderrStream) {
+          stderrStream.on('data', (chunk: Buffer | string) => {
+            this.stderrBuf.write(chunk)
+          })
+        }
+        transport = stdioTransport
       } else if (this.config.type === 'sse') {
         transport = new SSEClientTransport(new URL(this.config.url), {
           requestInit: { headers: this.config.headers },
@@ -180,7 +201,13 @@ export class McpClient {
       this.emit({ kind: 'connected', toolCount: tools.length, resourceCount: resources.length })
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err)
-      const error = raw.startsWith('connect timed out') ? 'connect timeout' : raw
+      const base = raw.startsWith('connect timed out') ? 'connect timeout' : raw
+      // Append last ~2 KB of stderr (if any) to aid debugging.
+      const stderrSnippet = this.stderrBuf.read()
+      const tail = stderrSnippet.length > 0
+        ? stderrSnippet.slice(-2048)
+        : ''
+      const error = tail.length > 0 ? `${base}\n${tail}` : base
       this.emit({ kind: 'error', error })
     }
   }
