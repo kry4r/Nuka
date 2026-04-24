@@ -63,10 +63,12 @@ export function makeDispatchAgentTool(deps: {
       additionalProperties: false,
     },
     source: 'builtin',
-    // Marked readOnly so the main-loop parallelizer may dispatch multiple
-    // sub-agents concurrently. The sub-agent itself will still gate its own
-    // write tools through the shared PermissionChecker.
-    annotations: { readOnly: true, destructive: false, openWorld: true },
+    // readOnly + parallelSafe so the main loop dispatches sibling sub-agents
+    // concurrently even when both calls are to dispatch_agent itself. Each
+    // sub-session has its own state (messages, permission cache, tool
+    // registry), so concurrent execution is safe. The sub-agent's own write
+    // tools still gate through the shared PermissionChecker.
+    annotations: { readOnly: true, destructive: false, openWorld: true, parallelSafe: true },
     needsPermission: () => 'none',
     async run(input: DispatchAgentInput, ctx: ToolContext): Promise<ToolResult> {
       // Recursion guard — a sub-agent's session has allowedAgentDispatch=false.

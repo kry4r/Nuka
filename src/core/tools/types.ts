@@ -48,6 +48,14 @@ export interface Tool<I = unknown> {
     readOnly?: boolean
     destructive?: boolean
     openWorld?: boolean
+    /**
+     * When true, the main agent loop may parallelize two calls to this
+     * tool even when they share the same tool name. This is only safe
+     * when each invocation is fully independent (no shared state).
+     * Used by `dispatch_agent` — sibling sub-agent dispatches hold their
+     * own isolated session and tool registry.
+     */
+    parallelSafe?: boolean
   }
   /**
    * Keywords that trigger eager loading when matched against the first user

@@ -109,8 +109,13 @@ describe('makeDispatchAgentTool', () => {
     expect(result.output as string).toMatch(/Sub-agents cannot dispatch/)
   })
 
-  it('annotations flag readOnly so main-loop can parallelize sibling dispatches', () => {
+  it('annotations flag readOnly + parallelSafe so main-loop can parallelize sibling dispatches', () => {
     const tool = makeDispatchAgentTool(makeDeps(new AgentRegistry()))
-    expect(tool.annotations).toEqual({ readOnly: true, destructive: false, openWorld: true })
+    expect(tool.annotations).toEqual({
+      readOnly: true,
+      destructive: false,
+      openWorld: true,
+      parallelSafe: true,
+    })
   })
 })

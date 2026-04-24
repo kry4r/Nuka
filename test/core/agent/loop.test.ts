@@ -618,4 +618,84 @@ describe('runAgent', () => {
     const results = events.filter(e => e.type === 'tool_result')
     expect(results).toHaveLength(2)
   })
+
+  it('two parallel dispatch_agent calls run concurrently (M5.1.6)', async () => {
+    const { makeDispatchAgentTool } = await import('../../../src/core/agents/dispatchTool')
+    const { AgentRegistry } = await import('../../../src/core/agents/registry')
+
+    const agents = new AgentRegistry()
+    agents.register({
+      name: 'slow', description: 'slow', systemPrompt: 's', maxTurns: 20, pluginName: 'core',
+    })
+    agents.register({
+      name: 'fast', description: 'fast', systemPrompt: 's', maxTurns: 20, pluginName: 'core',
+    })
+
+    // Sub-agent provider returns a short text after a per-agent delay so we
+    // can detect parallelism. Each dispatch call spawns its own stream() —
+    // the same provider object is shared.
+    let streamCalls = 0
+    const subProvider: LLMProvider = {
+      id: 'p', format: 'openai',
+      async *stream(req) {
+        streamCalls++
+        // Delay keyed off the system prompt content is unreliable; instead
+        // use the first user message text.
+        const m = req.messages[0] as { content: Array<{ text: string }> }
+        const text = m.content[0]!.text
+        const delay = text.includes('slow') ? 120 : 30
+        await new Promise<void>(r => setTimeout(r, delay))
+        yield { type: 'text_delta', text: `done-${text}` }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    const subResolver = { resolveFor: () => ({ provider: subProvider, model: 'm' }), listProviders: () => [{ id: 'p' } as unknown as never] } as unknown as import('../../../src/core/provider/resolver').ProviderResolver
+
+    const permission = new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true }))
+    const tools = new ToolRegistry()
+    const dispatchTool = makeDispatchAgentTool({
+      agents,
+      registry: tools,
+      providerResolver: subResolver,
+      permission,
+    })
+    tools.register(dispatchTool as any)
+
+    // Main-session provider: one turn with two dispatch_agent tool calls,
+    // then a final text turn.
+    const turn1: ProviderEvent[] = [
+      { type: 'tool_use_start', id: 'd1', name: 'dispatch_agent' },
+      { type: 'tool_use_stop', id: 'd1', input: { agent: 'core:slow', task: 'slow' } },
+      { type: 'tool_use_start', id: 'd2', name: 'dispatch_agent' },
+      { type: 'tool_use_stop', id: 'd2', input: { agent: 'core:fast', task: 'fast' } },
+      { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const turn2: ProviderEvent[] = [
+      { type: 'text_delta', text: 'ok' },
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } },
+    ]
+    const mainProvider = stubProvider([turn1, turn2])
+
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const t0 = Date.now()
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'route' },
+      session,
+      { provider: { resolveFor: () => ({ provider: mainProvider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) events.push(ev)
+    const elapsed = Date.now() - t0
+
+    // Parallel: ~120ms (max) not ~150ms (sum). Margin accounts for scheduler jitter.
+    expect(elapsed).toBeLessThan(140)
+    expect(streamCalls).toBe(2)
+    const results = events.filter(e => e.type === 'tool_result')
+    expect(results).toHaveLength(2)
+    // Each sub-agent produced its own distinct output.
+    expect(results[0]!.output).toContain('done-slow')
+    expect(results[1]!.output).toContain('done-fast')
+  })
 })
