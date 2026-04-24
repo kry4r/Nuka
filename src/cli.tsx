@@ -53,6 +53,7 @@ import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/re
 import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
+import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import type { McpServerConfig } from './core/mcp/types'
 
 const argv = process.argv.slice(2)
@@ -191,11 +192,24 @@ async function runInteractive(): Promise<void> {
   ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
-  const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled, extraDirs })
+  const plugins = await loadPlugins({
+    home: os.homedir(),
+    enabled: config.plugins?.enabled,
+    extraDirs,
+    checkUserConfig: true,
+  })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   const hooks: import('./core/hooks/types').HookEntry[] = []
-  for (const p of plugins) {
-    const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks })
+
+  // Wire plugins that are ready (have config or don't need it)
+  const pendingPlugins = plugins.filter(p => p.needsUserConfig)
+  const readyPlugins = plugins.filter(p => !p.needsUserConfig)
+  for (const p of readyPlugins) {
+    const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
+    const result = await wirePlugin(p, {
+      tools, slash, skills, mcpServers, hooks,
+      pluginConfig: pluginConfig ?? undefined,
+    })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
@@ -299,5 +313,26 @@ async function runInteractive(): Promise<void> {
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
     />,
   )
+
+  // After render, process plugins that need user config input.
+  // The App will have set the pluginConfigHandler on the bridge by this point
+  // (set in App's first useEffect). We give React one tick via setImmediate.
+  if (pendingPlugins.length > 0) {
+    void new Promise<void>(resolve => setImmediate(resolve)).then(async () => {
+      for (const p of pendingPlugins) {
+        const fields = p.manifest.userConfig?.fields ?? []
+        const config = await permBridge.promptPluginConfig({ plugin: p, fields })
+        if (config !== null) {
+          await writeUserConfig(os.homedir(), p.manifest.name, config)
+          const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks, pluginConfig: config })
+          if (result.errors.length > 0) {
+            for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
+          }
+        } else {
+          console.warn(`[plugin:${p.manifest.name}] user skipped config — plugin inactive this session`)
+        }
+      }
+    })
+  }
 }
 

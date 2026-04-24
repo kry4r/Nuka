@@ -27,8 +27,26 @@ export const PluginManifestSchema = z.object({
   mcpServers: z.record(z.string(), McpServerConfigSchema).default({}),
   /** Relative path to a hooks.json file within the plugin directory */
   hooks: z.string().optional(),
+  /**
+   * User-configurable fields that must be supplied at first launch.
+   * Persisted to ~/.nuka/plugins/<name>/.userconfig.json.
+   */
+  userConfig: z
+    .object({
+      fields: z.array(
+        z.object({
+          name: z.string().min(1),
+          type: z.enum(['string', 'number', 'boolean']),
+          description: z.string().optional(),
+          default: z.unknown().optional(),
+          required: z.boolean().optional(),
+        }),
+      ),
+    })
+    .optional(),
 })
 export type PluginManifest = z.infer<typeof PluginManifestSchema>
+export type PluginUserConfigField = NonNullable<PluginManifest['userConfig']>['fields'][number]
 
 export type LoadedPlugin = {
   manifest: PluginManifest
@@ -37,4 +55,9 @@ export type LoadedPlugin = {
   source: 'installed' | 'session'
   /** For session plugins: the directory they were loaded from */
   dir?: string
+  /**
+   * True when the plugin declares userConfig.fields and no .userconfig.json exists yet.
+   * The TUI resolves these post-mount via PluginConfigDialog before wiring the plugin.
+   */
+  needsUserConfig?: boolean
 }

@@ -3,12 +3,19 @@ import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type LoadedPlugin } from './manifest'
 import { loadSessionPluginsFromDir } from './sessionPlugins'
+import { needsUserConfigPrompt } from './userConfig'
 
 export async function loadPlugins(opts: {
   home: string
   enabled?: string[]
   /** Additional directories to scan for session-only plugins (from --plugin-dir) */
   extraDirs?: string[]
+  /**
+   * When true, check each plugin for a missing .userconfig.json and mark
+   * needsUserConfig: true on those that require user input before wiring.
+   * Default: false (omit for tests and non-interactive scenarios).
+   */
+  checkUserConfig?: boolean
 }): Promise<LoadedPlugin[]> {
   const pluginsDir = join(opts.home, '.nuka', 'plugins')
 
@@ -96,6 +103,17 @@ export async function loadPlugins(opts: {
         installedNames.add(sp.manifest.name)
       }
     }
+  }
+
+  // Mark plugins that need user config input before wiring
+  if (opts.checkUserConfig) {
+    await Promise.all(
+      plugins.map(async (p) => {
+        if (await needsUserConfigPrompt(p, opts.home)) {
+          p.needsUserConfig = true
+        }
+      }),
+    )
   }
 
   return plugins
