@@ -46,6 +46,12 @@ export interface Tool<I = unknown> {
    * it has been un-deferred via searchHint matching or manual un-defer.
    */
   shouldDefer?: (input: { text: string }) => boolean
+  /**
+   * Alternate names for this tool. The registry will map each alias to
+   * this tool so find(alias) works. Collision with an existing name or
+   * alias → the conflicting alias is skipped with a warning.
+   */
+  aliases?: string[]
   needsPermission: (input: I) => PermissionHint
   run: (input: I, ctx: ToolContext) => Promise<ToolResult>
 }
