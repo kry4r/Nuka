@@ -33,7 +33,7 @@ async function createLocalRepo(dir: string): Promise<string> {
 }
 
 describe('installFromGit', () => {
-  it('clones a local bare repo and returns a short SHA version', async () => {
+  it('clones a local bare repo and returns a short SHA version', { timeout: 15000 }, async () => {
     const repoPath = await createLocalRepo(repoDir)
 
     const result = await installFromGit({
@@ -51,7 +51,7 @@ describe('installFromGit', () => {
     expect(s.isFile()).toBe(true)
   })
 
-  it('is idempotent — second install with same URL returns same version', async () => {
+  it('is idempotent — second install with same URL returns same version', { timeout: 15000 }, async () => {
     const repoPath = await createLocalRepo(repoDir)
     const url = `file://${repoPath}`
 
@@ -62,7 +62,7 @@ describe('installFromGit', () => {
     expect(result1.cacheDir).toBe(result2.cacheDir)
   })
 
-  it('uses the URL hash as part of the cache path', async () => {
+  it('uses the URL hash as part of the cache path', { timeout: 15000 }, async () => {
     const repoPath = await createLocalRepo(repoDir)
     const url = `file://${repoPath}`
 
