@@ -51,6 +51,20 @@ export const PluginManifestSchema = z.object({
    */
   agents: z.array(AgentDefSchema).optional(),
   /**
+   * Custom tool-result renderers provided by this plugin.
+   * Each entry maps a tool name glob + optional source to a React component path.
+   */
+  outputStyles: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        matchToolName: z.string().optional(),
+        matchToolSource: z.enum(['mcp', 'plugin', 'skill', 'builtin']).optional(),
+        componentPath: z.string().min(1),
+      }),
+    )
+    .optional(),
+  /**
    * User-configurable fields that must be supplied at first launch.
    * Persisted to ~/.nuka/plugins/<name>/.userconfig.json.
    */

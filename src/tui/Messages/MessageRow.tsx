@@ -7,11 +7,95 @@ import { Markdown } from './Markdown'
 import { ToolCall } from './ToolCall'
 import { AgentCall } from './AgentCall'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
+import { matchStyle, getRegistry } from '../../core/plugin/outputStyles'
+import type { OutputStyleProps } from '../../core/plugin/outputStyles'
 
 function summarize(input: unknown): string {
   const s = JSON.stringify(input)
   if (s.length <= 80) return s
   return s.slice(0, 80) + '…'
+}
+
+/**
+ * Error boundary that wraps a custom output-style component.
+ * On error, renders the fallback ToolCall and logs a warning.
+ */
+class OutputStyleErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode; styleName: string },
+  { hasError: boolean }
+> {
+  constructor(props: OutputStyleErrorBoundary['props']) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true }
+  }
+
+  override componentDidCatch(err: Error): void {
+    console.warn(
+      `[outputStyles] component '${this.props.styleName}' threw during render — falling back to default. Error: ${err.message}`,
+    )
+  }
+
+  override render(): React.ReactNode {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
+}
+
+/**
+ * Lazily loads and renders a custom output-style component.
+ * Falls back (via error boundary) to the default ToolCall on any throw.
+ */
+function CustomOutputStyle(props: {
+  componentPath: string
+  styleName: string
+  styleProps: OutputStyleProps
+  fallback: React.ReactNode
+}): React.JSX.Element {
+  const [Comp, setComp] = React.useState<React.ComponentType<OutputStyleProps> | null>(null)
+  const [loadError, setLoadError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    const fileUrl = 'file://' + props.componentPath
+    // Dynamic import of the resolved absolute path
+    import(fileUrl)
+      .then((mod: unknown) => {
+        if (cancelled) return
+        const m = mod as Record<string, unknown>
+        const firstKey = Object.keys(m)[0]
+        const component = (m['default'] ?? (firstKey ? m[firstKey] : undefined)) as
+          | React.ComponentType<OutputStyleProps>
+          | undefined
+        if (typeof component === 'function') {
+          setComp(() => component)
+        } else {
+          setLoadError('no valid default export')
+          console.warn(`[outputStyles] component '${props.styleName}' has no valid default export`)
+        }
+      })
+      .catch((err: Error) => {
+        if (cancelled) return
+        setLoadError(err.message)
+        console.warn(
+          `[outputStyles] failed to load component '${props.styleName}': ${err.message}`,
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [props.componentPath, props.styleName])
+
+  if (loadError !== null || Comp === null) return <>{props.fallback}</>
+
+  return (
+    <OutputStyleErrorBoundary styleName={props.styleName} fallback={props.fallback}>
+      <Comp {...props.styleProps} />
+    </OutputStyleErrorBoundary>
+  )
 }
 
 export function MessageRow(props: {
@@ -21,7 +105,9 @@ export function MessageRow(props: {
   /** Ids of dispatch_agent tool_use blocks that should render expanded. */
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined
-  resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
+  resolveToolAnnotations?: (
+    toolName: string,
+  ) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
 }): React.JSX.Element | null {
   const { m } = props
   if (m.role === 'system') return null
@@ -34,12 +120,15 @@ export function MessageRow(props: {
     if (props.toolResultsById?.has(m.toolUseId)) {
       return null
     }
-    const toolContent = typeof m.content === 'string'
-      ? m.content
-      : m.content.map(b => b.type === 'text' ? b.text : `[${b.type}]`).join('\n')
+    const toolContent =
+      typeof m.content === 'string'
+        ? m.content
+        : m.content.map(b => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n')
     return (
       <Box flexDirection="column" marginY={1}>
-        <Text color={color} bold>▎ {speaker}</Text>
+        <Text color={color} bold>
+          ▎ {speaker}
+        </Text>
         <Box marginLeft={2}>
           <Markdown source={toolContent} />
         </Box>
@@ -51,7 +140,9 @@ export function MessageRow(props: {
     const blocks = m.content
     return (
       <Box flexDirection="column" marginY={1}>
-        <Text color={color} bold>▎ {speaker}</Text>
+        <Text color={color} bold>
+          ▎ {speaker}
+        </Text>
         <Box flexDirection="column" marginLeft={2}>
           {blocks.map((b: any, i: number) => {
             if (b.type === 'text') {
@@ -77,16 +168,40 @@ export function MessageRow(props: {
                   />
                 )
               }
-              return (
+              const source = props.resolveToolSource?.(b.name)
+              const registry = getRegistry()
+              const matchedStyle = matchStyle(b.name, source, [...registry])
+
+              const defaultFallback = (
                 <ToolCall
                   key={i}
                   name={b.name}
                   argSummary={summarize(b.input)}
                   status="ok"
-                  source={props.resolveToolSource?.(b.name)}
+                  source={source}
                   annotations={props.resolveToolAnnotations?.(b.name)}
                 />
               )
+
+              if (matchedStyle) {
+                const styleProps: OutputStyleProps = {
+                  toolName: b.name,
+                  input: b.input,
+                  output: '',
+                  isError: false,
+                }
+                return (
+                  <CustomOutputStyle
+                    key={i}
+                    componentPath={matchedStyle.componentPath}
+                    styleName={matchedStyle.name}
+                    styleProps={styleProps}
+                    fallback={defaultFallback}
+                  />
+                )
+              }
+
+              return defaultFallback
             }
             return null
           })}
@@ -99,7 +214,9 @@ export function MessageRow(props: {
   const text = m.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('')
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text color={color} bold>▎ {speaker}</Text>
+      <Text color={color} bold>
+        ▎ {speaker}
+      </Text>
       <Box marginLeft={2}>
         <Markdown source={text} />
       </Box>
