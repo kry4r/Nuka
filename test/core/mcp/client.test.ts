@@ -229,6 +229,41 @@ describe('McpClient callTool', () => {
   })
 })
 
+describe('McpClient callTool truncation', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('truncates huge results to maxResultChars with a notice', async () => {
+    const huge = 'a'.repeat(250_000)
+    mocks.setCallToolResult({ content: [{ type: 'text', text: huge }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+    })
+    await client.connect()
+    const result = await client.callTool('foo', {})
+    expect(result.output.length).toBeGreaterThan(100_000)
+    expect(result.output.length).toBeLessThan(100_100)
+    expect(result.output).toMatch(/\.\.\.\[truncated 150000 chars of 250000\]\.\.\.$/)
+  })
+
+  it('passes below-limit results through unchanged', async () => {
+    mocks.setCallToolResult({ content: [{ type: 'text', text: 'tiny' }], isError: false })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      maxResultChars: 100_000,
+    })
+    await client.connect()
+    const result = await client.callTool('foo', {})
+    expect(result.output).toBe('tiny')
+  })
+})
+
 describe('McpClient readResource', () => {
   beforeEach(() => {
     mocks.setConnectError(null)

@@ -2,10 +2,13 @@ import type { McpServerConfig, McpConnectionStatus, McpToolDescriptor, McpResour
 import { Client, StdioClientTransport, StreamableHTTPClientTransport } from './sdkBridge'
 import type { ContentBlock } from '../tools/content'
 import { mcpTmpDir, mimeToExt } from './paths'
+import { truncateMcpResult } from './truncate'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 
 type SdkClientHandle = InstanceType<typeof Client>
+
+export const DEFAULT_MAX_RESULT_CHARS = 100_000
 
 export class McpClient {
   readonly name: string
@@ -15,15 +18,18 @@ export class McpClient {
   private sdk?: SdkClientHandle
   private toolsCache?: McpToolDescriptor[]
   private resourcesCache?: McpResourceDescriptor[]
+  private maxResultChars: number
 
   constructor(opts: {
     name: string
     config: McpServerConfig
     onStatusChange?: (s: McpConnectionStatus) => void
+    maxResultChars?: number
   }) {
     this.name = opts.name
     this.config = opts.config
     this.onStatus = opts.onStatusChange
+    this.maxResultChars = opts.maxResultChars ?? DEFAULT_MAX_RESULT_CHARS
   }
 
   get status(): McpConnectionStatus {
@@ -159,7 +165,8 @@ export class McpClient {
         lines.push('[unknown content block]')
       }
     }
-    return { output: lines.join('\n'), isError: (result.isError as boolean) ?? false }
+    const truncated = truncateMcpResult(lines, this.maxResultChars)
+    return { output: truncated.text, isError: (result.isError as boolean) ?? false }
   }
 
   async readResource(
@@ -177,7 +184,8 @@ export class McpClient {
         lines.push(`[blob: ${item.mimeType ?? 'unknown'} len=${item.blob.length}]`)
       }
     }
-    return { output: lines.join('\n'), isError: false }
+    const truncated = truncateMcpResult(lines, this.maxResultChars)
+    return { output: truncated.text, isError: false }
   }
 
   async close(): Promise<void> {

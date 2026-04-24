@@ -77,7 +77,10 @@ export const McpServerConfigSchema = z.discriminatedUnion('type', [
 ])
 
 export const McpConfigSchema = z
-  .object({ servers: z.record(z.string(), McpServerConfigSchema).default({}) })
+  .object({
+    servers: z.record(z.string(), McpServerConfigSchema).default({}),
+    maxResultChars: z.number().int().positive().default(100_000),
+  })
   .optional()
 
 export const ConfigSchema = z.object({

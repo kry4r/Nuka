@@ -5,10 +5,18 @@ export class McpManager {
   private clients: McpClient[]
   private listeners: Array<() => void> = []
 
-  constructor(opts: { servers: Record<string, McpServerConfig> }) {
+  constructor(opts: {
+    servers: Record<string, McpServerConfig>
+    maxResultChars?: number
+  }) {
     this.clients = Object.entries(opts.servers).map(
       ([name, config]) =>
-        new McpClient({ name, config, onStatusChange: () => this.notify() }),
+        new McpClient({
+          name,
+          config,
+          onStatusChange: () => this.notify(),
+          maxResultChars: opts.maxResultChars,
+        }),
     )
   }
 

@@ -164,7 +164,9 @@ async function runInteractive(): Promise<void> {
   // Register skill tool after all skill-loading (including plugin skills) finishes
   tools.register(makeSkillTool(skills) as any)
 
-  const mcpManager = Object.keys(mcpServers).length > 0 ? new McpManager({ servers: mcpServers }) : null
+  const mcpManager = Object.keys(mcpServers).length > 0
+    ? new McpManager({ servers: mcpServers, maxResultChars: config.mcp?.maxResultChars })
+    : null
 
   if (mcpManager) {
     tools.register(makeListMcpResourcesTool(mcpManager) as any)
