@@ -11,6 +11,8 @@ import { parseSkill } from '../skill/loader'
 import type { McpServerConfig } from '../mcp/types'
 import { loadHooks } from '../hooks/loader'
 import type { HookEntry } from '../hooks/types'
+import type { AgentRegistry } from '../agents/registry'
+import { resolveAgentDef } from '../agents/loader'
 
 function isToolLike(v: unknown): v is Tool {
   if (!v || typeof v !== 'object') return false
@@ -53,6 +55,7 @@ export async function wirePlugin(
     skills: Skill[]
     mcpServers: Record<string, McpServerConfig>
     hooks?: HookEntry[]
+    agents?: AgentRegistry
     /**
      * Persisted user config values for this plugin.
      * Injected into ctx.pluginConfig when a tool is run.
@@ -65,6 +68,7 @@ export async function wirePlugin(
   skillsAdded: number
   mcpAdded: number
   hooksAdded: number
+  agentsAdded: number
   errors: string[]
 }> {
   let toolsAdded = 0
@@ -72,6 +76,7 @@ export async function wirePlugin(
   let skillsAdded = 0
   let mcpAdded = 0
   let hooksAdded = 0
+  let agentsAdded = 0
   const errors: string[] = []
 
   // Tools
@@ -169,5 +174,18 @@ export async function wirePlugin(
     hooksAdded = entries.length
   }
 
-  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, errors }
+  // Agents
+  if (plugin.manifest.agents !== undefined && deps.agents !== undefined) {
+    for (const agentDef of plugin.manifest.agents) {
+      try {
+        const resolved = await resolveAgentDef(agentDef, plugin.rootDir, plugin.manifest.name)
+        deps.agents.register(resolved)
+        agentsAdded++
+      } catch (err) {
+        errors.push(`agent '${agentDef.name}': ${(err as Error).message}`)
+      }
+    }
+  }
+
+  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, agentsAdded, errors }
 }

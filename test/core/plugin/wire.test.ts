@@ -5,6 +5,7 @@ import os from 'node:os'
 import { wirePlugin } from '../../../src/core/plugin/wire'
 import { ToolRegistry } from '../../../src/core/tools/registry'
 import { SlashRegistry } from '../../../src/slash/registry'
+import { AgentRegistry } from '../../../src/core/agents/registry'
 import type { LoadedPlugin } from '../../../src/core/plugin/manifest'
 
 let root: string
@@ -80,7 +81,7 @@ describe('wirePlugin', () => {
 
     const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
 
-    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, errors: [] })
+    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, agentsAdded: 0, errors: [] })
 
     const t = tools.find('plugin__demo__Hello')
     expect(t).toBeDefined()
@@ -153,5 +154,63 @@ describe('wirePlugin', () => {
     expect(result.errors.some(e => e.includes("mcp server 'local-fs'"))).toBe(true)
     // original entry survives
     expect((mcpServers['local-fs'] as { command: string }).command).toBe('existing')
+  })
+
+  it('registers agents under <plugin>:<name>', async () => {
+    await writeFile(join(root, 'tester.md'), 'Act as a tester.', 'utf8')
+    const tools = new ToolRegistry()
+    const slash = new SlashRegistry()
+    const skills: import('../../../src/core/skill/types').Skill[] = []
+    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
+    const agents = new AgentRegistry()
+    const plugin: LoadedPlugin = {
+      manifest: {
+        name: 'demo',
+        tools: [],
+        slashCommands: [],
+        skills: [],
+        mcpServers: {},
+        agents: [
+          { name: 'reviewer', description: 'reviews code', systemPrompt: 'you review', maxTurns: 20 },
+          { name: 'tester', description: 'runs tests', systemPromptPath: 'tester.md', maxTurns: 20 },
+        ],
+      },
+      rootDir: root,
+      source: 'installed' as const,
+    }
+    const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, agents })
+    expect(result.agentsAdded).toBe(2)
+    expect(result.errors).toEqual([])
+    expect(agents.find('demo:reviewer')?.systemPrompt).toBe('you review')
+    expect(agents.find('demo:tester')?.systemPrompt).toBe('Act as a tester.')
+  })
+
+  it('missing systemPromptPath: logs error, other agents still load', async () => {
+    const tools = new ToolRegistry()
+    const slash = new SlashRegistry()
+    const skills: import('../../../src/core/skill/types').Skill[] = []
+    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
+    const agents = new AgentRegistry()
+    const plugin: LoadedPlugin = {
+      manifest: {
+        name: 'demo',
+        tools: [],
+        slashCommands: [],
+        skills: [],
+        mcpServers: {},
+        agents: [
+          { name: 'ghost', description: 'missing', systemPromptPath: 'nope.md', maxTurns: 20 },
+          { name: 'ok', description: 'ok', systemPrompt: 'fine', maxTurns: 20 },
+        ],
+      },
+      rootDir: root,
+      source: 'installed' as const,
+    }
+    const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, agents })
+    expect(result.agentsAdded).toBe(1)
+    expect(result.errors.length).toBe(1)
+    expect(result.errors[0]).toMatch(/ghost/)
+    expect(agents.find('demo:ok')).toBeDefined()
+    expect(agents.find('demo:ghost')).toBeUndefined()
   })
 })
