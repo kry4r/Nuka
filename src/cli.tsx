@@ -115,6 +115,20 @@ if (argv[0] === 'plugin' && argv[1] === 'list') {
   })
 }
 
+/** Collect all --plugin-dir <path> values from argv (repeatable flag). */
+function parsePluginDirs(rawArgv: string[]): string[] {
+  const dirs: string[] = []
+  for (let i = 0; i < rawArgv.length; i++) {
+    if (rawArgv[i] === '--plugin-dir' && rawArgv[i + 1] !== undefined) {
+      dirs.push(path.resolve(rawArgv[i + 1]!))
+      i++ // skip the value token
+    } else if (rawArgv[i]?.startsWith('--plugin-dir=')) {
+      dirs.push(path.resolve(rawArgv[i]!.slice('--plugin-dir='.length)))
+    }
+  }
+  return dirs
+}
+
 async function runInteractive(): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig({ home: os.homedir(), cwd })
@@ -176,7 +190,8 @@ async function runInteractive(): Promise<void> {
   const slash = new SlashRegistry()
   ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
-  const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled })
+  const extraDirs = parsePluginDirs(process.argv.slice(2))
+  const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled, extraDirs })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   const hooks: import('./core/hooks/types').HookEntry[] = []
   for (const p of plugins) {
@@ -281,6 +296,7 @@ async function runInteractive(): Promise<void> {
       version={MACRO_VERSION}
       mcpManager={mcpManager ?? undefined}
       tools={tools}
+      sessionPluginCount={plugins.filter(p => p.source === 'session').length}
     />,
   )
 }

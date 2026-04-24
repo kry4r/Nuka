@@ -62,6 +62,8 @@ export type AppProps = {
   version: string
   mcpManager?: McpManager
   tools?: ToolRegistry
+  /** Number of session plugins loaded via --plugin-dir (shown in status bar) */
+  sessionPluginCount?: number
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -297,6 +299,7 @@ export function App(props: AppProps): React.JSX.Element {
         autoMode="off"
         queueLength={session.queue.size()}
         mode={hintMode}
+        sessionPluginCount={props.sessionPluginCount}
       />
     </Box>
   )

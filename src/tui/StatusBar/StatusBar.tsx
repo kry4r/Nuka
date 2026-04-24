@@ -2,7 +2,7 @@
 import React from 'react'
 import { Box } from 'ink'
 import {
-  ModelSeg, CwdSeg, GitSeg, CtxSeg, CostSeg, McpSeg, AutoSeg, QueueSeg, Sep,
+  ModelSeg, CwdSeg, GitSeg, CtxSeg, CostSeg, McpSeg, AutoSeg, QueueSeg, SessionPluginSeg, Sep,
 } from './Segments'
 import { HintLine, type HintMode } from './HintLine'
 
@@ -18,6 +18,8 @@ export type StatusBarProps = {
   autoMode: 'off' | `on(${number})`
   queueLength: number
   mode: HintMode
+  /** Number of session plugins loaded via --plugin-dir */
+  sessionPluginCount?: number
 }
 
 export function StatusBar(p: StatusBarProps): React.JSX.Element {
@@ -34,6 +36,7 @@ export function StatusBar(p: StatusBarProps): React.JSX.Element {
         <McpSeg count={p.mcpCount} health={p.mcpHealth} /><Sep />
         <AutoSeg mode={p.autoMode} />
         {p.queueLength > 0 && <><Sep /><QueueSeg n={p.queueLength} /></>}
+        {(p.sessionPluginCount ?? 0) > 0 && <><Sep /><SessionPluginSeg count={p.sessionPluginCount!} /></>}
         <Box flexGrow={1} />
         <HintLine mode={p.mode} />
       </Box>
