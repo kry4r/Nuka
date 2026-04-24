@@ -6,7 +6,7 @@ import type {
   ProviderEvent,
   ToolSpec,
 } from './types'
-import type { Message, StopReason } from '../message/types'
+import type { Message, StopReason, ToolContentBlock } from '../message/types'
 import { fetchRemoteModels } from './remoteModels'
 
 type OpenAIOpts = {
@@ -175,9 +175,30 @@ function toOpenAIMessages(system: string, messages: Message[]): unknown[] {
       out.push({
         role: 'tool',
         tool_call_id: m.toolUseId,
-        content: m.content,
+        content: typeof m.content === 'string'
+          ? m.content
+          : toolContentBlocksToOpenAI(m.content),
       })
     }
   }
   return out
+}
+
+/**
+ * Serialize tool ContentBlock[] for OpenAI (text-only).
+ * Images are described by path (no native image blocks in tool results this phase).
+ */
+function toolContentBlocksToOpenAI(blocks: ToolContentBlock[]): string {
+  return blocks
+    .map(b => {
+      if (b.type === 'text') return b.text
+      if (b.type === 'image') return `[image: ${b.mimeType} path=${b.path}]`
+      if (b.type === 'resource') {
+        const parts: string[] = [b.uri]
+        if (b.text) parts.push(b.text)
+        return parts.join('\n')
+      }
+      return ''
+    })
+    .join('\n')
 }

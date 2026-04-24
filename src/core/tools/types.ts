@@ -1,10 +1,13 @@
 // src/core/tools/types.ts
 import type { ToolSpec } from '../provider/types'
 import type { ValidationResult } from './validate'
+import type { ContentBlock } from './content'
+
+export type { ContentBlock } from './content'
 
 export type PermissionHint = 'none' | 'write' | 'exec' | 'network'
 
-export type ToolResult = { output: string; isError: boolean }
+export type ToolResult = { output: string | ContentBlock[]; isError: boolean }
 
 export type ToolContext = {
   signal: AbortSignal

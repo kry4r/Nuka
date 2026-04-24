@@ -16,6 +16,7 @@ import { createProgressPump } from './progressPump'
 import type { AutoCompactOpts } from '../compact/auto'
 import { maybeAutoCompact } from '../compact/auto'
 import { validateWithJsonSchema } from '../tools/validate'
+import { serializeContentBlocks } from '../tools/content'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -130,7 +131,7 @@ export async function* runAgent(
         hint: tool.needsPermission(call.input),
         input: call.input,
       })
-      let result: { output: string; isError: boolean }
+      let result: import('../tools/types').ToolResult
       if (!decision.allowed) {
         result = { output: `Rejected: ${decision.reason ?? 'user denied'}`, isError: true }
       } else {
@@ -144,7 +145,7 @@ export async function* runAgent(
           yield { type: 'tool_progress', id: call.id, text: msg }
         }
         result = await toolPromise
-        // Apply per-tool result size cap (string output only)
+        // Apply per-tool result size cap (string output only; ContentBlock[] left alone)
         if (
           tool.maxResultSizeChars !== undefined &&
           typeof result.output === 'string' &&
@@ -158,7 +159,11 @@ export async function* runAgent(
         }
       }
       appendMessage(session, makeToolMessage(call.id, result), deps.persist)
-      yield { type: 'tool_result', id: call.id, output: result.output, isError: result.isError }
+      // tool_result event payload must be string (UI requirement)
+      const outputStr = typeof result.output === 'string'
+        ? result.output
+        : serializeContentBlocks(result.output)
+      yield { type: 'tool_result', id: call.id, output: outputStr, isError: result.isError }
     }
 
     const drained = session.queue.drain()

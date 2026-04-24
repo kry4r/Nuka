@@ -22,11 +22,14 @@ export function MessageRow(props: {
   const color = m.role === 'user' ? P.muted : m.role === 'assistant' ? P.primary : P.accent
 
   if (m.role === 'tool') {
+    const toolContent = typeof m.content === 'string'
+      ? m.content
+      : m.content.map(b => b.type === 'text' ? b.text : `[${b.type}]`).join('\n')
     return (
       <Box flexDirection="column" marginY={1}>
         <Text color={color} bold>▎ {speaker}</Text>
         <Box marginLeft={2}>
-          <Markdown source={m.content} />
+          <Markdown source={toolContent} />
         </Box>
       </Box>
     )
