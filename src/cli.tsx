@@ -49,6 +49,9 @@ import { sessionsDir } from './core/session/paths'
 import { McpManager } from './core/mcp/manager'
 import { mcpToolsFor } from './core/mcp/toolAdapter'
 import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/resourceTools'
+import { loadPlugins } from './core/plugin/loader'
+import { wirePlugin } from './core/plugin/wire'
+import type { McpServerConfig } from './core/mcp/types'
 
 async function main(): Promise<void> {
   const cwd = process.cwd()
@@ -107,9 +110,23 @@ async function main(): Promise<void> {
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool, WebFetchTool].forEach(t => tools.register(t as any))
   tools.register(makeTodoWriteTool(todoStore) as any)
   tools.register(makeWebSearchTool(config.search) as any)
+
+  const slash = new SlashRegistry()
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
+
+  const plugins = await loadPlugins({ home: os.homedir() })
+  const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
+  for (const p of plugins) {
+    const result = await wirePlugin(p, { tools, slash, skills, mcpServers })
+    if (result.errors.length > 0) {
+      for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
+    }
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded}`)
+  }
+
+  // Register skill tool after all skill-loading (including plugin skills) finishes
   tools.register(makeSkillTool(skills) as any)
 
-  const mcpServers = config.mcp?.servers ?? {}
   const mcpManager = Object.keys(mcpServers).length > 0 ? new McpManager({ servers: mcpServers }) : null
 
   if (mcpManager) {
@@ -132,9 +149,6 @@ async function main(): Promise<void> {
     permBridge.ask({ call, suggestedPattern: suggestPattern(call) })
 
   const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
-
-  const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
   const nodeVersion = process.version
   const shell = process.env.SHELL ?? '/bin/sh'
