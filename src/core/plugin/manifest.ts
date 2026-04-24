@@ -65,6 +65,31 @@ export const PluginManifestSchema = z.object({
     )
     .optional(),
   /**
+   * Notification routing channels provided by this plugin.
+   */
+  channels: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        allowlist: z.array(
+          z.enum([
+            'tool_result',
+            'turn_end',
+            'error',
+            'plugin_install',
+            'plugin_uninstall',
+            'plugin_enable',
+            'plugin_disable',
+          ]),
+        ),
+        dispatch: z.discriminatedUnion('type', [
+          z.object({ type: z.literal('webhook'), url: z.string().url() }),
+          z.object({ type: z.literal('command'), command: z.string().min(1) }),
+        ]),
+      }),
+    )
+    .optional(),
+  /**
    * User-configurable fields that must be supplied at first launch.
    * Persisted to ~/.nuka/plugins/<name>/.userconfig.json.
    */

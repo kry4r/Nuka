@@ -21,6 +21,8 @@ import type { HookEntry } from '../hooks/types'
 import { runHooks } from '../hooks/runner'
 import { parallelBatch } from '../tools/concurrency'
 import type { ToolResult } from '../tools/types'
+import { getChannels } from '../notifications/channelRegistry'
+import { dispatchToChannels } from '../notifications/channels'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -150,6 +152,11 @@ export async function* runAgent(
         stopReason: assistant.stopReason ?? 'end_turn',
         usage: assistant.usage ?? { inputTokens: 0, outputTokens: 0 },
       }
+      // Dispatch turn_end to channels (non-blocking — don't await)
+      void dispatchToChannels(getChannels() as import('../notifications/channels').ChannelDef[], {
+        type: 'turn_end',
+        payload: { stopReason: assistant.stopReason ?? 'end_turn' },
+      })
       // afterTurn hook — non-cancelable, swallow failures
       if (deps.hooks && deps.hooks.length > 0) {
         await runHooks(deps.hooks, 'afterTurn', { event: 'afterTurn', stopReason: assistant.stopReason ?? 'end_turn' })
@@ -313,6 +320,11 @@ export async function* runAgent(
           ? outcome.result.output
           : serializeContentBlocks(outcome.result.output)
         yield { type: 'tool_result', id: call.id, output: outputStr, isError: outcome.result.isError }
+        // Dispatch tool_result to channels (non-blocking)
+        void dispatchToChannels(getChannels() as import('../notifications/channels').ChannelDef[], {
+          type: 'tool_result',
+          payload: { id: call.id, name: call.name, output: outputStr, isError: outcome.result.isError },
+        })
 
         // afterToolCall hook (serial, in input order)
         if (slot.kind === 'approved' && deps.hooks && deps.hooks.length > 0) {
@@ -397,6 +409,11 @@ export async function* runAgent(
           ? result.output
           : serializeContentBlocks(result.output)
         yield { type: 'tool_result', id: call.id, output: outputStr, isError: result.isError }
+        // Dispatch tool_result to channels (non-blocking)
+        void dispatchToChannels(getChannels() as import('../notifications/channels').ChannelDef[], {
+          type: 'tool_result',
+          payload: { id: call.id, name: call.name, output: outputStr, isError: result.isError },
+        })
         // afterToolCall hook — non-cancelable, swallow failures
         if (deps.hooks && deps.hooks.length > 0) {
           await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: result.isError }, { tool: call.name })
