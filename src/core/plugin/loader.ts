@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type LoadedPlugin } from './manifest'
 
-export async function loadPlugins(opts: { home: string }): Promise<LoadedPlugin[]> {
+export async function loadPlugins(opts: { home: string; enabled?: string[] }): Promise<LoadedPlugin[]> {
   const pluginsDir = join(opts.home, '.nuka', 'plugins')
 
   let entries: string[]
@@ -58,6 +58,11 @@ export async function loadPlugins(opts: { home: string }): Promise<LoadedPlugin[
     }
 
     plugins.push({ manifest, rootDir: dir })
+  }
+
+  if (opts.enabled !== undefined) {
+    const allowed = new Set(opts.enabled)
+    return plugins.filter(p => allowed.has(p.manifest.name))
   }
 
   return plugins

@@ -151,7 +151,7 @@ async function runInteractive(): Promise<void> {
   const slash = new SlashRegistry()
   ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
-  const plugins = await loadPlugins({ home: os.homedir() })
+  const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   for (const p of plugins) {
     const result = await wirePlugin(p, { tools, slash, skills, mcpServers })

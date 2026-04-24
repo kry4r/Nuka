@@ -90,6 +90,12 @@ export const McpConfigSchema = z
   })
   .optional()
 
+export const PluginsConfigSchema = z
+  .object({
+    enabled: z.array(z.string()).optional(),
+  })
+  .optional()
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -98,5 +104,6 @@ export const ConfigSchema = z.object({
   compact: CompactSchema,
   search: SearchSchema,
   mcp: McpConfigSchema,
+  plugins: PluginsConfigSchema,
 })
 export type Config = z.infer<typeof ConfigSchema>
