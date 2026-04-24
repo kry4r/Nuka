@@ -313,3 +313,40 @@ Merge commits on `main`: `e79ffbc` (M2), `b06cd6b` (M1), `e39832d` (M3).
 7. **M3.3 YAML warning** emits to `console.warn` on `loadPlugins` once per plugin per process; YAML manifest support is retained (not removed) for now.
 
 Phase 4b begins from `main` at the M3 merge commit.
+
+---
+
+## Appendix — Phase 4b Gap Closure
+
+Phase 4b landed on `main` via three worktrees merged in order M2 → M1 → M3 (base `d42aa16`). Post-merge: `npm test` 518 passing, `npm run typecheck` green, `dist/cli.js` 177.1 KB. The 14 items scheduled for Phase 4b closed as follows.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 4b.M1.13 | `stderr` capture from stdio transport | `6f7fea3` |
+| 4b.M1.14 | MCP tool result persistence to disk | `5de01f6` |
+| 4b.M1.15 | Unicode sanitization on tool results | `66f41e5` |
+| 4b.M1.16 | `searchHint` / `alwaysLoad` via `_meta` | `9bdf62b` |
+| 4b.M1.17 | Memoized connection cache (LRU + `clearServerCache`) | `62a27a8` |
+| 4b.M2.7 | `isConcurrencySafe` + parallel tool execution | `01199c8` |
+| 4b.M2.8 | Annotation-aware permission prompt | `dff82e4` |
+| 4b.M2.9 | `shouldDefer` / `alwaysLoad` scheduling | `fca7569` |
+| 4b.M2.10 | Tool `aliases[]` for rename compat | `6b997d6` |
+| 4b.M2.11 | `isOpenWorld` UI suffix | `195caa0` |
+| 4b.M2.12 | Typed progress events (`ToolCallProgress<P>`) | `9c38507` |
+| 4b.M3.4 | Manifest metadata (`author`/`homepage`/etc.) + `plugin list` CLI | `06644bc` |
+| 4b.M3.5 | `--plugin-dir` session-only flag | `87426fa` |
+| 4b.M3.6 | Plugin `userConfig` prompted at enable time | `f44b381` |
+
+Merge commits on `main`: `f65f4a2` (M2), `aa4f0b9` (M1), `d97a133` (M3).
+
+### Gap-closure divergences from the design spec
+
+1. **M1.13 stderr:** to capture stderr the client now unconditionally spawns stdio transports with `stderr: 'pipe'`. Operators who relied on server stderr appearing in their terminal will no longer see it there; it is accessible via `McpClient.stderr()`. Ring buffer defaults to 64 MiB and is configurable.
+2. **M1.17 LRU cache lifetime:** `McpManager.cache` is static and persists for the process lifetime. `closeAll()` does *not* purge the cache — callers who want a clean slate must call `McpManager.clearServerCache()` before starting a new manager.
+3. **M2.7 parallel execution progress ordering:** per-call progress is buffered into a `string[]` and emitted in strict input order (`tool_call[i] → progress[i]* → tool_result[i]`) after all parallel calls complete, instead of interleaved as-it-arrives. Simpler to reason about; users see progress in batches rather than a live stream when parallelism kicks in. `beforeToolCall` / permission prompts run serially before dispatch (no dialog stacking); `afterToolCall` hooks run serially after.
+4. **M2.8 `AskUser` signature widened** from `(call: PermissionCall) => Promise<Decision>` to `(payload: PermissionPayload) => Promise<Decision>` so badges flow through. Clean extension; `cli.tsx`'s lambda and `PermissionBridge.ask` were updated accordingly.
+5. **M2.12 typed progress** reuses the existing `tool_progress` string event channel — `onProgressTyped(payload)` is a thin wrapper that JSON.stringify's the payload into the existing `onProgress(string)` pump. No new event type or pump-shape change.
+6. **M3.5 `--plugin-dir`** is parsed via manual `argv` scanning (the project's convention) rather than introducing a commander/yargs dependency. The repeatable flag is handled explicitly in `cli.tsx`.
+7. **M3.6 userConfig orchestration:** "first enable" is detected by *file-existence* on `.userconfig.json` (no separate flag). The loader partitions plugins into `readyPlugins` (wired immediately) and `pendingPlugins` (deferred until the TUI mounts and the permission bridge is available). A `setImmediate` tick after the initial render lets React mount before the first prompt fires — mirrors the existing `mcpManager` startup pattern. Cancelling a first-enable prompt skips that plugin *for the session only*; next launch re-prompts.
+
+Phase 5 begins from `main` at `d97a133` (next: marketplace + git/npm install + dependency closure, plugin `agents`/`outputStyles`/`channels`/`lspServers`, config scope).
