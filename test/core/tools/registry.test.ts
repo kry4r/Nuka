@@ -1,5 +1,5 @@
 // test/core/tools/registry.test.ts
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { ToolRegistry } from '../../../src/core/tools/registry'
 import type { Tool } from '../../../src/core/tools/types'
 
@@ -10,6 +10,15 @@ const fake: Tool = {
   source: 'builtin',
   needsPermission: () => 'none',
   run: async (input: any) => ({ output: String(input.text ?? ''), isError: false }),
+}
+
+const fakeMcp: Tool = {
+  name: 'McpSearch',
+  description: 'mcp search tool',
+  parameters: { type: 'object', properties: {} },
+  source: 'mcp',
+  needsPermission: () => 'network',
+  run: async () => ({ output: '', isError: false }),
 }
 
 describe('ToolRegistry', () => {
@@ -28,9 +37,25 @@ describe('ToolRegistry', () => {
     expect(specs[0].name).toBe('Echo')
   })
 
-  it('throws on duplicate name by default', () => {
+  it('logs and skips on duplicate name, returns { registered: false, reason: "duplicate" }', () => {
+    const r = new ToolRegistry()
+    const second: Tool = { ...fake, source: 'mcp' }
+    r.register(fake)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const result = r.register(second)
+    expect(result).toEqual({ registered: false, reason: 'duplicate' })
+    expect(warnSpy).toHaveBeenCalledOnce()
+    expect(r.find('Echo')!.source).toBe('builtin')
+    warnSpy.mockRestore()
+  })
+
+  it('bySource returns only tools matching the given source', () => {
     const r = new ToolRegistry()
     r.register(fake)
-    expect(() => r.register(fake)).toThrow(/duplicate/)
+    r.register(fakeMcp)
+    expect(r.bySource('builtin')).toEqual([fake])
+    expect(r.bySource('mcp')).toEqual([fakeMcp])
+    expect(r.bySource('skill')).toEqual([])
+    expect(r.bySource('plugin')).toEqual([])
   })
 })
