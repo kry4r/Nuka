@@ -1,8 +1,15 @@
 // test/core/session/manager.test.ts
 import { describe, it, expect, vi } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { SessionManager } from '../../../src/core/session/manager'
-import type { SessionStore, DebouncedMetaWriter } from '../../../src/core/session/store'
+import { SessionStore, DebouncedMetaWriter } from '../../../src/core/session/store'
 import type { Message } from '../../../src/core/message/types'
+
+async function tmpDir(): Promise<string> {
+  return fs.mkdtemp(path.join(os.tmpdir(), 'nuka-manager-test-'))
+}
 
 describe('SessionManager', () => {
   it('start creates and activates an initial session', () => {
@@ -81,5 +88,65 @@ describe('SessionManager with store + metaWriter', () => {
     await new Promise(r => setTimeout(r, 10))
     expect(warnSpy).toHaveBeenCalled()
     warnSpy.mockRestore()
+  })
+})
+
+describe('SessionManager resume + listPersisted', () => {
+  it('round-trip: start → persist → new manager → resume returns session with messages', async () => {
+    const dir = await tmpDir()
+    const store1 = new SessionStore({ dir })
+    const meta1 = new DebouncedMetaWriter(store1, 0)
+    const m1 = new SessionManager({ store: store1, metaWriter: meta1 })
+    const s = m1.start({ providerId: 'p', model: 'gpt-x' })
+    const msg: Message = { role: 'user', id: 'u1', ts: Date.now(), content: [{ type: 'text', text: 'hello' }] }
+    m1.persist(s, msg)
+    await meta1.flush()
+    // wait for appendMessage fire-and-forget
+    await new Promise(r => setTimeout(r, 20))
+
+    const store2 = new SessionStore({ dir })
+    const m2 = new SessionManager({ store: store2 })
+    const resumed = await m2.resume(s.id)
+    expect(resumed.id).toBe(s.id)
+    expect(resumed.model).toBe('gpt-x')
+    expect(resumed.messages).toHaveLength(1)
+    expect((resumed.messages[0]!.content[0] as any).text).toBe('hello')
+    expect(m2.active()).toBe(resumed)
+  })
+
+  it('resume throws on unknown id', async () => {
+    const dir = await tmpDir()
+    const store = new SessionStore({ dir })
+    const m = new SessionManager({ store })
+    await expect(m.resume('nonexistent-id')).rejects.toThrow('unknown session: nonexistent-id')
+  })
+
+  it('resume throws when no store configured', async () => {
+    const m = new SessionManager()
+    await expect(m.resume('some-id')).rejects.toThrow('no store — session resume unavailable')
+  })
+
+  it('listPersisted returns sorted metas', async () => {
+    const dir = await tmpDir()
+    const store = new SessionStore({ dir })
+    const meta = new DebouncedMetaWriter(store, 0)
+    const m = new SessionManager({ store, metaWriter: meta })
+    const s1 = m.start({ providerId: 'p', model: 'm1' })
+    s1.updatedAt = 1000
+    const s2 = m.new()
+    s2.updatedAt = 3000
+    await meta.flush()
+    // flush writes the last pending (s2); also manually write s1 meta
+    await store.writeMeta(s1)
+
+    const metas = await m.listPersisted()
+    expect(metas).toHaveLength(2)
+    expect(metas[0]!.updatedAt).toBeGreaterThanOrEqual(metas[1]!.updatedAt)
+  })
+
+  it('listPersisted returns empty array when no store', async () => {
+    const m = new SessionManager()
+    const metas = await m.listPersisted()
+    expect(metas).toEqual([])
   })
 })

@@ -5,6 +5,7 @@ import type { Config } from '../core/config/schema'
 export type DialogDescriptor =
   | { kind: 'model-picker' }
   | { kind: 'config-editor' }
+  | { kind: 'session-picker' }
 
 export type SessionEffect =
   | { kind: 'new-session' }

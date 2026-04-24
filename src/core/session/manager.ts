@@ -2,7 +2,9 @@
 import type { Session } from './types'
 import type { Message } from '../message/types'
 import { createSession, branchSession } from './session'
-import type { SessionStore, DebouncedMetaWriter } from './store'
+import type { SessionStore, DebouncedMetaWriter, SessionMeta } from './store'
+import { PermissionCache } from '../permission/cache'
+import { MessageQueue } from './queue'
 
 export class SessionManager {
   private sessions: Session[] = []
@@ -67,5 +69,39 @@ export class SessionManager {
       )
     }
     this.metaWriter?.schedule(session)
+  }
+
+  async resume(id: string): Promise<Session> {
+    if (!this.store) throw new Error('no store — session resume unavailable')
+    const meta = await this.store.readMeta(id)
+    if (!meta) throw new Error(`unknown session: ${id}`)
+    const messages = await this.store.readMessages(id)
+    const s: Session = {
+      id: meta.id,
+      parentId: meta.parentId,
+      providerId: meta.providerId,
+      model: meta.model,
+      messages,
+      totalUsage: { ...meta.totalUsage },
+      permissionCache: new PermissionCache(),
+      queue: new MessageQueue(),
+      mode: meta.mode,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt,
+    }
+    this.sessions.push(s)
+    this.activeId = s.id
+    return s
+  }
+
+  async listPersisted(): Promise<SessionMeta[]> {
+    if (!this.store) return []
+    return this.store.list()
+  }
+
+  async delete(id: string): Promise<void> {
+    if (this.store) await this.store.delete(id)
+    this.sessions = this.sessions.filter(s => s.id !== id)
+    if (this.activeId === id) this.activeId = undefined
   }
 }

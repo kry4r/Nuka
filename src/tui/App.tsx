@@ -1,6 +1,6 @@
 // src/tui/App.tsx
 import React, { useCallback, useEffect, useState } from 'react'
-import { Box, useApp, useInput } from 'ink'
+import { Box, Text, useApp, useInput } from 'ink'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
 import { PromptInput } from './PromptInput/PromptInput'
@@ -8,6 +8,8 @@ import { StatusBar } from './StatusBar/StatusBar'
 import { PermissionDialog } from './dialogs/PermissionDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
 import { ConfigEditor } from './dialogs/ConfigEditor'
+import { SessionPicker } from './dialogs/SessionPicker'
+import type { SessionMeta } from '../core/session/store'
 import { pickTip } from './Welcome/tips'
 import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
@@ -29,6 +31,7 @@ type Dialog =
     }
   | { kind: 'model-picker' }
   | { kind: 'config-editor' }
+  | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
 
 export type AppProps = {
   sessions: SessionManager
@@ -97,7 +100,15 @@ export function App(props: AppProps): React.JSX.Element {
         config: props.config,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
-      else if (res.type === 'dialog') setDialog(res.dialog as Dialog)
+      else if (res.type === 'dialog') {
+        if (res.dialog.kind === 'session-picker') {
+          setDialog({ kind: 'session-picker', metas: 'loading' })
+          const metas = await props.sessions.listPersisted()
+          setDialog({ kind: 'session-picker', metas })
+        } else {
+          setDialog(res.dialog as Dialog)
+        }
+      }
       else if (res.type === 'effect') await handleSlashEffect(res.effect)
       return
     }
@@ -170,6 +181,23 @@ export function App(props: AppProps): React.JSX.Element {
           preview={JSON.stringify(props.config, null, 2)}
           onOpen={() => { props.onOpenEditor(); setDialog(null) }}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'session-picker' && dialog.metas === 'loading' && (
+        <Box borderStyle="round" borderColor="cyan" paddingX={1}>
+          <Text color="cyan">Loading sessions…</Text>
+        </Box>
+      )}
+      {dialog?.kind === 'session-picker' && dialog.metas !== 'loading' && (
+        <SessionPicker
+          sessions={dialog.metas}
+          onSelect={async (id) => {
+            setDialog(null)
+            const resumed = await props.sessions.resume(id)
+            setSession(resumed)
+            stream.reset()
+          }}
+          onCancel={() => setDialog(null)}
         />
       )}
 

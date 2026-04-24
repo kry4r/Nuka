@@ -22,6 +22,9 @@ import { CostCommand } from './slash/cost'
 import { ModelCommand } from './slash/model'
 import { ConfigCommand } from './slash/config'
 import { CompactCommand } from './slash/compact'
+import { ResumeCommand } from './slash/resume'
+import { HistoryCommand } from './slash/history'
+import { DeleteSessionCommand } from './slash/delete-session'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -64,7 +67,33 @@ async function main(): Promise<void> {
     process.exit(2)
   }
   const activeModel = activeProvider!.selectedModel ?? activeProvider!.models?.[0] ?? ''
-  sessions.start({ providerId: activeProvider!.id, model: activeModel })
+
+  // Parse --resume flag: --resume (most recent) or --resume=<id-prefix>
+  const resumeArg = process.argv.find(a => a === '--resume' || a.startsWith('--resume='))
+  if (resumeArg !== undefined) {
+    const prefix = resumeArg.includes('=') ? resumeArg.split('=').slice(1).join('=') : ''
+    const allMetas = await sessions.listPersisted()
+    let resolvedId: string | undefined
+    if (!prefix) {
+      resolvedId = allMetas[0]?.id
+    } else {
+      const matches = allMetas.filter(m => m.id.startsWith(prefix))
+      if (matches.length === 1) {
+        resolvedId = matches[0]!.id
+      } else if (matches.length === 0) {
+        console.error(`--resume: no session matching prefix "${prefix}"`)
+      } else {
+        console.error(`--resume: ambiguous prefix "${prefix}" matches ${matches.length} sessions`)
+      }
+    }
+    if (resolvedId) {
+      await sessions.resume(resolvedId)
+    } else {
+      sessions.start({ providerId: activeProvider!.id, model: activeModel })
+    }
+  } else {
+    sessions.start({ providerId: activeProvider!.id, model: activeModel })
+  }
 
   const tools = new ToolRegistry()
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool].forEach(t => tools.register(t as any))
@@ -77,7 +106,7 @@ async function main(): Promise<void> {
   const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand].forEach(c => slash.register(c))
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
   const nodeVersion = process.version
   const shell = process.env.SHELL ?? '/bin/sh'
