@@ -134,8 +134,9 @@ export function App(props: AppProps): React.JSX.Element {
   })
 
   const streamingMsg = null // Phase 1 renders via messages[]; streaming text is appended via runAgent pushing to session.messages
+  const justCompacted = stream.events.some(e => e.type === 'auto_compacted')
   const contextUsed = session.totalUsage.inputTokens + session.totalUsage.outputTokens
-  const contextMax = 200_000
+  const contextMax = props.config.compact?.contextWindow ?? 200_000
   const pc = props.providers.getProviderConfig(session.providerId)
   const cost = pc ? computeCost(pc, session.model, session.totalUsage) : 0
   const hintMode: 'idle' | 'running' | 'awaiting-user' | 'primed-quit' =
@@ -144,6 +145,9 @@ export function App(props: AppProps): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" flexGrow={1}>
+        {justCompacted && (
+          <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
+        )}
         {session.messages.length === 0
           ? <Welcome
               cwd={props.cwd}

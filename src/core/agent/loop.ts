@@ -13,6 +13,8 @@ import type { AssistantMessage, ContentBlock, Message } from '../message/types'
 import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
 import { createProgressPump } from './progressPump'
+import type { AutoCompactOpts } from '../compact/auto'
+import { maybeAutoCompact } from '../compact/auto'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -21,6 +23,7 @@ export type RunAgentDeps = {
   systemPromptInput?: () => Parameters<typeof buildSystemPrompt>[0]
   skills?: Skill[]
   persist?: (session: Session, msg: Message) => void
+  autoCompact?: AutoCompactOpts
 }
 
 function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string; input: unknown }> {
@@ -91,6 +94,12 @@ export async function* runAgent(
         type: 'turn_end',
         stopReason: assistant.stopReason ?? 'end_turn',
         usage: assistant.usage ?? { inputTokens: 0, outputTokens: 0 },
+      }
+      if (deps.autoCompact) {
+        const result = await maybeAutoCompact(session, deps.autoCompact)
+        if (result.compacted) {
+          yield { type: 'auto_compacted', before: result.before, after: result.after }
+        }
       }
       break
     }

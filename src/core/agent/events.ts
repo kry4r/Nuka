@@ -8,4 +8,5 @@ export type AgentEvent =
   | { type: 'tool_result'; id: string; output: string; isError: boolean }
   | { type: 'turn_end'; usage: TokenUsage; stopReason: StopReason }
   | { type: 'queued_message_flushed'; count: number }
+  | { type: 'auto_compacted'; before: number; after: number }
   | { type: 'error'; error: Error }

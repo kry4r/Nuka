@@ -34,6 +34,7 @@ import { GrepTool } from './core/tools/grep'
 import { currentGitBranch } from './core/session/telemetry'
 import { runAgent as runAgentLoop } from './core/agent/loop'
 import { compactSession } from './core/compact/compact'
+import type { AutoCompactOpts } from './core/compact/auto'
 import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
@@ -117,6 +118,20 @@ async function main(): Promise<void> {
     metaWriter.flush().finally(() => process.exit(0))
   })
 
+  // Build auto-compact opts. Use compact.model with the active session's provider when set;
+  // otherwise fall back to the active session's model. Provider resolution uses the active
+  // session's provider in both cases (no cross-provider summarization in this phase).
+  const activeSession = sessions.active()!
+  const compactModel = config.compact?.model ?? activeSession.model
+  const { provider: compactProvider } = providers.resolveFor(activeSession)
+  const autoCompact: AutoCompactOpts = {
+    provider: compactProvider,
+    model: compactModel,
+    keepTurns: config.compact?.keepTurns ?? 3,
+    autoThreshold: config.compact?.autoThreshold ?? 0.8,
+    contextWindow: config.compact?.contextWindow ?? 200_000,
+  }
+
   const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) =>
     runAgentLoop(input, session, {
       provider: providers,
@@ -127,6 +142,7 @@ async function main(): Promise<void> {
       }),
       skills,
       persist: sessions.persist,
+      autoCompact,
     }, signal)
 
   render(

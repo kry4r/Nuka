@@ -6,6 +6,7 @@ import { ToolRegistry } from '../../../src/core/tools/registry'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Tool } from '../../../src/core/tools/types'
+import type { AutoCompactOpts } from '../../../src/core/compact/auto'
 
 function stubProvider(scripts: ProviderEvent[][]): LLMProvider {
   let i = 0
@@ -237,5 +238,54 @@ describe('runAgent', () => {
     )) { /* drain */ }
     // checker's add() is the only writer — must be exactly 1, not 2
     expect(session.permissionCache.list()).toHaveLength(1)
+  })
+
+  it('yields auto_compacted event when totalUsage exceeds autoThreshold after a turn', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    // Pre-populate enough turns so compactSession won't no-op
+    for (let i = 0; i < 6; i++) {
+      session.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      session.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+    }
+    // Set totalUsage above the threshold (contextWindow:1000 * autoThreshold:0.8 = 800)
+    session.totalUsage = { inputTokens: 500, outputTokens: 400 }
+
+    const mainProvider = stubProvider([[
+      { type: 'text_delta', text: 'hello' },
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]])
+
+    // Separate stub provider for the summarizer
+    const summarizerProvider: LLMProvider = {
+      id: 'summarizer', format: 'openai',
+      async *stream(): AsyncIterable<ProviderEvent> {
+        yield { type: 'text_delta', text: 'SUMMARY' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 10, outputTokens: 20 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    const autoCompact: AutoCompactOpts = {
+      provider: summarizerProvider,
+      model: 'm',
+      autoThreshold: 0.8,
+      contextWindow: 1000,
+    }
+
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    const events: any[] = []
+    for await (const ev of runAgent(
+      { text: 'hi' },
+      session,
+      { provider: { resolveFor: () => ({ provider: mainProvider, model: 'm' }) } as any, tools, permission, autoCompact },
+      new AbortController().signal,
+    )) events.push(ev)
+
+    expect(events.some(e => e.type === 'auto_compacted')).toBe(true)
+    const compactedEv = events.find(e => e.type === 'auto_compacted')
+    expect(typeof compactedEv.before).toBe('number')
+    expect(typeof compactedEv.after).toBe('number')
   })
 })
