@@ -229,6 +229,88 @@ describe('McpClient callTool', () => {
   })
 })
 
+describe('McpClient timeouts', () => {
+  beforeEach(() => {
+    mocks.setConnectError(null)
+    mocks.FakeClient.mockClear()
+    mocks.clearInstances()
+  })
+
+  it('transitions to error with "connect timeout" when connect never resolves', async () => {
+    // Swap FakeClient's connect with one that hangs.
+    mocks.FakeClient.mockImplementationOnce(() => {
+      const instance = {
+        connect: vi.fn().mockImplementation(() => new Promise<void>(() => {})),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn(),
+        readResource: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      }
+      mocks.sdkInstances.push(instance as any)
+      return instance
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      connectTimeoutMs: 20,
+    })
+    await client.connect()
+    const s = client.status
+    expect(s.kind).toBe('error')
+    if (s.kind === 'error') expect(s.error).toBe('connect timeout')
+  })
+
+  it('returns a timeout tool result when callTool never resolves', async () => {
+    mocks.setCallToolResult({ content: [{ type: 'text', text: 'ok' }] })
+    mocks.FakeClient.mockImplementationOnce(() => {
+      const instance = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn().mockImplementation(() => new Promise(() => {})),
+        readResource: vi.fn(),
+        close: vi.fn().mockResolvedValue(undefined),
+      }
+      mocks.sdkInstances.push(instance as any)
+      return instance
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      requestTimeoutMs: 20,
+    })
+    await client.connect()
+    const res = await client.callTool('foo', {})
+    expect(res.isError).toBe(true)
+    expect(res.output).toBe('request timeout (20ms)')
+  })
+
+  it('returns a timeout tool result when readResource never resolves', async () => {
+    mocks.FakeClient.mockImplementationOnce(() => {
+      const instance = {
+        connect: vi.fn().mockResolvedValue(undefined),
+        listTools: vi.fn().mockResolvedValue({ tools: [] }),
+        listResources: vi.fn().mockResolvedValue({ resources: [] }),
+        callTool: vi.fn(),
+        readResource: vi.fn().mockImplementation(() => new Promise(() => {})),
+        close: vi.fn().mockResolvedValue(undefined),
+      }
+      mocks.sdkInstances.push(instance as any)
+      return instance
+    })
+    const client = new McpClient({
+      name: 'srv',
+      config: { type: 'stdio', command: 'node', args: [] },
+      requestTimeoutMs: 20,
+    })
+    await client.connect()
+    const res = await client.readResource('res://a')
+    expect(res.isError).toBe(true)
+    expect(res.output).toBe('request timeout (20ms)')
+  })
+})
+
 describe('McpClient callTool truncation', () => {
   beforeEach(() => {
     mocks.setConnectError(null)

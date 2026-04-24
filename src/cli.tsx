@@ -165,7 +165,12 @@ async function runInteractive(): Promise<void> {
   tools.register(makeSkillTool(skills) as any)
 
   const mcpManager = Object.keys(mcpServers).length > 0
-    ? new McpManager({ servers: mcpServers, maxResultChars: config.mcp?.maxResultChars })
+    ? new McpManager({
+        servers: mcpServers,
+        maxResultChars: config.mcp?.maxResultChars,
+        connectTimeoutMs: config.mcp?.connectTimeoutMs,
+        requestTimeoutMs: config.mcp?.requestTimeoutMs,
+      })
     : null
 
   if (mcpManager) {

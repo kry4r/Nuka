@@ -9,6 +9,25 @@ import crypto from 'node:crypto'
 type SdkClientHandle = InstanceType<typeof Client>
 
 export const DEFAULT_MAX_RESULT_CHARS = 100_000
+export const DEFAULT_CONNECT_TIMEOUT_MS = 30_000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000
+
+/**
+ * Race a promise against a timer. On timeout the returned promise rejects
+ * with a labelled `Error('<label> timed out after <ms>ms')` — the caller is
+ * responsible for translating that into the appropriate surface.
+ */
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`))
+    }, ms)
+    p.then(
+      v => { clearTimeout(timer); resolve(v) },
+      e => { clearTimeout(timer); reject(e) },
+    )
+  })
+}
 
 export class McpClient {
   readonly name: string
@@ -19,17 +38,23 @@ export class McpClient {
   private toolsCache?: McpToolDescriptor[]
   private resourcesCache?: McpResourceDescriptor[]
   private maxResultChars: number
+  private connectTimeoutMs: number
+  private requestTimeoutMs: number
 
   constructor(opts: {
     name: string
     config: McpServerConfig
     onStatusChange?: (s: McpConnectionStatus) => void
     maxResultChars?: number
+    connectTimeoutMs?: number
+    requestTimeoutMs?: number
   }) {
     this.name = opts.name
     this.config = opts.config
     this.onStatus = opts.onStatusChange
     this.maxResultChars = opts.maxResultChars ?? DEFAULT_MAX_RESULT_CHARS
+    this.connectTimeoutMs = opts.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS
+    this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   }
 
   get status(): McpConnectionStatus {
@@ -59,14 +84,19 @@ export class McpClient {
       }
 
       const client = new Client({ name: 'nuka', version: '0.1' }, { capabilities: {} })
-      await client.connect(transport as Parameters<typeof client.connect>[0])
+      await withTimeout(
+        client.connect(transport as Parameters<typeof client.connect>[0]),
+        this.connectTimeoutMs,
+        'connect',
+      )
       this.sdk = client
 
       const tools = await this.listTools()
       const resources = await this.listResources()
       this.emit({ kind: 'connected', toolCount: tools.length, resourceCount: resources.length })
     } catch (err) {
-      const error = err instanceof Error ? err.message : String(err)
+      const raw = err instanceof Error ? err.message : String(err)
+      const error = raw.startsWith('connect timed out') ? 'connect timeout' : raw
       this.emit({ kind: 'error', error })
     }
   }
@@ -116,11 +146,24 @@ export class McpClient {
     signal?: AbortSignal,
   ): Promise<{ output: string | ContentBlock[]; isError: boolean }> {
     if (!this.sdk) throw new Error('Not connected')
-    const result = await this.sdk.callTool(
-      { name: rawName, arguments: input as Record<string, unknown> },
-      undefined,
-      { signal },
-    )
+    let result: Awaited<ReturnType<SdkClientHandle['callTool']>>
+    try {
+      result = await withTimeout(
+        this.sdk.callTool(
+          { name: rawName, arguments: input as Record<string, unknown> },
+          undefined,
+          { signal },
+        ),
+        this.requestTimeoutMs,
+        'callTool',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.startsWith('callTool timed out')) {
+        return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
+      }
+      throw err
+    }
     const sdkContent = result.content as Array<{
       type: string
       text?: string
@@ -174,7 +217,20 @@ export class McpClient {
     signal?: AbortSignal,
   ): Promise<{ output: string; isError: boolean }> {
     if (!this.sdk) throw new Error('Not connected')
-    const result = await this.sdk.readResource({ uri }, { signal })
+    let result: Awaited<ReturnType<SdkClientHandle['readResource']>>
+    try {
+      result = await withTimeout(
+        this.sdk.readResource({ uri }, { signal }),
+        this.requestTimeoutMs,
+        'readResource',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.startsWith('readResource timed out')) {
+        return { output: `request timeout (${this.requestTimeoutMs}ms)`, isError: true }
+      }
+      throw err
+    }
     const lines: string[] = []
     for (const c of result.contents) {
       const item = c as { uri: string; mimeType?: string; text?: string; blob?: string }

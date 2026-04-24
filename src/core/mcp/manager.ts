@@ -8,6 +8,8 @@ export class McpManager {
   constructor(opts: {
     servers: Record<string, McpServerConfig>
     maxResultChars?: number
+    connectTimeoutMs?: number
+    requestTimeoutMs?: number
   }) {
     this.clients = Object.entries(opts.servers).map(
       ([name, config]) =>
@@ -16,6 +18,8 @@ export class McpManager {
           config,
           onStatusChange: () => this.notify(),
           maxResultChars: opts.maxResultChars,
+          connectTimeoutMs: opts.connectTimeoutMs,
+          requestTimeoutMs: opts.requestTimeoutMs,
         }),
     )
   }
