@@ -62,6 +62,24 @@ export const SearchSchema = z
   })
   .optional()
 
+export const McpServerConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('stdio'),
+    command: z.string().min(1),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string(), z.string()).optional(),
+  }),
+  z.object({
+    type: z.literal('http'),
+    url: z.string().url(),
+    headers: z.record(z.string(), z.string()).optional(),
+  }),
+])
+
+export const McpConfigSchema = z
+  .object({ servers: z.record(z.string(), McpServerConfigSchema).default({}) })
+  .optional()
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -69,5 +87,6 @@ export const ConfigSchema = z.object({
   welcome: WelcomeSchema,
   compact: CompactSchema,
   search: SearchSchema,
+  mcp: McpConfigSchema,
 })
 export type Config = z.infer<typeof ConfigSchema>

@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
 import { loadConfig } from '../../../src/core/config/load'
+import { ConfigSchema } from '../../../src/core/config/schema'
 
 function tmp(): string {
   return mkdtempSync(join(os.tmpdir(), 'nuka-cfg-'))
@@ -72,5 +73,40 @@ active: { providerId: p2 }
     const cfg = await loadConfig({ home, cwd })
     expect(cfg.active.providerId).toBe('p2')
     expect(cfg.providers.map(p => p.name).sort()).toEqual(['Global', 'Project'])
+  })
+
+  it('accepts a config with mcp servers', async () => {
+    const home = tmp()
+    mkdirSync(join(home, '.nuka'))
+    writeFileSync(
+      join(home, '.nuka', 'config.yaml'),
+      `active: { providerId: 'none' }
+mcp:
+  servers:
+    fs:
+      type: stdio
+      command: node
+      args: ['-e', 'console.log(1)']
+    api:
+      type: http
+      url: https://example.com/mcp
+`,
+    )
+    const cfg = await loadConfig({ home, cwd: tmp() })
+    expect(cfg.mcp?.servers.fs).toMatchObject({ type: 'stdio', command: 'node' })
+    expect(cfg.mcp?.servers.api).toMatchObject({ type: 'http', url: 'https://example.com/mcp' })
+  })
+
+  it('rejects a malformed mcp server type', () => {
+    expect(() =>
+      ConfigSchema.parse({
+        active: { providerId: '' },
+        mcp: {
+          servers: {
+            bad: { type: 'websocket', url: 'ws://localhost' },
+          },
+        },
+      }),
+    ).toThrow()
   })
 })

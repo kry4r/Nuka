@@ -59,6 +59,7 @@ export async function loadConfig(opts: {
     theme: projectCfg.theme ?? globalCfg.theme,
     welcome: projectCfg.welcome ?? globalCfg.welcome,
     compact: projectCfg.compact ?? globalCfg.compact,
+    mcp: projectCfg.mcp ?? globalCfg.mcp,
   }
 
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID
