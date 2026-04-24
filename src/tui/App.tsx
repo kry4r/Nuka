@@ -1,6 +1,8 @@
 // src/tui/App.tsx
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
 import { PromptInput } from './PromptInput/PromptInput'
@@ -21,6 +23,8 @@ import type { PermissionCall, PermissionDecision } from '../core/permission/type
 import type { PermissionBridge } from '../core/permission/bridge'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
+import { runBangShell } from './bangShell'
+import { makeUserMessage } from '../core/message/factories'
 
 type Dialog =
   | {
@@ -55,6 +59,7 @@ export function App(props: AppProps): React.JSX.Element {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
+  const pendingAttachments = useRef<string[]>([])
 
   useEffect(() => {
     props.permissionBridge.setHandler((payload, resolve) => {
@@ -112,11 +117,35 @@ export function App(props: AppProps): React.JSX.Element {
       else if (res.type === 'effect') await handleSlashEffect(res.effect)
       return
     }
-    if (stream.running) {
-      session.queue.push(raw) // /btw semantics: pressing enter while running queues
+
+    // !cmd — run shell command, append output as user message, skip agent loop
+    if (raw.startsWith('!')) {
+      const cmd = raw.slice(1).trim()
+      const output = await runBangShell(cmd, props.cwd)
+      const text = `[!cmd $ ${cmd}]\n${output}`
+      session.messages.push(makeUserMessage({ text }))
       return
     }
-    await stream.send(raw)
+
+    // Resolve @mention attachments
+    const attachPaths = pendingAttachments.current.splice(0)
+    let text = raw
+    if (attachPaths.length > 0) {
+      const blocks: string[] = []
+      for (const relPath of attachPaths) {
+        const abs = path.resolve(props.cwd, relPath)
+        let content = ''
+        try { content = await readFile(abs, 'utf8') } catch { content = '(unreadable)' }
+        blocks.push(`[file: ${relPath}]\n${content}`)
+      }
+      text = blocks.join('\n\n') + '\n\n' + raw
+    }
+
+    if (stream.running) {
+      session.queue.push(text) // /btw semantics: pressing enter while running queues
+      return
+    }
+    await stream.send(text)
   }, [props, session, stream, handleSlashEffect, exit])
 
   useEffect(() => {
@@ -211,6 +240,8 @@ export function App(props: AppProps): React.JSX.Element {
         onSubmit={handleSubmit}
         disabled={!!dialog}
         placeholder=""
+        cwd={props.cwd}
+        onAttachFile={p => { pendingAttachments.current.push(p) }}
       />
       <StatusBar
         model={session.model}
