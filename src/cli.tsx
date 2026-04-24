@@ -53,10 +53,37 @@ import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/re
 import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
+import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import type { McpServerConfig } from './core/mcp/types'
 
 const argv = process.argv.slice(2)
-if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
+if (argv[0] === 'plugin' && argv[1] === 'list') {
+  ;(async () => {
+    try {
+      const plugins = await loadPlugins({ home: os.homedir() })
+      if (plugins.length === 0) {
+        process.stdout.write('No plugins installed.\n')
+        process.exit(0)
+      }
+      for (const p of plugins) {
+        const m = p.manifest
+        process.stdout.write(`${m.name}@${m.version ?? 'unversioned'}\n`)
+        if (m.description) process.stdout.write(`  description: ${m.description}\n`)
+        if (m.author)      process.stdout.write(`  author:      ${m.author}\n`)
+        if (m.homepage)    process.stdout.write(`  homepage:    ${m.homepage}\n`)
+        if (m.repository)  process.stdout.write(`  repository:  ${m.repository}\n`)
+        if (m.license)     process.stdout.write(`  license:     ${m.license}\n`)
+        if (m.keywords && m.keywords.length > 0) {
+          process.stdout.write(`  keywords:    ${m.keywords.join(', ')}\n`)
+        }
+      }
+      process.exit(0)
+    } catch (err) {
+      process.stderr.write(`plugin list failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
   const source = argv[2]
   const force = argv.includes('--force')
   ;(async () => {
@@ -87,6 +114,20 @@ if (argv[0] === 'plugin' && argv[1] === 'install' && argv[2]) {
     console.error(err)
     process.exit(1)
   })
+}
+
+/** Collect all --plugin-dir <path> values from argv (repeatable flag). */
+function parsePluginDirs(rawArgv: string[]): string[] {
+  const dirs: string[] = []
+  for (let i = 0; i < rawArgv.length; i++) {
+    if (rawArgv[i] === '--plugin-dir' && rawArgv[i + 1] !== undefined) {
+      dirs.push(path.resolve(rawArgv[i + 1]!))
+      i++ // skip the value token
+    } else if (rawArgv[i]?.startsWith('--plugin-dir=')) {
+      dirs.push(path.resolve(rawArgv[i]!.slice('--plugin-dir='.length)))
+    }
+  }
+  return dirs
 }
 
 async function runInteractive(): Promise<void> {
@@ -150,11 +191,25 @@ async function runInteractive(): Promise<void> {
   const slash = new SlashRegistry()
   ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
 
-  const plugins = await loadPlugins({ home: os.homedir(), enabled: config.plugins?.enabled })
+  const extraDirs = parsePluginDirs(process.argv.slice(2))
+  const plugins = await loadPlugins({
+    home: os.homedir(),
+    enabled: config.plugins?.enabled,
+    extraDirs,
+    checkUserConfig: true,
+  })
   const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   const hooks: import('./core/hooks/types').HookEntry[] = []
-  for (const p of plugins) {
-    const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks })
+
+  // Wire plugins that are ready (have config or don't need it)
+  const pendingPlugins = plugins.filter(p => p.needsUserConfig)
+  const readyPlugins = plugins.filter(p => !p.needsUserConfig)
+  for (const p of readyPlugins) {
+    const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
+    const result = await wirePlugin(p, {
+      tools, slash, skills, mcpServers, hooks,
+      pluginConfig: pluginConfig ?? undefined,
+    })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
@@ -255,7 +310,29 @@ async function runInteractive(): Promise<void> {
       version={MACRO_VERSION}
       mcpManager={mcpManager ?? undefined}
       tools={tools}
+      sessionPluginCount={plugins.filter(p => p.source === 'session').length}
     />,
   )
+
+  // After render, process plugins that need user config input.
+  // The App will have set the pluginConfigHandler on the bridge by this point
+  // (set in App's first useEffect). We give React one tick via setImmediate.
+  if (pendingPlugins.length > 0) {
+    void new Promise<void>(resolve => setImmediate(resolve)).then(async () => {
+      for (const p of pendingPlugins) {
+        const fields = p.manifest.userConfig?.fields ?? []
+        const config = await permBridge.promptPluginConfig({ plugin: p, fields })
+        if (config !== null) {
+          await writeUserConfig(os.homedir(), p.manifest.name, config)
+          const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks, pluginConfig: config })
+          if (result.errors.length > 0) {
+            for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
+          }
+        } else {
+          console.warn(`[plugin:${p.manifest.name}] user skipped config — plugin inactive this session`)
+        }
+      }
+    })
+  }
 }
 

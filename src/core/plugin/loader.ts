@@ -2,17 +2,31 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type LoadedPlugin } from './manifest'
+import { loadSessionPluginsFromDir } from './sessionPlugins'
+import { needsUserConfigPrompt } from './userConfig'
 
-export async function loadPlugins(opts: { home: string; enabled?: string[] }): Promise<LoadedPlugin[]> {
+export async function loadPlugins(opts: {
+  home: string
+  enabled?: string[]
+  /** Additional directories to scan for session-only plugins (from --plugin-dir) */
+  extraDirs?: string[]
+  /**
+   * When true, check each plugin for a missing .userconfig.json and mark
+   * needsUserConfig: true on those that require user input before wiring.
+   * Default: false (omit for tests and non-interactive scenarios).
+   */
+  checkUserConfig?: boolean
+}): Promise<LoadedPlugin[]> {
   const pluginsDir = join(opts.home, '.nuka', 'plugins')
 
   let entries: string[]
   try {
     entries = await readdir(pluginsDir)
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
-    console.warn(`[plugin] cannot read plugins dir: ${(err as Error).message}`)
-    return []
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`[plugin] cannot read plugins dir: ${(err as Error).message}`)
+    }
+    entries = []
   }
 
   const plugins: LoadedPlugin[] = []
@@ -65,12 +79,41 @@ export async function loadPlugins(opts: { home: string; enabled?: string[] }): P
       continue
     }
 
-    plugins.push({ manifest, rootDir: dir })
+    plugins.push({ manifest, rootDir: dir, source: 'installed' })
   }
 
   if (opts.enabled !== undefined) {
     const allowed = new Set(opts.enabled)
-    return plugins.filter(p => allowed.has(p.manifest.name))
+    plugins.splice(0, plugins.length, ...plugins.filter(p => allowed.has(p.manifest.name)))
+  }
+
+  // Load session plugins from extraDirs (bypass enabled filter)
+  if (opts.extraDirs && opts.extraDirs.length > 0) {
+    const installedNames = new Set(plugins.map(p => p.manifest.name))
+    for (const extraDir of opts.extraDirs) {
+      const sessionPlugins = await loadSessionPluginsFromDir(extraDir)
+      for (const sp of sessionPlugins) {
+        if (installedNames.has(sp.manifest.name)) {
+          console.warn(
+            `[plugin] session plugin '${sp.manifest.name}' conflicts with installed plugin of the same name; installed wins — skipping session copy`,
+          )
+          continue
+        }
+        plugins.push(sp)
+        installedNames.add(sp.manifest.name)
+      }
+    }
+  }
+
+  // Mark plugins that need user config input before wiring
+  if (opts.checkUserConfig) {
+    await Promise.all(
+      plugins.map(async (p) => {
+        if (await needsUserConfigPrompt(p, opts.home)) {
+          p.needsUserConfig = true
+        }
+      }),
+    )
   }
 
   return plugins

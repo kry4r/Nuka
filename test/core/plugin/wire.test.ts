@@ -66,6 +66,7 @@ function makePlugin(overrides: Partial<LoadedPlugin['manifest']> = {}): LoadedPl
       ...overrides,
     },
     rootDir: root,
+    source: 'installed' as const,
   }
 }
 

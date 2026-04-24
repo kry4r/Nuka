@@ -19,6 +19,12 @@ export type ToolContext = {
    * as the text of a tool_progress event.
    */
   onProgressTyped?: <P extends Record<string, unknown>>(payload: P) => void
+  /**
+   * Persisted user config for the plugin that owns this tool.
+   * Only present for plugin tools that have userConfig fields defined in
+   * their manifest.
+   */
+  pluginConfig?: Record<string, unknown>
 }
 
 export interface Tool<I = unknown> {

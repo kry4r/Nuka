@@ -9,11 +9,13 @@ import { PromptInput } from './PromptInput/PromptInput'
 import { StatusBar } from './StatusBar/StatusBar'
 import { PermissionDialog } from './dialogs/PermissionDialog'
 import { ElicitationDialog } from './dialogs/ElicitationDialog'
+import { PluginConfigDialog } from './dialogs/PluginConfigDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
 import { ConfigEditor } from './dialogs/ConfigEditor'
 import { SessionPicker } from './dialogs/SessionPicker'
 import type { ElicitationPayload, ElicitationResult } from '../core/mcp/elicitation'
 import type { SessionMeta } from '../core/session/store'
+import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
 import { pickTip } from './Welcome/tips'
 import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
@@ -43,6 +45,12 @@ type Dialog =
       payload: ElicitationPayload
       resolve: (r: ElicitationResult) => void
     }
+  | {
+      kind: 'plugin-config'
+      plugin: LoadedPlugin
+      fields: PluginUserConfigField[]
+      resolve: (result: Record<string, unknown> | null) => void
+    }
   | { kind: 'model-picker' }
   | { kind: 'config-editor' }
   | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
@@ -62,6 +70,8 @@ export type AppProps = {
   version: string
   mcpManager?: McpManager
   tools?: ToolRegistry
+  /** Number of session plugins loaded via --plugin-dir (shown in status bar) */
+  sessionPluginCount?: number
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -81,9 +91,13 @@ export function App(props: AppProps): React.JSX.Element {
     props.permissionBridge.setElicitationHandler((payload, resolve) => {
       setDialog({ kind: 'elicitation', payload, resolve })
     })
+    props.permissionBridge.setPluginConfigHandler((payload, resolve) => {
+      setDialog({ kind: 'plugin-config', plugin: payload.plugin, fields: payload.fields, resolve })
+    })
     return () => {
       props.permissionBridge.setHandler(null)
       props.permissionBridge.setElicitationHandler(null)
+      props.permissionBridge.setPluginConfigHandler(null)
     }
   }, [props.permissionBridge])
 
@@ -237,6 +251,14 @@ export function App(props: AppProps): React.JSX.Element {
           onResolve={r => { dialog.resolve(r); setDialog(null) }}
         />
       )}
+      {dialog?.kind === 'plugin-config' && (
+        <PluginConfigDialog
+          plugin={dialog.plugin}
+          fields={dialog.fields}
+          onSubmit={values => { dialog.resolve(values); setDialog(null) }}
+          onCancel={() => { dialog.resolve(null); setDialog(null) }}
+        />
+      )}
       {dialog?.kind === 'model-picker' && (
         <ModelPicker
           providers={props.providers.listProviders()}
@@ -297,6 +319,7 @@ export function App(props: AppProps): React.JSX.Element {
         autoMode="off"
         queueLength={session.queue.size()}
         mode={hintMode}
+        sessionPluginCount={props.sessionPluginCount}
       />
     </Box>
   )

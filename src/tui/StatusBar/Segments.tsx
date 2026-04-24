@@ -47,3 +47,8 @@ export function QueueSeg({ n }: { n: number }): React.JSX.Element | null {
   if (n === 0) return null
   return <Text color={P.muted}>⏳ {n} queued</Text>
 }
+
+export function SessionPluginSeg({ count }: { count: number }): React.JSX.Element | null {
+  if (count === 0) return null
+  return <Text color={P.warn}>[session: {count}]</Text>
+}

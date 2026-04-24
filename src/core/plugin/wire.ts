@@ -53,6 +53,11 @@ export async function wirePlugin(
     skills: Skill[]
     mcpServers: Record<string, McpServerConfig>
     hooks?: HookEntry[]
+    /**
+     * Persisted user config values for this plugin.
+     * Injected into ctx.pluginConfig when a tool is run.
+     */
+    pluginConfig?: Record<string, unknown>
   },
 ): Promise<{
   toolsAdded: number
@@ -84,10 +89,17 @@ export async function wirePlugin(
       errors.push(`tool '${entry}': default export is not a valid Tool`)
       continue
     }
+    const pluginConfig = deps.pluginConfig
     const namespaced: Tool = {
       ...raw,
       name: `plugin__${plugin.manifest.name}__${raw.name}`,
       source: 'plugin',
+      ...(pluginConfig !== undefined
+        ? {
+            run: async (input: unknown, ctx: import('../tools/types').ToolContext) =>
+              raw.run(input, { ...ctx, pluginConfig }),
+          }
+        : {}),
     }
     const result = deps.tools.register(namespaced)
     if (result.registered) toolsAdded++
