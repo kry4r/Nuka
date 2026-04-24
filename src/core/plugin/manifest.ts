@@ -28,6 +28,22 @@ export const PluginManifestSchema = z.object({
   /** Relative path to a hooks.json file within the plugin directory */
   hooks: z.string().optional(),
   /**
+   * Plugin dependencies — other plugins this plugin requires.
+   * Resolved at install time via DFS closure.
+   */
+  dependencies: z
+    .array(
+      z.object({
+        name: z
+          .string()
+          .min(1)
+          .regex(/^[a-z0-9][a-z0-9-]*$/, 'dependency name must be kebab-case'),
+        version: z.string().optional(),
+        required: z.boolean().optional(),
+      }),
+    )
+    .optional(),
+  /**
    * User-configurable fields that must be supplied at first launch.
    * Persisted to ~/.nuka/plugins/<name>/.userconfig.json.
    */
