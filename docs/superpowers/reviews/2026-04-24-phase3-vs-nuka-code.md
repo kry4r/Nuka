@@ -269,3 +269,47 @@ Proposed new items for the `§M` backlog in `docs/superpowers/plans/2026-04-23-n
 16. **M-listroots-handler** — Register `ListRootsRequestSchema` handler in `McpClient.connect` returning `[{ uri: \`file://${process.cwd()}\` }]`. (Low effort, spec compliance.)
 
 17. **M-tool-userfacing-name** — Add `userFacingName` display helper; in `ToolCall.tsx`, for `source === 'mcp'` strip the `mcp__<server>__` prefix and render `<server> · <tool>`. (UX.)
+
+---
+
+## Appendix — Phase 4a Gap Closure
+
+Phase 4a landed on `main` via three worktrees merged in order M2 → M1 → M3. Post-merge: `npm test` 383 passing, `npm run typecheck` green, `dist/cli.js` 148.8 KB. The 11 unintended gaps catalogued above plus 10 high-value deferrals (21 items total per `docs/superpowers/plans/2026-04-24-full-divergence-schedule.md`) closed as follows.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 4a.M1.1 | MCP result size limits + truncation | `c79e84c` |
+| 4a.M1.2 | MCP connect timeout | `233c773` |
+| 4a.M1.3 | MCP per-request timeout | `233c773` |
+| 4a.M1.4 | Tool description truncation (2048 chars) | `ceb34cc` |
+| 4a.M1.5 | Server instruction truncation (2048 chars) | `ceb34cc` |
+| 4a.M1.6 | `resource_link` auto-fetch | `c154ac8` |
+| 4a.M1.7 | `ListRoots` handler | `43df1ea` |
+| 4a.M1.8 | `roots` capability declaration | `43df1ea` |
+| 4a.M1.9 | SSE transport (`type: 'sse'`) | `88f1895` |
+| 4a.M1.10 | Auto-reconnect on `onclose` | `83912a4` |
+| 4a.M1.11 | Reconnect on session expiry (HTTP 404 / -32001) | `83912a4` |
+| 4a.M1.12 | Elicitation (form + URL modes) | `9d2a2ee` |
+| 4a.M2.1 | Tool input JSON-Schema validation | `8384f07` |
+| 4a.M2.2 | Tool result type widening (`string \| ContentBlock[]`) | `deba311` |
+| 4a.M2.3 | Image blob persistence to disk | `1e2962a` |
+| 4a.M2.4 | MCP tool annotations → `Tool.annotations` | `5afde31` |
+| 4a.M2.5 | `userFacingName` display formatter | `889cf54` |
+| 4a.M2.6 | `maxResultSizeChars` per-tool budget | `7245b34` |
+| 4a.M3.1 | Plugin enable/disable flag | `2365a40` |
+| 4a.M3.2 | Plugin hooks (`beforeToolCall`/`afterToolCall`/`afterTurn`/`beforeAutoCompact`) | `9a3038f` |
+| 4a.M3.3 | YAML manifest documentation + startup warning | `568ed44` |
+
+Merge commits on `main`: `e79ffbc` (M2), `b06cd6b` (M1), `e39832d` (M3).
+
+### Gap-closure divergences from the design spec
+
+1. **M1.5 `resource_link` output remains a plain string, not a `ContentBlock`.** The auto-fetch site in `McpClient.callTool` splices `readResource(uri).output` into the `lines[]` array and returns a string — it does not emit a `{ type: 'resource', ... }` block in the non-rich branch. Rationale: M1 and M2 ran in parallel worktrees; M1 avoided betting on M2's `ContentBlock` shape. The rich-blocks branch (triggered by image presence) does emit `{ type: 'resource', uri }`. A follow-up can unify the two paths once the shape is stable.
+2. **M1.8 elicitation dialog is a new sibling dialog kind** (`'elicitation'` in `src/tui/App.tsx`), not a polymorphic reuse of `PermissionDialog`. The permission flow is tightly coupled to `PermissionCall` / consent cache; collapsing would force cross-cutting changes for no user-visible benefit. Dialog form-mode input supports free-form string fields only; array / enum / oneOf subtypes are submitted as strings. Phase 5 can add widget specialization.
+3. **M1.10 reconnect has a sticky latch** — once `maxAttempts` is exhausted, the client stays in error state for the lifetime of the process. There is no retry window. Sessions must be restarted to recover.
+4. **M2.3 image persistence** uses a `${Date.now()}_${crypto.randomBytes(4).toString('hex')}` ID instead of a ULID to avoid adding a new dep. The image branch in `callTool` writes via `fs.writeFileSync` (sync) inside an `async` method — acceptable for small blobs, but a truly large image would block the event loop briefly.
+5. **M2.6 per-tool truncation** only applies when `result.output` is a string; `ContentBlock[]` outputs pass through unmodified. Sizing a structured result is deferred.
+6. **M3.2 hooks:** all four events (`beforeToolCall`, `afterToolCall`, `afterTurn`, `beforeAutoCompact`) are wired. `beforeAutoCompact` was implementable because `src/core/compact/auto.ts` already exists with a clean seam in `loop.ts`. Hooks run via `execa` with `sh -c` and `reject:false` so stdout is captured even on non-zero exit; JSON parse of stdout extracts `cancel` / `reason` fields. Only `beforeToolCall` and `beforeAutoCompact` honor the `cancel=true` veto; the other two swallow failures.
+7. **M3.3 YAML warning** emits to `console.warn` on `loadPlugins` once per plugin per process; YAML manifest support is retained (not removed) for now.
+
+Phase 4b begins from `main` at the M3 merge commit.
