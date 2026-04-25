@@ -518,3 +518,41 @@ Merge commits: `36f29ef` (M1), `5600e91` (M3), `0e709d9` (M2). Merge order M1→
 - Theme animations / shimmer.
 - Polymorphic task system (long-running bash, MCP monitors, dream).
 - Ultraplan (remote CCR) — won't ship.
+
+---
+
+## Appendix — Phase 9 Gap Closure
+
+Phase 9 (self-driving TUI auto-test harness) landed via two sequential workstreams. Post-merge: `npm test` **1159 passing** (1095 baseline + 64 new), `npm run typecheck` clean, `dist/cli.js` **361.4 KB**.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 9.1 | Plan format + `parsePlan` validator | `7cd9b03` |
+| 9.2.a | `MockProvider` + keystroke constants | `feda741` |
+| 9.2.b | `mountApp` ink harness + `ProviderResolver` injection | `7f16441` |
+| 9.3 | `runPlan` orchestrator + assertion matchers + snapshot diff | `0ac431c` |
+| 9.4 | `expectPlanToPass` vitest binding | `25ddb94` |
+| 9.5 | `nuka --test-plan` subcommand (pretty/tap/json reporters) | `5ba99e6` (rewritten `083ad10`) |
+| 9.6 | Five sample plans + integration test | `f7e06f3` (rewritten `1fc964a`) |
+| 9.7 | Auto-test mode docs in `README.md` + `README.zh-CN.md` | `200f1e4` (rewritten `fe9f8f3`) |
+
+Merge commits: `6ad8c6b → 69f3bf5` (M1), `9064f79 → 8f662e2` (M2). All commits authored as `Nidhog <Nidhogxt@outlook.com>` after history rewrite.
+
+### Divergences
+- **9.2.a `MockProvider`**: implements `stream(req, signal)` to match the real `LLMProvider` interface (the spec said `streamMessage`). `usage` event folded into `message_stop` (the real `ProviderEvent` union has no separate `usage` event); plan YAML still accepts `usage` per response and the parser translates snake_case ↔ camelCase.
+- **9.2.b `mountApp`**: keeps a private mini-matcher for `waitFor()` so it could ship before 9.3 landed; the runner uses the canonical `assertions.ts` matcher. A code comment marks the future swap.
+- **9.6 sample plan downgrades** (documented inline as YAML comments — these are the high-leverage findings for Phase 10):
+  - `02-onboarding`: dropped wizard keystroke navigation. ink-testing-library swallows Enter without `setRawMode`; only the welcome banner is asserted.
+  - `03-theme-switch`: `/config` slash never fires under the harness (mounted with empty `SlashRegistry` to avoid full app-wiring); the plan asserts that the typed prefix `/con` appears in the input buffer instead of asserting on slash effects.
+  - `04-stats-view`: no live token stats since `runAgent` is a no-op in the harness; asserts NUKA header + version regex.
+  - `05-plan-mode-lockout`: `/plan on` slash never fires (same harness limitation); asserts the typed text appears in the buffer.
+
+### Bundle ceiling
+Spec target was ≤ 360 KB; actual **361.4 KB** — 0.4 % over. The overage is testing-infrastructure code (`MockProvider`, `runner`, `harness`) that ships in `dist/cli.js` because `--test-plan` is a top-level subcommand. A Phase-10 follow-up could split the testing module into a separately-bundled entry to keep the production CLI under 320 KB.
+
+### Out-of-scope follow-ups (queued for Phase 10)
+- Full slash-command routing under the harness so plans can drive `/plan on`, `/theme default-light`, `/stats`, etc., end-to-end (currently only the input buffer is asserted for these).
+- Wizard keystroke navigation under ink-testing-library (workaround: synthesize `setRawMode` → emit raw input events directly to the wizard's `useInput`).
+- Bundle split: production CLI vs. testing helpers, to bring the production bundle back under 320 KB.
+- Plan recording mode (capture user keystrokes in a live session and emit a YAML plan).
+- Per-step retry / `flaky: true` annotations.

@@ -6,8 +6,8 @@
 
 **插件优先、Agent 蜂群的 CLI 编程助手。**
 
-[![tests](https://img.shields.io/badge/tests-849%20passing-brightgreen)]()
-[![bundle](https://img.shields.io/badge/bundle-237%20KB-blue)]()
+[![tests](https://img.shields.io/badge/tests-1159%20passing-brightgreen)]()
+[![bundle](https://img.shields.io/badge/bundle-361%20KB-blue)]()
 [![status](https://img.shields.io/badge/status-active-success)]()
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
@@ -209,8 +209,11 @@ nuka config show [--scope user]
 | **4b** | 14 | 并行批处理 · 注解化授权 · 调度 · 别名 · userConfig · stderr 缓冲 · LRU |
 | **5** | 16 | 市场 + git/npm/bundle · 依赖闭包 · `/plugin` TUI · **Agent 蜂群** · outputStyles · channels · 4 层配置 |
 | **6** | 1 | LSP 集成 |
+| **7** | 13 | 引导向导 · 成本追踪 · 自动记忆 · Vim 模式 · 状态 HUD |
+| **8** | 11 | 主题切换 · `/stats` · `/rewind` · 计划模式 · IDE 桥接 |
+| **9** | 8 | 自驱 TUI 测试框架 · YAML 计划 · `nuka --test-plan` · 5 个示例 |
 
-849 个测试 · 237 KB 包体 · 0 新增 vendored 依赖。
+1159 个测试 · 361 KB 包体 · 0 新增 vendored 依赖。
 
 ---
 
