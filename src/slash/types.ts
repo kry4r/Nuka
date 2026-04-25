@@ -7,6 +7,7 @@ export type DialogDescriptor =
   | { kind: 'model-picker' }
   | { kind: 'config-editor' }
   | { kind: 'session-picker' }
+  | { kind: 'stats' }
 
 export type SessionEffect =
   | { kind: 'new-session' }
