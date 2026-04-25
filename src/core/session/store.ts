@@ -47,6 +47,18 @@ export class SessionStore {
     await fs.appendFile(this.msgPath(sessionId), JSON.stringify(msg) + '\n', 'utf8')
   }
 
+  /**
+   * Overwrite the entire persisted messages file with `msgs`. Used by
+   * `truncateAfter` to re-seat the transcript after a /rewind.
+   */
+  async rewriteMessages(sessionId: string, msgs: Message[]): Promise<void> {
+    await this.ensureDir()
+    const body = msgs.map(m => JSON.stringify(m)).join('\n') + (msgs.length > 0 ? '\n' : '')
+    const tmp = this.msgPath(sessionId) + '.tmp'
+    await fs.writeFile(tmp, body, 'utf8')
+    await fs.rename(tmp, this.msgPath(sessionId))
+  }
+
   async writeMeta(session: Session): Promise<void> {
     await this.ensureDir()
     const meta: SessionMeta = {

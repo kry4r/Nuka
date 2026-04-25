@@ -16,6 +16,13 @@ function deriveBadges(call: PermissionCall): AnnotationBadge[] | undefined {
   return badges.length > 0 ? badges : undefined
 }
 
+/** Tool names whose writes are always blocked in plan mode. */
+const PLAN_BLOCKED_TOOLS = new Set(['Write', 'Edit', 'Bash'])
+
+/** Phase 8 §4.4 error surfaced to the agent via tool_result isError=true. */
+export const PLAN_BLOCKED_REASON =
+  'blocked: plan mode is active. Use /plan apply to execute.'
+
 export class PermissionChecker {
   constructor(
     private getCache: () => PermissionCache,
@@ -23,6 +30,20 @@ export class PermissionChecker {
   ) {}
 
   async check(call: PermissionCall): Promise<PermissionDecision> {
+    // Plan-mode gate runs BEFORE cache/hint shortcuts so that a previously
+    // remembered "allow write" rule cannot bypass the plan. Read-only tools
+    // are unaffected regardless of mode.
+    if (call.mode === 'plan') {
+      const ann = call.annotations
+      const blocked =
+        PLAN_BLOCKED_TOOLS.has(call.toolName) ||
+        ann?.destructive === true ||
+        ann?.openWorld === true
+      if (blocked) {
+        return { allowed: false, reason: PLAN_BLOCKED_REASON }
+      }
+    }
+
     if (call.hint === 'none') return { allowed: true }
     if (this.getCache().isAllowed(call)) return { allowed: true }
     const payload: PermissionPayload = {

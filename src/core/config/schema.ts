@@ -105,6 +105,17 @@ export const VimConfigSchema = z
   })
   .optional()
 
+export const RewindConfigSchema = z
+  .object({
+    /**
+     * Phase 8 §4.3 — when true, the agent loop snapshots SHA1+bytes of any
+     * file touched by Write/Edit per turn so `/rewind` can later restore.
+     * OFF by default: restore is a no-op until git-backed path lands.
+     */
+    fileCheckpointing: z.boolean().default(false),
+  })
+  .optional()
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -115,6 +126,7 @@ export const ConfigSchema = z.object({
   mcp: McpConfigSchema,
   plugins: PluginsConfigSchema,
   vim: VimConfigSchema,
+  rewind: RewindConfigSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.
