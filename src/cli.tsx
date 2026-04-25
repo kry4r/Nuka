@@ -74,7 +74,125 @@ import { synthMemoryEntry } from './core/memdir/synth'
 import type { MemoryEntry } from './core/memdir/parser'
 
 const argv = process.argv.slice(2)
-if (argv[0] === 'init') {
+
+// ---------------------------------------------------------------------------
+// --test-plan <path>  [--update-snapshots]  [--reporter=tap|json|pretty]
+// ---------------------------------------------------------------------------
+const testPlanIdx = argv.findIndex(a => a === '--test-plan' || a.startsWith('--test-plan='))
+if (testPlanIdx !== -1) {
+  ;(async () => {
+    try {
+      // Resolve path argument.
+      let planPath: string
+      const flag = argv[testPlanIdx]!
+      if (flag.startsWith('--test-plan=')) {
+        planPath = flag.slice('--test-plan='.length)
+      } else {
+        planPath = argv[testPlanIdx + 1] ?? ''
+      }
+      if (!planPath) {
+        process.stderr.write('--test-plan requires a file path\n')
+        process.exit(2)
+      }
+      planPath = path.resolve(planPath)
+
+      const updateSnapshots = argv.includes('--update-snapshots')
+
+      // --reporter=<tap|json|pretty>  (default: pretty)
+      type Reporter = 'tap' | 'json' | 'pretty'
+      const reporterArg = argv.find(a => a.startsWith('--reporter='))
+      let reporter: Reporter = 'pretty'
+      if (reporterArg) {
+        const val = reporterArg.slice('--reporter='.length)
+        if (val === 'tap' || val === 'json' || val === 'pretty') reporter = val
+        else {
+          process.stderr.write(`unknown reporter ${JSON.stringify(val)}; expected tap, json, or pretty\n`)
+          process.exit(2)
+        }
+      }
+
+      // Read & parse plan.
+      const { readFile } = await import('node:fs/promises')
+      const { parsePlan, PlanError } = await import('./core/testing/plan')
+      const { runPlan } = await import('./core/testing/runner')
+
+      let yamlText: string
+      try {
+        yamlText = await readFile(planPath, 'utf8')
+      } catch (err) {
+        process.stderr.write(`cannot read plan file: ${(err as Error).message}\n`)
+        process.exit(2)
+      }
+
+      let plan: import('./core/testing/plan').Plan
+      try {
+        plan = parsePlan(yamlText)
+      } catch (err) {
+        if (err instanceof PlanError) {
+          const loc = err.line ? ` (line ${err.line}${err.column ? `:${err.column}` : ''})` : ''
+          process.stderr.write(`plan parse error${loc}: ${err.message}\n`)
+        } else {
+          process.stderr.write(`plan parse error: ${(err as Error).message}\n`)
+        }
+        process.exit(2)
+      }
+
+      const result = await runPlan(plan, { cwd: path.dirname(planPath), updateSnapshots })
+
+      if (reporter === 'json') {
+        process.stdout.write(JSON.stringify(result) + '\n')
+        process.exit(result.ok ? 0 : 1)
+        return
+      }
+
+      if (reporter === 'tap') {
+        const n = result.steps.length
+        process.stdout.write(`TAP version 13\n1..${n}\n`)
+        for (const s of result.steps) {
+          const num = s.index + 1
+          if (s.ok) {
+            process.stdout.write(`ok ${num} - step ${s.index} (${s.kind})\n`)
+          } else {
+            process.stdout.write(`not ok ${num} - step ${s.index} (${s.kind})\n`)
+            if (s.message) {
+              for (const line of s.message.split('\n')) {
+                process.stdout.write(`  # ${line}\n`)
+              }
+            }
+          }
+        }
+        process.exit(result.ok ? 0 : 1)
+        return
+      }
+
+      // pretty reporter (default)
+      const GREEN = '\x1b[32m'
+      const RED   = '\x1b[31m'
+      const RESET = '\x1b[0m'
+      let passed = 0
+      let failed = 0
+      for (const s of result.steps) {
+        if (s.ok) {
+          process.stdout.write(`  ${GREEN}\u2713${RESET} step ${s.index} (${s.kind})\n`)
+          passed++
+        } else {
+          process.stdout.write(`  ${RED}\u2717${RESET} step ${s.index} (${s.kind})\n`)
+          if (s.message) {
+            for (const line of s.message.split('\n')) {
+              process.stdout.write(`    ${line}\n`)
+            }
+          }
+          failed++
+        }
+      }
+      process.stdout.write(`\n${passed} passed, ${failed} failed\n`)
+      process.exit(result.ok ? 0 : 1)
+    } catch (err) {
+      process.stderr.write(`test-plan failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'init') {
   ;(async () => {
     try {
       const home = os.homedir()
