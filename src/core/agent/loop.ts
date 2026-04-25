@@ -1,4 +1,5 @@
 // src/core/agent/loop.ts
+import { readFile } from 'node:fs/promises'
 import type { Session } from '../session/types'
 import type { AgentEvent } from './events'
 import type { ProviderEvent } from '../provider/types'
@@ -23,6 +24,7 @@ import { parallelBatch } from '../tools/concurrency'
 import type { ToolResult } from '../tools/types'
 import { getChannels } from '../notifications/channelRegistry'
 import { dispatchToChannels } from '../notifications/channels'
+import type { LspManager } from '../lsp/manager'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -33,6 +35,44 @@ export type RunAgentDeps = {
   persist?: (session: Session, msg: Message) => void
   autoCompact?: AutoCompactOpts
   hooks?: HookEntry[]
+  /** Optional LSP manager for didChange notifications after Write/Edit. */
+  lsp?: LspManager
+}
+
+/** Tools that modify files and should trigger LSP didChange notifications. */
+const FILE_WRITE_TOOLS = new Set(['Write', 'Edit'])
+
+/**
+ * After a successful Write or Edit tool run, notify any open LSP trackers
+ * about the changed file content. Non-blocking — failures are swallowed.
+ */
+function maybeNotifyLspChange(
+  toolName: string,
+  input: unknown,
+  isError: boolean,
+  lsp: LspManager | undefined,
+): void {
+  if (!lsp) return
+  if (isError) return
+  if (!FILE_WRITE_TOOLS.has(toolName)) return
+
+  const inp = input as Record<string, unknown>
+  const filePath = typeof inp['path'] === 'string' ? inp['path'] : undefined
+  if (!filePath) return
+
+  // For Write, the new content is available in the input directly.
+  // For Edit (and others), read the updated file from disk.
+  const inlineContent = typeof inp['content'] === 'string' ? inp['content'] : undefined
+  if (inlineContent !== undefined) {
+    lsp.notifyFileChanged(filePath, inlineContent)
+    return
+  }
+
+  // Read the file and notify — fire-and-forget
+  void readFile(filePath, 'utf8').then(
+    newText => lsp.notifyFileChanged(filePath, newText),
+    () => { /* file might not exist or not be readable — ignore */ },
+  )
 }
 
 /**
@@ -330,6 +370,11 @@ export async function* runAgent(
         if (slot.kind === 'approved' && deps.hooks && deps.hooks.length > 0) {
           await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: outcome.result.isError }, { tool: call.name })
         }
+
+        // LSP didChange notification after Write/Edit (non-blocking)
+        if (slot.kind === 'approved') {
+          maybeNotifyLspChange(call.name, call.input, outcome.result.isError, deps.lsp)
+        }
       }
     } else {
       // ── Serial path (original) ─────────────────────────────────────────────
@@ -417,6 +462,11 @@ export async function* runAgent(
         // afterToolCall hook — non-cancelable, swallow failures
         if (deps.hooks && deps.hooks.length > 0) {
           await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: result.isError }, { tool: call.name })
+        }
+
+        // LSP didChange notification after Write/Edit (non-blocking)
+        if (!hookVetoed && decision.allowed) {
+          maybeNotifyLspChange(call.name, call.input, result.isError, deps.lsp)
         }
       }
     }

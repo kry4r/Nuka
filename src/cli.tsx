@@ -60,6 +60,8 @@ import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { validatePlugin, formatReport } from './core/plugin/validate'
 import type { McpServerConfig } from './core/mcp/types'
+import { LspManager } from './core/lsp/manager'
+import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
 
 const argv = process.argv.slice(2)
 if (argv[0] === 'plugin' && argv[1] === 'list') {
@@ -275,19 +277,28 @@ async function runInteractive(): Promise<void> {
   const hooks: import('./core/hooks/types').HookEntry[] = []
   const agents = new AgentRegistry()
 
+  const lspManager = new LspManager()
+
   // Wire plugins that are ready (have config or don't need it)
   const pendingPlugins = plugins.filter(p => p.needsUserConfig)
   const readyPlugins = plugins.filter(p => !p.needsUserConfig)
   for (const p of readyPlugins) {
     const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
     const result = await wirePlugin(p, {
-      tools, slash, skills, mcpServers, hooks, agents,
+      tools, slash, skills, mcpServers, hooks, agents, lsp: lspManager,
       pluginConfig: pluginConfig ?? undefined,
     })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
-    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded}`)
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded} lsp=${result.lspAdded}`)
+  }
+
+  // Register LSP tools when at least one server is configured
+  if (lspManager.list().length > 0) {
+    tools.register(makeLspDiagnosticsTool(lspManager) as any)
+    tools.register(makeLspDefinitionTool(lspManager) as any)
+    tools.register(makeLspReferencesTool(lspManager) as any)
   }
 
   // Register skill tool after all skill-loading (including plugin skills) finishes
@@ -341,8 +352,9 @@ async function runInteractive(): Promise<void> {
   const gitBranch = currentGitBranch(cwd)
 
   process.on('SIGINT', () => {
-    const cleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
-    cleanup.finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    const mcpCleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
+    const lspCleanup = lspManager.closeAll().catch(() => {})
+    Promise.all([mcpCleanup, lspCleanup]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
   // Build auto-compact opts. Use compact.model with the active session's provider when set;
@@ -371,6 +383,7 @@ async function runInteractive(): Promise<void> {
       persist: sessions.persist,
       autoCompact,
       hooks,
+      lsp: lspManager,
     }, signal)
 
   render(
