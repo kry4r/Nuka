@@ -15,6 +15,7 @@ import type { AgentRegistry } from '../agents/registry'
 import { resolveAgentDef } from '../agents/loader'
 import { registerOutputStyle } from './outputStyles'
 import { registerChannel } from '../notifications/channelRegistry'
+import type { LspManager } from '../lsp/manager'
 
 function isToolLike(v: unknown): v is Tool {
   if (!v || typeof v !== 'object') return false
@@ -63,6 +64,8 @@ export async function wirePlugin(
      * Injected into ctx.pluginConfig when a tool is run.
      */
     pluginConfig?: Record<string, unknown>
+    /** LspManager instance for registering plugin-declared LSP servers. */
+    lsp?: LspManager
   },
 ): Promise<{
   toolsAdded: number
@@ -71,6 +74,7 @@ export async function wirePlugin(
   mcpAdded: number
   hooksAdded: number
   agentsAdded: number
+  lspAdded: number
   errors: string[]
 }> {
   let toolsAdded = 0
@@ -79,6 +83,7 @@ export async function wirePlugin(
   let mcpAdded = 0
   let hooksAdded = 0
   let agentsAdded = 0
+  let lspAdded = 0
   const errors: string[] = []
 
   // Tools
@@ -200,5 +205,22 @@ export async function wirePlugin(
     registerChannel(channelDef)
   }
 
-  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, agentsAdded, errors }
+  // LSP servers — register each declared server with LspManager
+  if (plugin.manifest.lspServers !== undefined && deps.lsp !== undefined) {
+    for (const serverDef of plugin.manifest.lspServers) {
+      // Namespace the server name as <plugin>:<server-name>
+      const namespacedDef = {
+        ...serverDef,
+        name: `${plugin.manifest.name}:${serverDef.name}`,
+      }
+      const result = deps.lsp.register(namespacedDef)
+      if (result.ok) {
+        lspAdded++
+      } else {
+        errors.push(`lsp server '${serverDef.name}': ${result.reason}`)
+      }
+    }
+  }
+
+  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, agentsAdded, lspAdded, errors }
 }
