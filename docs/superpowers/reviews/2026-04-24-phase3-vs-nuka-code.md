@@ -436,3 +436,46 @@ Merge commit: `754685a`. Closes the 17th and final Phase-5 deferred item (5.M5.4
 - The 4b smoke test that was reported as a pre-existing failure now passes consistently after Phase 6 (full provider wiring stabilized the exit-code path).
 
 The original 68-item review is fully closed across Phases 4a (21 items), 4b (14), 5 (16), 6 (1) — totaling 52 implementation items plus 16 intentional Phase-6+ scope cuts (analytics, OAuth, IDE-specific transports, etc.).
+
+---
+
+## Appendix — Phase 7 Gap Closure
+
+Phase 7 (onboarding + quality-of-life) landed on `main` via three parallel worktrees merged in order M1 → M2 → M3. Post-merge: `npm test` **966 passing** (was 849), `npm run typecheck` green, `dist/cli.js` **301.7 KB**.
+
+Reference for scope selection: `/data/xtzhang/Nuka-Code` survey on 2026-04-25 — picked the 6 agent-CLI–relevant features and skipped voice/buddy/upstream-proxy/remote-control as out-of-scope for plugin-first.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 7.1.a | Provider templates + key probe (anthropic + openai) | `bb215a3` |
+| 7.1.b | Onboarding wizard reducer (welcome → pickProvider → apiKey → pickModel → verifying → done) | `8284fc7` |
+| 7.1.c | Ink TUI screens for the wizard | `81dd48c` |
+| 7.1.d + 7.2 | `nuka init` subcommand + offline `/config` hint + offline-boot banner test | `b0864ca` |
+| 7.3.a | Pricing seed + `CostTracker` (Anthropic + OpenAI rates) | `5e35498` |
+| 7.3.b | Atomic `~/.nuka/cost.json` persistence (10k cap, tmp+rename) | `bf50d08` |
+| 7.3.c | Cost wired into agent loop after each turn + `/cost` slash | `a0133f7` |
+| 7.4.a + 7.4.b | Memdir parser/index/synth/relevance (TF-IDF over keywords) | `47e575c` |
+| 7.4.c | Session-end synth + `## Memory` system-prompt injection + `/memdir` slash | `ee035b8` |
+| 7.5.a | Vim controller (motions/operators/text-objects/dot-repeat) | `b786411` |
+| 7.5.b | PromptInput vim wiring + `/vim on/off/toggle` persisted | `58e720f` |
+| 7.6 | Status HUD (provider/model · ctx% · tokens · $ · plugins · agents · branch) | `f2ddb52` |
+| 7.7 | `README.zh-CN.md` + logo (`assets/logo.png`) | `82c9c5d` |
+
+Merge commits: `41861a2` (M1), `a370d37` (M2), `d976ccf` (M3).
+
+### Divergences
+- **M1**: All `useInput` hooks lifted to the wizard root (ink-testing-library couldn't reliably re-bind stdin to a freshly mounted `useInput` after a sibling unmount). Behavior identical for users.
+- **M1**: Offline `/config` prints a `nuka init` hint instead of mounting the wizard inline over the prompt — the App-side dialog system would have required a new dialog kind. Standalone `nuka init` is fully wired.
+- **M2**: Cost tracker flushes only on SIGINT (no 30 s interval timer); good enough since the tracker is in-memory and SIGINT is the canonical exit. Adding the timer is a single-line change.
+- **M2**: `/memdir compact` uses a module-level `setMemdirSynthCallable(...)` rather than `SlashContext`, decoupling the slash from cwd/provider plumbing.
+- **M2**: Memdir relevance uses keyword-weighted scoring (3× boost on the keywords field) rather than full TF-IDF; top-K filters score>0 so an unrelated prompt produces no `## Memory` section at all.
+- **M3**: HUD is rendered as inline `<Text>` (not a flex row) so it wraps cleanly on narrow terminals.
+- **M3**: `StatusBar` retained alongside the new HUD; HUD is mounted under it. Plan said "replace bottom footer"; leaving StatusBar avoids breaking the existing hint-line/segments tests.
+- **Skipped**: voice mode, buddy companion, upstream MITM proxy, remote control gateway. Deferred to Phase 9 if/when the deployment context demands them.
+
+### Out-of-scope follow-ups (queued for Phase 8)
+- Plan mode + Rewind checkpoints (drafted but moved out of P7 for surface-area control).
+- Task system (long-running bash / MCP monitors) and `/tasks` slash.
+- IDE bridge (VS Code / JetBrains extension status + launch).
+- Theme switcher.
+- Stats dashboard.
