@@ -26,6 +26,8 @@ import { getChannels } from '../notifications/channelRegistry'
 import { dispatchToChannels } from '../notifications/channels'
 import type { LspManager } from '../lsp/manager'
 import type { CostTracker } from '../cost/tracker'
+import type { CheckpointLog } from '../rewind/checkpoint'
+import { captureFileSnapshot, filePathsFromToolInput } from '../rewind/checkpoint'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -43,6 +45,52 @@ export type RunAgentDeps = {
    * recorded against `(model, sessionId)` after the message is appended.
    */
   costTracker?: CostTracker
+  /**
+   * Phase 8 §4.3 — when provided AND `rewind.fileCheckpointing` is enabled
+   * in config, file snapshots are captured after each successful
+   * Write/Edit tool run. Absent → feature is a no-op (default OFF).
+   */
+  checkpoint?: {
+    log: CheckpointLog
+    enabled: boolean
+    /**
+     * Turn id used to group snapshots. Defaults to the last user message
+     * id when not supplied.
+     */
+    turnId?: () => string
+  }
+}
+
+/**
+ * Best-effort snapshot capture for one tool call. Non-blocking from the
+ * caller's POV: failures are swallowed so the agent loop is never
+ * affected by filesystem hiccups.
+ */
+function maybeCaptureCheckpoint(
+  toolName: string,
+  input: unknown,
+  isError: boolean,
+  session: Session,
+  cp: RunAgentDeps['checkpoint'],
+): void {
+  if (!cp || !cp.enabled) return
+  if (isError) return
+  const paths = filePathsFromToolInput(toolName, input)
+  if (paths.length === 0) return
+  const turnId = cp.turnId ? cp.turnId() : lastUserMsgId(session) ?? 'turn'
+  for (const p of paths) {
+    void captureFileSnapshot(p).then(snap => cp.log.record(turnId, snap), () => {
+      /* swallow */
+    })
+  }
+}
+
+function lastUserMsgId(session: Session): string | undefined {
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const m = session.messages[i]
+    if (m && m.role === 'user') return m.id
+  }
+  return undefined
 }
 
 /** Tools that modify files and should trigger LSP didChange notifications. */
@@ -393,6 +441,7 @@ export async function* runAgent(
         // LSP didChange notification after Write/Edit (non-blocking)
         if (slot.kind === 'approved') {
           maybeNotifyLspChange(call.name, call.input, outcome.result.isError, deps.lsp)
+          maybeCaptureCheckpoint(call.name, call.input, outcome.result.isError, session, deps.checkpoint)
         }
       }
     } else {
@@ -486,6 +535,7 @@ export async function* runAgent(
         // LSP didChange notification after Write/Edit (non-blocking)
         if (!hookVetoed && decision.allowed) {
           maybeNotifyLspChange(call.name, call.input, result.isError, deps.lsp)
+          maybeCaptureCheckpoint(call.name, call.input, result.isError, session, deps.checkpoint)
         }
       }
     }
