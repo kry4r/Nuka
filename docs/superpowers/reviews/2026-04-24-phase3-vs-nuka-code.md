@@ -411,3 +411,28 @@ Merge commits on `main`: `d6828ad` (M4-install), `099e4a5` (M5-agents), `01ff232
 The design spec called for a fixture marketplace + one dummy plugin with `agents[]` exercising `/plugin install` and `dispatch_agent`. The demo was not included as a test fixture in this round (would have required network or elaborate fixtures) — recorded here as a Phase 5 deliverable completed via integration tests rather than an end-to-end script. A standalone smoke-demo script can land in Phase 6 backlog as a quality-of-life addition.
 
 Phase 6 begins from `main` at the M4-ops merge commit (`728f06b`) plus the Gap Closure doc update.
+
+---
+
+## Appendix — Phase 6 Gap Closure
+
+Phase 6 landed on `main` via a single sequential worktree merged at `754685a` (base `8106606`). Post-merge: `npm test` **849 passing**, `npm run typecheck` green, `dist/cli.js` **237.2 KB**.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 6.1 | LSP types + JSON-RPC framing (`MessageStream`) | `254987b` |
+| 6.2 | `LspClient` lifecycle + diagnostics buffer | `362d051` |
+| 6.3 | `DocumentTracker` (didOpen/didChange/didClose, version counter) | `0163ba8` |
+| 6.4 | `LspManager` (documentSelector routing, lazy spawn, collision policy) | `c15f48f` |
+| 6.5 | Manifest `lspServers[]` + wire integration | `4f3b96d` |
+| 6.6 | `lsp_diagnostics` / `lsp_definition` / `lsp_references` tools + Write/Edit didChange hook | `571446f` |
+
+Merge commit: `754685a`. Closes the 17th and final Phase-5 deferred item (5.M5.4).
+
+### Notes
+- LSP transport is stdio only; TCP/websocket out of scope.
+- LSP coverage is intentionally minimal (diagnostics + definition + references). Completions/hover/code actions deferred indefinitely — agent-driven CLI doesn't benefit much from them.
+- Mock-LSP test strategy: `_spawnFn` injection point on `LspClient`, `makeMockSpawn()` factory in manager tests. No real `typescript-language-server` dependency in CI.
+- The 4b smoke test that was reported as a pre-existing failure now passes consistently after Phase 6 (full provider wiring stabilized the exit-code path).
+
+The original 68-item review is fully closed across Phases 4a (21 items), 4b (14), 5 (16), 6 (1) — totaling 52 implementation items plus 16 intentional Phase-6+ scope cuts (analytics, OAuth, IDE-specific transports, etc.).
