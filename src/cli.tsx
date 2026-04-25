@@ -62,9 +62,39 @@ import { validatePlugin, formatReport } from './core/plugin/validate'
 import type { McpServerConfig } from './core/mcp/types'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
+import { Wizard } from './tui/Onboarding/Wizard'
+import { saveWizardPatch } from './core/onboarding/save'
 
 const argv = process.argv.slice(2)
-if (argv[0] === 'plugin' && argv[1] === 'list') {
+if (argv[0] === 'init') {
+  ;(async () => {
+    try {
+      const home = os.homedir()
+      const { waitUntilExit } = render(
+        <Wizard
+          onDone={async (patch) => {
+            try {
+              await saveWizardPatch(home, patch)
+              process.stdout.write(`\nSaved provider '${patch.providerId}' to ${globalConfigPath()}\n`)
+              process.exit(0)
+            } catch (err) {
+              process.stderr.write(`\nFailed to save provider: ${(err as Error).message}\n`)
+              process.exit(1)
+            }
+          }}
+          onCancel={() => {
+            process.stderr.write('\nOnboarding cancelled.\n')
+            process.exit(2)
+          }}
+        />,
+      )
+      await waitUntilExit()
+    } catch (err) {
+      process.stderr.write(`init failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'plugin' && argv[1] === 'list') {
   ;(async () => {
     try {
       const plugins = await loadPlugins({ home: os.homedir() })
