@@ -71,6 +71,34 @@ export class SessionManager {
     this.metaWriter?.schedule(session)
   }
 
+  /**
+   * Phase 8 §4.3 — Truncate the active (or specified) session's transcript
+   * at `messageId` inclusive. The selected message and everything after it
+   * are dropped. If the session is backed by a store, the messages file is
+   * rewritten atomically and a meta write is scheduled.
+   *
+   * Returns the number of messages removed. Throws when `messageId` is not
+   * in the session (callers can catch and surface a user-friendly error).
+   */
+  async truncateAfter(messageId: string, sessionId?: string): Promise<number> {
+    const target = sessionId
+      ? this.sessions.find(s => s.id === sessionId)
+      : this.active()
+    if (!target) throw new Error('no active session to truncate')
+    const idx = target.messages.findIndex(m =>
+      (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.id === messageId,
+    )
+    if (idx < 0) throw new Error(`message not in session: ${messageId}`)
+    const removed = target.messages.length - idx
+    target.messages = target.messages.slice(0, idx)
+    target.updatedAt = Date.now()
+    if (this.store) {
+      await this.store.rewriteMessages(target.id, target.messages)
+    }
+    this.metaWriter?.schedule(target)
+    return removed
+  }
+
   async resume(id: string): Promise<Session> {
     if (!this.store) throw new Error('no store — session resume unavailable')
     const meta = await this.store.readMeta(id)
