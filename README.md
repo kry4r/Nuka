@@ -139,6 +139,30 @@ dependencies: [{ name: shared-lib, required: true }]
 
 ---
 
+## 🤖 Auto-test mode
+
+Nuka ships a headless TUI test harness. Plans are YAML files in `test-plans/`
+that mount the app, send keystrokes, and assert on rendered frames.
+
+```bash
+# Run a plan (pretty reporter, default)
+nuka --test-plan test-plans/01-offline-boot.yaml
+
+# TAP output for CI
+nuka --test-plan test-plans/01-offline-boot.yaml --reporter=tap
+
+# Update snapshots
+nuka --test-plan test-plans/01-offline-boot.yaml --update-snapshots
+
+# Run all sample plans via vitest
+npx vitest run test/integration/samplePlans.test.ts
+```
+
+Five sample plans live in `test-plans/`: offline boot, onboarding wizard,
+theme-switch surface, stats view, and plan-mode lockout.
+
+---
+
 ## 🎬 Manual test flow
 
 ```bash

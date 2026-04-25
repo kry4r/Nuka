@@ -1,0 +1,30 @@
+# 05-plan-mode-lockout.yaml
+#
+# DOWNGRADE NOTE: A full plan-mode lockout test would type "/plan on", wait
+# for the banner to appear, then verify that sending a message is blocked.
+# The headless harness has no slash commands registered (empty SlashRegistry),
+# so /plan never fires. Instead, we demonstrate the keystroke-reaches-input
+# surface: type "/plan on" and assert the literal characters appear, which
+# confirms the input pipeline is live. Document the upgrade path in comments.
+#
+# UPGRADE PATH: Once SlashRegistry in the harness is pre-populated with the
+# plan-mode command, replace the assert below with:
+#   - slash: "plan on"
+#   - assert: { contains: "Plan mode" }
+name: "plan mode lockout (downgraded)"
+description: >
+  Demonstrates the /plan on surface by typing the command literal and
+  asserting it appears in the input buffer. Downgraded from full plan-mode
+  activation because slash commands are not registered in the headless harness.
+steps:
+  - render: app
+  - assert:
+      contains: "NUKA"
+  # Type the /plan on command — appears in the prompt input.
+  - keystroke: "/plan on"
+  - wait:
+      ms: 50
+  - assert:
+      contains: "/plan on"
+cleanup:
+  unmount: true

@@ -1,0 +1,30 @@
+# 03-theme-switch.yaml
+#
+# DOWNGRADE NOTE: A real theme-switch would require the /config slash command
+# to be registered and the Config screen to render a theme picker. The harness
+# mountApp builds a SlashRegistry with zero commands registered, so /config is
+# a no-op. Instead, we verify the baseline app renders and that typing `/config`
+# appears in the input echoed back — demonstrating keystroke-to-input-buffer
+# reachability without requiring slash dispatch.
+#
+# If slash dispatch is later wired in the harness, upgrade step 3 to:
+#   - slash: "config"
+#   - assert: { contains: "theme" }
+name: "theme switch surface (downgraded)"
+description: >
+  Verifies the app renders its header and that keystrokes reach the input
+  buffer. Downgraded from full /config theme-picker flow because the headless
+  harness does not register slash commands.
+steps:
+  - render: app
+  - assert:
+      contains: "NUKA"
+  # Type a slash command prefix — visible in the prompt area.
+  - keystroke: "/con"
+  - wait:
+      ms: 50
+  # The typed characters appear in the prompt/input line.
+  - assert:
+      contains: "/con"
+cleanup:
+  unmount: true

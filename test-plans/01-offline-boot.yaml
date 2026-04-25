@@ -1,0 +1,15 @@
+# 01-offline-boot.yaml
+#
+# Verifies the app boots successfully in offline mode (no providers configured)
+# and renders its main NUKA header. The harness uses makeMinimalAppDeps which
+# intentionally starts with zero providers — exactly the offline scenario.
+name: "offline boot"
+description: >
+  Boot the TUI app with no providers configured. Assert the NUKA header
+  is visible and the process stays alive (no hard-exit on zero providers).
+steps:
+  - render: app
+  - assert:
+      contains: "NUKA"
+cleanup:
+  unmount: true

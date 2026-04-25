@@ -141,6 +141,30 @@ dependencies: [{ name: shared-lib, required: true }]
 
 ---
 
+## 🤖 自动测试模式
+
+Nuka 内置无头 TUI 测试框架。测试计划是 `test-plans/` 目录下的 YAML 文件，
+可挂载 App、发送按键，并对渲染帧进行断言。
+
+```bash
+# 运行测试计划（默认 pretty 输出）
+nuka --test-plan test-plans/01-offline-boot.yaml
+
+# TAP 格式输出（适用于 CI）
+nuka --test-plan test-plans/01-offline-boot.yaml --reporter=tap
+
+# 更新快照
+nuka --test-plan test-plans/01-offline-boot.yaml --update-snapshots
+
+# 通过 vitest 运行全部示例计划
+npx vitest run test/integration/samplePlans.test.ts
+```
+
+`test-plans/` 中包含 5 个示例计划：离线启动、引导向导、
+主题切换界面、状态视图、以及计划模式锁定。
+
+---
+
 ## 🎬 人工测试流程
 
 ```bash
