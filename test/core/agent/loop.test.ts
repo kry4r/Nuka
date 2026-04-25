@@ -698,4 +698,55 @@ describe('runAgent', () => {
     expect(results[0]!.output).toContain('done-slow')
     expect(results[1]!.output).toContain('done-fast')
   })
+
+  it('records assistant-turn usage into the cost tracker (Phase 7 §5.2)', async () => {
+    const { CostTracker } = await import('../../../src/core/cost/tracker')
+    const session = createSession({ providerId: 'p', model: 'claude-haiku-4-5' })
+    const provider = stubProvider([[
+      { type: 'text_delta', text: 'ok' },
+      {
+        type: 'message_stop',
+        stopReason: 'end_turn',
+        usage: { inputTokens: 7, outputTokens: 3, cacheReadTokens: 2, cacheWriteTokens: 1 },
+      },
+    ]])
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const tracker = new CostTracker()
+
+    for await (const _ of runAgent(
+      { text: 'hi' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'claude-haiku-4-5' }) } as any, tools, permission, costTracker: tracker },
+      new AbortController().signal,
+    )) void _
+
+    const cur = tracker.current(session.id)
+    expect(cur.turns).toBe(1)
+    expect(cur.inputTokens).toBe(7)
+    expect(cur.outputTokens).toBe(3)
+    expect(cur.cacheReadTokens).toBe(2)
+    expect(cur.cacheCreateTokens).toBe(1)
+    const usd = tracker.toUsd('claude-haiku-4-5', cur)
+    expect(usd).toBeDefined()
+    expect(usd!).toBeGreaterThan(0)
+  })
+
+  it('skips cost tracking when no tracker is provided (back-compat)', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    const provider = stubProvider([[
+      { type: 'text_delta', text: 'ok' },
+      { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+    ]])
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    // No throw, no tracker present.
+    for await (const _ of runAgent(
+      { text: 'hi' },
+      session,
+      { provider: { resolveFor: () => ({ provider, model: 'm' }) } as any, tools, permission },
+      new AbortController().signal,
+    )) void _
+    expect(session.totalUsage.inputTokens).toBe(1)
+  })
 })

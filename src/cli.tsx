@@ -28,6 +28,7 @@ import { ConfigCommand } from './slash/config'
 import { CompactCommand } from './slash/compact'
 import { ResumeCommand } from './slash/resume'
 import { HistoryCommand } from './slash/history'
+import { MemdirCommand, setMemdirSynthCallable } from './slash/memdir'
 import { DeleteSessionCommand } from './slash/delete-session'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
@@ -64,6 +65,12 @@ import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
 import { Wizard } from './tui/Onboarding/Wizard'
 import { saveWizardPatch } from './core/onboarding/save'
+import { CostTracker } from './core/cost/tracker'
+import { defaultCostPath, readCostFile, writeCostFile } from './core/cost/persist'
+import { loadMemory, appendMemory } from './core/memdir/index'
+import { findRelevant, tokenize } from './core/memdir/relevance'
+import { synthMemoryEntry } from './core/memdir/synth'
+import type { MemoryEntry } from './core/memdir/parser'
 
 const argv = process.argv.slice(2)
 if (argv[0] === 'init') {
@@ -294,7 +301,7 @@ async function runInteractive(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand].forEach(c => slash.register(c))
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({
@@ -308,6 +315,16 @@ async function runInteractive(): Promise<void> {
   const agents = new AgentRegistry()
 
   const lspManager = new LspManager()
+
+  // Phase 7 §5.2 — process-wide cost tracker hydrated from ~/.nuka/cost.json.
+  // Persisted on SIGINT (best-effort; failures are swallowed to keep exit fast).
+  const costTracker = new CostTracker()
+  try {
+    const entries = await readCostFile(defaultCostPath())
+    if (entries.length > 0) costTracker.hydrate(entries)
+  } catch {
+    // ignore — start with empty tracker on read failure
+  }
 
   // Wire plugins that are ready (have config or don't need it)
   const pendingPlugins = plugins.filter(p => p.needsUserConfig)
@@ -384,7 +401,12 @@ async function runInteractive(): Promise<void> {
   process.on('SIGINT', () => {
     const mcpCleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
     const lspCleanup = lspManager.closeAll().catch(() => {})
-    Promise.all([mcpCleanup, lspCleanup]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    // Phase 7 §5.2 — flush cost tracker on exit. Best-effort.
+    const costFlush = writeCostFile(defaultCostPath(), costTracker.snapshot()).catch(() => {})
+    // Phase 7 §5.3 — synth a memory entry from this session's transcript.
+    // Hard-bounded by synth's 5s internal timeout; failures are swallowed.
+    const memSynth = synthOnExit()
+    Promise.all([mcpCleanup, lspCleanup, costFlush, memSynth]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
   const activeSession = sessions.active()!
@@ -401,6 +423,10 @@ async function runInteractive(): Promise<void> {
     }
   }
 
+  // Phase 7 §5.3 — preload memory entries for this cwd. Refreshed on each
+  // turn so newly synth'd entries appear without a CLI restart.
+  let memoryCache: MemoryEntry[] = await loadMemory(cwd).catch(() => [])
+
   const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) => {
     if (!session.providerId) {
       throw new Error('No provider configured. Use /config to add one, or edit ~/.nuka/config.yaml.')
@@ -411,14 +437,36 @@ async function runInteractive(): Promise<void> {
       permission,
       systemPromptInput: () => ({
         cwd, platform, shell, nodeVersion, gitBranch, skills,
+        memory: findRelevant(memoryCache, tokenize(input.text), 5),
       }),
       skills,
       persist: sessions.persist,
       autoCompact: autoCompact!,
       hooks,
       lsp: lspManager,
+      costTracker,
     }, signal)
   }
+
+  // Phase 7 §5.3 — synth + append. Returns the entry or null. Always
+  // swallows errors; never throws. Used by both SIGINT and /memdir compact.
+  const synthAndAppend = async () => {
+    const active = sessions.active()
+    if (!active || !active.providerId) return null
+    if (active.messages.length < 2) return null
+    try {
+      const { provider, model } = providers.resolveFor(active)
+      const entry = await synthMemoryEntry(active.messages, provider, model, active.id)
+      if (!entry) return null
+      await appendMemory(cwd, entry)
+      memoryCache = await loadMemory(cwd).catch(() => memoryCache)
+      return entry
+    } catch {
+      return null
+    }
+  }
+  setMemdirSynthCallable(synthAndAppend)
+  const synthOnExit = async (): Promise<void> => { await synthAndAppend() }
 
   render(
     <App
@@ -443,6 +491,7 @@ async function runInteractive(): Promise<void> {
       mcpManager={mcpManager ?? undefined}
       tools={tools}
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
+      costTracker={costTracker}
     />,
   )
 
