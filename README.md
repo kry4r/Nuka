@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌑 Nuka
+<img src="assets/logo.png" width="128" height="128" alt="Nuka" />
+
+# Nuka
 
 **A plugin-first, agent-swarm CLI coding assistant.**
 
@@ -10,6 +12,8 @@
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
 Stream-rendered TUI · MCP servers · plugin marketplace · multi-expert agents · LSP-aware tools — all in a single ~240 KB bundle.
+
+[English](README.md) · [简体中文](README.zh-CN.md)
 
 </div>
 

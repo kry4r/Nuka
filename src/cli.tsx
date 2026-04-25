@@ -210,25 +210,25 @@ async function runInteractive(): Promise<void> {
   const config = await loadConfig({ home: os.homedir(), cwd })
   const skills = await loadSkills({ home: os.homedir(), cwd })
 
-  if (config.providers.length === 0) {
+  const hasProviders = config.providers.length > 0
+  if (!hasProviders) {
     console.error(
-      `No providers configured.\nAdd one to ${globalConfigPath()} — see docs/superpowers/specs/2026-04-23-nuka-rewrite-design.md §4.3`,
+      `\u001b[33m[nuka]\u001b[0m No providers configured. Starting in offline mode — use /config or /model to add a provider, or edit ${globalConfigPath()}.`,
     )
-    process.exit(2)
   }
 
   const providers = new ProviderResolver(config)
   const store = new SessionStore({ dir: sessionsDir(os.homedir()) })
   const metaWriter = new DebouncedMetaWriter(store)
   const sessions = new SessionManager({ store, metaWriter })
-  const firstProvider = config.providers[0]!
-  const activeProviderId = config.active.providerId || firstProvider.id
-  const activeProvider = config.providers.find(p => p.id === activeProviderId)
-  if (!activeProvider) {
+  const firstProvider = config.providers[0]
+  const activeProviderId = config.active.providerId || firstProvider?.id || ''
+  const activeProvider = activeProviderId ? config.providers.find(p => p.id === activeProviderId) : undefined
+  if (activeProviderId && !activeProvider && hasProviders) {
     console.error(`active.providerId references unknown provider: ${activeProviderId}`)
     process.exit(2)
   }
-  const activeModel = activeProvider!.selectedModel ?? activeProvider!.models?.[0] ?? ''
+  const activeModel = activeProvider?.selectedModel ?? activeProvider?.models?.[0] ?? ''
 
   // Parse --resume flag: --resume (most recent) or --resume=<id-prefix>
   const resumeArg = process.argv.find(a => a === '--resume' || a.startsWith('--resume='))
@@ -251,10 +251,10 @@ async function runInteractive(): Promise<void> {
     if (resolvedId) {
       await sessions.resume(resolvedId)
     } else {
-      sessions.start({ providerId: activeProvider!.id, model: activeModel })
+      sessions.start({ providerId: activeProvider?.id ?? '', model: activeModel })
     }
   } else {
-    sessions.start({ providerId: activeProvider!.id, model: activeModel })
+    sessions.start({ providerId: activeProvider?.id ?? '', model: activeModel })
   }
 
   const todoStore = createTodoStore()
@@ -357,22 +357,25 @@ async function runInteractive(): Promise<void> {
     Promise.all([mcpCleanup, lspCleanup]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
-  // Build auto-compact opts. Use compact.model with the active session's provider when set;
-  // otherwise fall back to the active session's model. Provider resolution uses the active
-  // session's provider in both cases (no cross-provider summarization in this phase).
   const activeSession = sessions.active()!
-  const compactModel = config.compact?.model ?? activeSession.model
-  const { provider: compactProvider } = providers.resolveFor(activeSession)
-  const autoCompact: AutoCompactOpts = {
-    provider: compactProvider,
-    model: compactModel,
-    keepTurns: config.compact?.keepTurns ?? 3,
-    autoThreshold: config.compact?.autoThreshold ?? 0.8,
-    contextWindow: config.compact?.contextWindow ?? 200_000,
+  let autoCompact: AutoCompactOpts | undefined
+  if (hasProviders && activeSession.providerId) {
+    const compactModel = config.compact?.model ?? activeSession.model
+    const { provider: compactProvider } = providers.resolveFor(activeSession)
+    autoCompact = {
+      provider: compactProvider,
+      model: compactModel,
+      keepTurns: config.compact?.keepTurns ?? 3,
+      autoThreshold: config.compact?.autoThreshold ?? 0.8,
+      contextWindow: config.compact?.contextWindow ?? 200_000,
+    }
   }
 
-  const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) =>
-    runAgentLoop(input, session, {
+  const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) => {
+    if (!session.providerId) {
+      throw new Error('No provider configured. Use /config to add one, or edit ~/.nuka/config.yaml.')
+    }
+    return runAgentLoop(input, session, {
       provider: providers,
       tools,
       permission,
@@ -381,10 +384,11 @@ async function runInteractive(): Promise<void> {
       }),
       skills,
       persist: sessions.persist,
-      autoCompact,
+      autoCompact: autoCompact!,
       hooks,
       lsp: lspManager,
     }, signal)
+  }
 
   render(
     <App
