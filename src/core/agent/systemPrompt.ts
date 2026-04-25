@@ -1,5 +1,6 @@
 import { alwaysOnSkills } from '../skill/activator'
 import type { Skill } from '../skill/types'
+import type { MemoryEntry } from '../memdir/parser'
 
 export type SystemPromptInput = {
   cwd: string
@@ -8,6 +9,12 @@ export type SystemPromptInput = {
   nodeVersion: string
   gitBranch: { branch: string; dirty: boolean } | null
   skills?: Skill[]
+  /**
+   * Phase 7 §5.3 — relevant memory entries to inject under a `## Memory`
+   * heading. Caller resolves relevance (via {@link findRelevant}) before
+   * passing in. Empty array → section is omitted.
+   */
+  memory?: MemoryEntry[]
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
@@ -38,6 +45,14 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
       for (const skill of active) {
         lines.push('', `# ${skill.name}`, '', skill.body)
       }
+    }
+  }
+
+  if (input.memory && input.memory.length > 0) {
+    lines.push('', '## Memory', '')
+    for (const e of input.memory) {
+      const kw = e.keywords.length > 0 ? ` [${e.keywords.join(', ')}]` : ''
+      lines.push(`- ${e.body}${kw}`)
     }
   }
 
