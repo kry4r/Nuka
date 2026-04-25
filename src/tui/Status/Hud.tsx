@@ -9,7 +9,8 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { defaultPalette as P } from '../theme'
+import { defaultPalette } from '../theme'
+import { useTheme } from '../../core/theme/context'
 import { useUsage, type UsageSource } from './useUsage'
 
 export type CostTrackerLike = {
@@ -52,12 +53,22 @@ class HudErrorBoundary extends React.Component<
   override state = { error: null as Error | null }
   static getDerivedStateFromError(error: Error) { return { error } }
   override render() {
-    if (this.state.error) return <Text color={P.error}>{this.props.fallback}</Text>
+    if (this.state.error) return <Text color={defaultPalette.error}>{this.props.fallback}</Text>
     return this.props.children
   }
 }
 
 export function Hud(props: HudProps): React.JSX.Element {
+  // Prefer theme context colors; fall back to the static default palette so
+  // legacy tests (mounted without a ThemeProvider) continue to pass.
+  const theme = useTheme()
+  const P = {
+    primary: theme.colors.accent,
+    muted: theme.colors.muted,
+    warn: theme.colors.warn,
+    error: theme.colors.error,
+  }
+
   const source: UsageSource = () => {
     let usd: number | undefined = undefined
     try {

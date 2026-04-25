@@ -3,6 +3,8 @@ import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
 import { Hud } from '../../../src/tui/Status/Hud'
+import { ThemeProvider } from '../../../src/core/theme/context'
+import { findTheme } from '../../../src/core/theme/themes'
 
 describe('Status HUD', () => {
   it('renders all six fields with a known mock state', () => {
@@ -96,5 +98,29 @@ describe('Status HUD', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).toContain('99.5%')
+  })
+
+  it('renders correctly when wrapped in a ThemeProvider', () => {
+    const theme = findTheme('solarized-dark')!
+    const { lastFrame } = render(
+      <ThemeProvider theme={theme}>
+        <Hud
+          providerId="anthropic"
+          model="claude-opus-4-7"
+          sessionId="s2"
+          contextUsed={10000}
+          contextMax={200000}
+          inputTokens={500}
+          outputTokens={200}
+          pluginCount={1}
+          agentInFlight={0}
+          gitBranch="main"
+        />
+      </ThemeProvider>,
+    )
+    const flat = (lastFrame() ?? '').replace(/\s+/g, ' ')
+    expect(flat).toContain('anthropic/claude-opus-4-7')
+    expect(flat).toContain('git:main')
+    expect(flat).toContain('plugins 1')
   })
 })

@@ -25,6 +25,8 @@ import type { AgentEvent } from '../core/agent/events'
 import type { SlashRegistry } from '../slash/registry'
 import type { Session } from '../core/session/types'
 import type { PermissionCall, PermissionDecision } from '../core/permission/types'
+import { ThemeProvider } from '../core/theme/context'
+import { resolveTheme } from '../core/theme/themes'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
 import type { ToolRegistry } from '../core/tools/registry'
@@ -258,7 +260,10 @@ export function App(props: AppProps): React.JSX.Element {
     : mcpStatuses.every(s => s.status.kind === 'connected') ? 'ok'
     : 'degraded'
 
+  const activeTheme = resolveTheme((props.config.theme as any)?.name ?? 'default-dark')
+
   return (
+    <ThemeProvider theme={activeTheme}>
     <Box flexDirection="column">
       <Box flexDirection="column" flexGrow={1}>
         {justCompacted && (
@@ -381,5 +386,6 @@ export function App(props: AppProps): React.JSX.Element {
         tick={mcpTick}
       />
     </Box>
+    </ThemeProvider>
   )
 }
