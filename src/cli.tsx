@@ -29,6 +29,7 @@ import { CompactCommand } from './slash/compact'
 import { ResumeCommand } from './slash/resume'
 import { HistoryCommand } from './slash/history'
 import { DeleteSessionCommand } from './slash/delete-session'
+import { VimCommand } from './slash/vim'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -264,7 +265,7 @@ async function runInteractive(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand].forEach(c => slash.register(c))
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, VimCommand].forEach(c => slash.register(c))
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({
