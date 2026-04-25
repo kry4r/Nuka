@@ -15,6 +15,13 @@ export type SystemPromptInput = {
    * passing in. Empty array → section is omitted.
    */
   memory?: MemoryEntry[]
+  /**
+   * Phase 8 §4.4 — injected under a `## Plan` heading when present AND
+   * the active session is in plan mode. Callers should pass the raw
+   * Markdown contents of the per-cwd plan file; the empty string is
+   * treated as "no plan" and the section is omitted.
+   */
+  plan?: { active: boolean; body: string }
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
@@ -54,6 +61,10 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
       const kw = e.keywords.length > 0 ? ` [${e.keywords.join(', ')}]` : ''
       lines.push(`- ${e.body}${kw}`)
     }
+  }
+
+  if (input.plan?.active && input.plan.body.trim().length > 0) {
+    lines.push('', '## Plan', '', input.plan.body.trimEnd())
   }
 
   return lines.join('\n')
