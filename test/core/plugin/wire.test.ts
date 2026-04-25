@@ -6,6 +6,7 @@ import { wirePlugin } from '../../../src/core/plugin/wire'
 import { ToolRegistry } from '../../../src/core/tools/registry'
 import { SlashRegistry } from '../../../src/slash/registry'
 import { AgentRegistry } from '../../../src/core/agents/registry'
+import { LspManager } from '../../../src/core/lsp/manager'
 import type { LoadedPlugin } from '../../../src/core/plugin/manifest'
 
 let root: string
@@ -81,7 +82,7 @@ describe('wirePlugin', () => {
 
     const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
 
-    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, agentsAdded: 0, errors: [] })
+    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, agentsAdded: 0, lspAdded: 0, errors: [] })
 
     const t = tools.find('plugin__demo__Hello')
     expect(t).toBeDefined()
@@ -183,6 +184,107 @@ describe('wirePlugin', () => {
     expect(result.errors).toEqual([])
     expect(agents.find('demo:reviewer')?.systemPrompt).toBe('you review')
     expect(agents.find('demo:tester')?.systemPrompt).toBe('Act as a tester.')
+  })
+
+  describe('lspServers', () => {
+    it('registers each lspServers entry with LspManager — namespaced as <plugin>:<name>', async () => {
+      const tools = new ToolRegistry()
+      const slash = new SlashRegistry()
+      const skills: import('../../../src/core/skill/types').Skill[] = []
+      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
+      const lsp = new LspManager()
+
+      const plugin: LoadedPlugin = {
+        manifest: {
+          name: 'demo',
+          tools: [],
+          slashCommands: [],
+          skills: [],
+          mcpServers: {},
+          lspServers: [
+            {
+              name: 'ts',
+              command: 'typescript-language-server',
+              args: ['--stdio'],
+              documentSelector: [{ language: 'typescript' }],
+            },
+          ],
+        },
+        rootDir: root,
+        source: 'installed' as const,
+      }
+
+      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, lsp })
+      expect(result.lspAdded).toBe(1)
+      expect(result.errors).toEqual([])
+      expect(lsp.list()).toHaveLength(1)
+      expect(lsp.list()[0]!.name).toBe('demo:ts')
+    })
+
+    it('reports collision as error when two plugins declare same selector', async () => {
+      const tools = new ToolRegistry()
+      const slash = new SlashRegistry()
+      const skills: import('../../../src/core/skill/types').Skill[] = []
+      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
+      const lsp = new LspManager()
+
+      // Pre-register a TS server
+      lsp.register({
+        name: 'existing:ts',
+        command: 'tsserver',
+        documentSelector: [{ language: 'typescript' }],
+      })
+
+      const plugin: LoadedPlugin = {
+        manifest: {
+          name: 'demo',
+          tools: [],
+          slashCommands: [],
+          skills: [],
+          mcpServers: {},
+          lspServers: [
+            {
+              name: 'ts',
+              command: 'typescript-language-server',
+              args: ['--stdio'],
+              documentSelector: [{ language: 'typescript' }],
+            },
+          ],
+        },
+        rootDir: root,
+        source: 'installed' as const,
+      }
+
+      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, lsp })
+      expect(result.lspAdded).toBe(0)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toMatch(/already registered/)
+    })
+
+    it('skips lsp registration when no lsp dep is provided', async () => {
+      const tools = new ToolRegistry()
+      const slash = new SlashRegistry()
+      const skills: import('../../../src/core/skill/types').Skill[] = []
+      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
+
+      const plugin: LoadedPlugin = {
+        manifest: {
+          name: 'demo',
+          tools: [],
+          slashCommands: [],
+          skills: [],
+          mcpServers: {},
+          lspServers: [{ name: 'ts', command: 'tsserver', documentSelector: [{ language: 'typescript' }] }],
+        },
+        rootDir: root,
+        source: 'installed' as const,
+      }
+
+      // No lsp dep — should silently skip
+      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers })
+      expect(result.lspAdded).toBe(0)
+      expect(result.errors).toEqual([])
+    })
   })
 
   it('missing systemPromptPath: logs error, other agents still load', async () => {

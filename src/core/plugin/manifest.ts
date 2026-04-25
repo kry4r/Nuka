@@ -2,6 +2,22 @@ import { z } from 'zod'
 import { McpServerConfigSchema } from '../config/schema'
 import { AgentDefSchema } from '../agents/types'
 
+// LSP server definition schema (mirrors LspServerDef from src/core/lsp/types.ts)
+const LspDocumentSelectorEntrySchema = z.object({
+  language: z.string().optional(),
+  pattern: z.string().optional(),
+})
+
+const LspServerDefSchema = z.object({
+  name: z.string().min(1),
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  documentSelector: z.array(LspDocumentSelectorEntrySchema).min(1),
+  initializationOptions: z.unknown().optional(),
+  rootUri: z.string().optional(),
+  env: z.record(z.string(), z.string()).optional(),
+})
+
 export const PluginManifestSchema = z.object({
   name: z
     .string()
@@ -64,6 +80,12 @@ export const PluginManifestSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * LSP server declarations. Each entry is registered with LspManager on wire.
+   * documentSelector determines which file types/paths this server handles.
+   * Collision policy: first registration for a selector wins; duplicates are skipped.
+   */
+  lspServers: z.array(LspServerDefSchema).optional(),
   /**
    * Notification routing channels provided by this plugin.
    */
