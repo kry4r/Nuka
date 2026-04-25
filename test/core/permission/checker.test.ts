@@ -1,6 +1,6 @@
 // test/core/permission/checker.test.ts
 import { describe, it, expect, vi } from 'vitest'
-import { PermissionChecker } from '../../../src/core/permission/checker'
+import { PermissionChecker, PLAN_BLOCKED_REASON } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { PermissionPayload } from '../../../src/core/permission/bridge'
 
@@ -101,5 +101,105 @@ describe('PermissionChecker', () => {
     const checker = new PermissionChecker(() => new PermissionCache(), ask)
     await checker.check({ toolName: 'Bash', hint: 'exec', input: {} })
     expect(captured?.annotationBadges).toBeUndefined()
+  })
+
+  // ── Phase 8 §4.4 — plan mode gate ──────────────────────────────────
+  describe('plan mode', () => {
+    it('rejects Write with the canonical plan-mode reason', async () => {
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'a' },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('rejects Edit in plan mode', async () => {
+      const checker = new PermissionChecker(() => new PermissionCache(), vi.fn())
+      const d = await checker.check({ toolName: 'Edit', hint: 'write', input: {}, mode: 'plan' })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+    })
+
+    it('rejects Bash in plan mode', async () => {
+      const checker = new PermissionChecker(() => new PermissionCache(), vi.fn())
+      const d = await checker.check({ toolName: 'Bash', hint: 'exec', input: {}, mode: 'plan' })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+    })
+
+    it('rejects any tool annotated destructive in plan mode', async () => {
+      const checker = new PermissionChecker(() => new PermissionCache(), vi.fn())
+      const d = await checker.check({
+        toolName: 'mcp__fs__delete',
+        hint: 'write',
+        input: {},
+        annotations: { destructive: true },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+    })
+
+    it('rejects any tool annotated openWorld in plan mode', async () => {
+      const checker = new PermissionChecker(() => new PermissionCache(), vi.fn())
+      const d = await checker.check({
+        toolName: 'mcp__http__fetch',
+        hint: 'network',
+        input: {},
+        annotations: { openWorld: true },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+    })
+
+    it('passes read-only tools in plan mode without prompting', async () => {
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'Read',
+        hint: 'none',
+        input: { path: 'a' },
+        annotations: { readOnly: true },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('cannot be bypassed by a cached "allow write" rule', async () => {
+      const cache = new PermissionCache()
+      cache.add({ scope: 'session', hint: 'write' })
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => cache, ask)
+      const d = await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'a' },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('normal mode still allows Write via prompt path', async () => {
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'a' },
+        mode: 'normal',
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).toHaveBeenCalledOnce()
+    })
   })
 })

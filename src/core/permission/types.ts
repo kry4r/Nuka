@@ -31,4 +31,10 @@ export type PermissionCall = {
     destructive?: boolean
     openWorld?: boolean
   }
+  /**
+   * Phase 8 §4.4 — active session permission mode. When `'plan'`, the
+   * checker rejects Write/Edit/Bash and any tool whose annotations mark it
+   * destructive or open-world. Absent/undefined is treated as `'normal'`.
+   */
+  mode?: 'normal' | 'plan' | 'bypass'
 }
