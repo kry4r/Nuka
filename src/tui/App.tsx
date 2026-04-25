@@ -7,6 +7,7 @@ import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
 import { PromptInput } from './PromptInput/PromptInput'
 import { StatusBar } from './StatusBar/StatusBar'
+import { Hud, type CostTrackerLike } from './Status/Hud'
 import { PermissionDialog } from './dialogs/PermissionDialog'
 import { ElicitationDialog } from './dialogs/ElicitationDialog'
 import { PluginConfigDialog } from './dialogs/PluginConfigDialog'
@@ -92,8 +93,12 @@ export type AppProps = {
   tools?: ToolRegistry
   /** Number of session plugins loaded via --plugin-dir (shown in status bar) */
   sessionPluginCount?: number
-  /** Phase 7 §5.2 cost tracker — surfaced through SlashContext for /cost. */
+  /** Phase 7 §5.2 cost tracker — surfaced through SlashContext for /cost and HUD. */
   costTracker?: import('../core/cost/tracker').CostTracker
+  /** Number of plugins loaded total (for HUD). */
+  pluginCount?: number
+  /** Number of agents currently in flight (for HUD). */
+  agentInFlight?: number
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -345,6 +350,7 @@ export function App(props: AppProps): React.JSX.Element {
         placeholder=""
         cwd={props.cwd}
         onAttachFile={p => { pendingAttachments.current.push(p) }}
+        vim={props.config.vim?.enabled === true}
       />
       <StatusBar
         model={session.model}
@@ -359,6 +365,20 @@ export function App(props: AppProps): React.JSX.Element {
         queueLength={session.queue.size()}
         mode={hintMode}
         sessionPluginCount={props.sessionPluginCount}
+      />
+      <Hud
+        providerId={session.providerId || '—'}
+        model={session.model}
+        sessionId={session.id}
+        contextUsed={contextUsed}
+        contextMax={contextMax}
+        inputTokens={session.totalUsage.inputTokens}
+        outputTokens={session.totalUsage.outputTokens}
+        pluginCount={props.pluginCount ?? 0}
+        agentInFlight={props.agentInFlight ?? 0}
+        gitBranch={props.gitBranch?.branch ?? null}
+        costTracker={props.costTracker}
+        tick={mcpTick}
       />
     </Box>
   )

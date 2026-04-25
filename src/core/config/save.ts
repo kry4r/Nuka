@@ -45,6 +45,16 @@ export async function saveProviderSelectedModel(
   await writeConfig(home, obj)
 }
 
+export async function saveVimEnabled(home: string, enabled: boolean): Promise<void> {
+  const obj = await readConfig(home)
+  obj.vim = { ...(obj.vim ?? {}), enabled }
+  await mkdir(path.join(home, '.nuka'), { recursive: true })
+  // Only validate the full schema when there is a provider selection;
+  // in offline mode (no providers) we still want to persist the toggle.
+  if (obj.active?.providerId) ConfigSchema.parse(obj)
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+}
+
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []

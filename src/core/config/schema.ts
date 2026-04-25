@@ -97,6 +97,12 @@ export const PluginsConfigSchema = z
   })
   .optional()
 
+export const VimConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+  })
+  .optional()
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -106,6 +112,7 @@ export const ConfigSchema = z.object({
   search: SearchSchema,
   mcp: McpConfigSchema,
   plugins: PluginsConfigSchema,
+  vim: VimConfigSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.
