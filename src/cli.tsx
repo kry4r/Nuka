@@ -62,6 +62,8 @@ import { validatePlugin, formatReport } from './core/plugin/validate'
 import type { McpServerConfig } from './core/mcp/types'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
+import { CostTracker } from './core/cost/tracker'
+import { defaultCostPath, readCostFile, writeCostFile } from './core/cost/persist'
 
 const argv = process.argv.slice(2)
 if (argv[0] === 'plugin' && argv[1] === 'list') {
@@ -279,6 +281,16 @@ async function runInteractive(): Promise<void> {
 
   const lspManager = new LspManager()
 
+  // Phase 7 §5.2 — process-wide cost tracker hydrated from ~/.nuka/cost.json.
+  // Persisted on SIGINT (best-effort; failures are swallowed to keep exit fast).
+  const costTracker = new CostTracker()
+  try {
+    const entries = await readCostFile(defaultCostPath())
+    if (entries.length > 0) costTracker.hydrate(entries)
+  } catch {
+    // ignore — start with empty tracker on read failure
+  }
+
   // Wire plugins that are ready (have config or don't need it)
   const pendingPlugins = plugins.filter(p => p.needsUserConfig)
   const readyPlugins = plugins.filter(p => !p.needsUserConfig)
@@ -354,7 +366,9 @@ async function runInteractive(): Promise<void> {
   process.on('SIGINT', () => {
     const mcpCleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
     const lspCleanup = lspManager.closeAll().catch(() => {})
-    Promise.all([mcpCleanup, lspCleanup]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    // Phase 7 §5.2 — flush cost tracker on exit. Best-effort.
+    const costFlush = writeCostFile(defaultCostPath(), costTracker.snapshot()).catch(() => {})
+    Promise.all([mcpCleanup, lspCleanup, costFlush]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
   const activeSession = sessions.active()!
@@ -387,6 +401,7 @@ async function runInteractive(): Promise<void> {
       autoCompact: autoCompact!,
       hooks,
       lsp: lspManager,
+      costTracker,
     }, signal)
   }
 
@@ -413,6 +428,7 @@ async function runInteractive(): Promise<void> {
       mcpManager={mcpManager ?? undefined}
       tools={tools}
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
+      costTracker={costTracker}
     />,
   )
 

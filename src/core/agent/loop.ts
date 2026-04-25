@@ -25,6 +25,7 @@ import type { ToolResult } from '../tools/types'
 import { getChannels } from '../notifications/channelRegistry'
 import { dispatchToChannels } from '../notifications/channels'
 import type { LspManager } from '../lsp/manager'
+import type { CostTracker } from '../cost/tracker'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -37,6 +38,11 @@ export type RunAgentDeps = {
   hooks?: HookEntry[]
   /** Optional LSP manager for didChange notifications after Write/Edit. */
   lsp?: LspManager
+  /**
+   * Optional cost tracker. When present, every assistant turn's usage is
+   * recorded against `(model, sessionId)` after the message is appended.
+   */
+  costTracker?: CostTracker
 }
 
 /** Tools that modify files and should trigger LSP didChange notifications. */
@@ -183,7 +189,20 @@ export async function* runAgent(
       applyToAssistant(assistant, ev)
     }
     appendMessage(session, assistant, deps.persist)
-    if (assistant.usage) session.totalUsage = addUsage(session.totalUsage, assistant.usage)
+    if (assistant.usage) {
+      session.totalUsage = addUsage(session.totalUsage, assistant.usage)
+      // Phase 7 §5.2 — fold this turn's usage into the per-process cost
+      // tracker. Cache fields are optional in TokenUsage but must map onto
+      // the tracker's Usage shape.
+      if (deps.costTracker) {
+        deps.costTracker.record(model, session.id, {
+          input: assistant.usage.inputTokens,
+          output: assistant.usage.outputTokens,
+          cacheCreate: assistant.usage.cacheWriteTokens,
+          cacheRead: assistant.usage.cacheReadTokens,
+        })
+      }
+    }
 
     const calls = extractToolCalls(assistant)
     if (calls.length === 0) {

@@ -1,6 +1,7 @@
 import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
+import type { CostTracker } from '../core/cost/tracker'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
@@ -23,6 +24,8 @@ export type SlashContext = {
   sessions: SessionManager
   providers: ProviderResolver
   config: Config
+  /** Phase 7 §5.2 — optional; absent in legacy tests / programmatic embeds. */
+  costTracker?: CostTracker
 }
 
 export interface SlashCommand {

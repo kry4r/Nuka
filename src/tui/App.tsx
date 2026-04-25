@@ -92,6 +92,8 @@ export type AppProps = {
   tools?: ToolRegistry
   /** Number of session plugins loaded via --plugin-dir (shown in status bar) */
   sessionPluginCount?: number
+  /** Phase 7 §5.2 cost tracker — surfaced through SlashContext for /cost. */
+  costTracker?: import('../core/cost/tracker').CostTracker
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -159,6 +161,7 @@ export function App(props: AppProps): React.JSX.Element {
         sessions: props.sessions,
         providers: props.providers,
         config: props.config,
+        costTracker: props.costTracker,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {

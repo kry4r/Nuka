@@ -61,4 +61,36 @@ describe('simple slash commands', () => {
       expect(res.text).toMatch(/tokens/i)
     }
   })
+
+  it('/cost reads from CostTracker when present and shows $-figure for known models', async () => {
+    const { CostTracker } = await import('../../src/core/cost/tracker')
+    const tracker = new CostTracker()
+    const sessions = new SessionManager()
+    const s = sessions.start({ providerId: 'p', model: 'claude-haiku-4-5' })
+    tracker.record('claude-haiku-4-5', s.id, { input: 100_000, output: 50_000 })
+    const c = ctx({ sessions, costTracker: tracker })
+    const res = await CostCommand.run('', c)
+    expect(res.type).toBe('text')
+    if (res.type === 'text') {
+      expect(res.text).toContain('This session')
+      expect(res.text).toContain('Today')
+      expect(res.text).toContain('All-time')
+      // Known model -> a USD figure must appear.
+      expect(res.text).toMatch(/\$\d+\.\d{4}/)
+    }
+  })
+
+  it('/cost falls back to "(no pricing)" for unknown models', async () => {
+    const { CostTracker } = await import('../../src/core/cost/tracker')
+    const tracker = new CostTracker()
+    const sessions = new SessionManager()
+    const s = sessions.start({ providerId: 'p', model: 'mystery-model' })
+    tracker.record('mystery-model', s.id, { input: 100, output: 50 })
+    const c = ctx({ sessions, costTracker: tracker })
+    const res = await CostCommand.run('', c)
+    expect(res.type).toBe('text')
+    if (res.type === 'text') {
+      expect(res.text).toContain('(no pricing)')
+    }
+  })
 })
