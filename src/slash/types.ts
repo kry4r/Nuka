@@ -2,6 +2,7 @@ import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
 import type { CostTracker } from '../core/cost/tracker'
+import type { McpManager } from '../core/mcp/manager'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
@@ -26,6 +27,8 @@ export type SlashContext = {
   config: Config
   /** Phase 7 §5.2 — optional; absent in legacy tests / programmatic embeds. */
   costTracker?: CostTracker
+  /** Phase 8 §4.5 — optional; wired by App when an McpManager is available. */
+  mcpManager?: McpManager
 }
 
 export interface SlashCommand {
