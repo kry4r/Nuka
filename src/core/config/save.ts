@@ -55,6 +55,15 @@ export async function saveVimEnabled(home: string, enabled: boolean): Promise<vo
   await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
 }
 
+export async function saveTheme(home: string, themeName: string): Promise<void> {
+  const obj = await readConfig(home)
+  obj.theme = { ...(obj.theme ?? {}), name: themeName }
+  await mkdir(path.join(home, '.nuka'), { recursive: true })
+  // Only validate when there is a provider selection (same pattern as saveVimEnabled).
+  if (obj.active?.providerId) ConfigSchema.parse(obj)
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+}
+
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []

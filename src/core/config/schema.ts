@@ -29,6 +29,8 @@ export const ActiveSelectionSchema = z.object({
 
 export const ThemeSchema = z
   .object({
+    /** Name of the active registered theme (e.g. "default-dark"). */
+    name: z.string().optional(),
     primary: z.string().optional(),
     accent: z.string().optional(),
     fg: z.string().optional(),
