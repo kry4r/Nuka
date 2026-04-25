@@ -479,3 +479,42 @@ Merge commits: `41861a2` (M1), `a370d37` (M2), `d976ccf` (M3).
 - IDE bridge (VS Code / JetBrains extension status + launch).
 - Theme switcher.
 - Stats dashboard.
+
+---
+
+## Appendix — Phase 8 Gap Closure
+
+Phase 8 (feature evolution: theme + stats + rewind + plan-mode + IDE bridge) landed via three parallel worktrees. Post-merge: `npm test` **1095 passing**, `npm run typecheck` clean, `dist/cli.js` **319.3 KB**.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 8.1.a | Theme registry (5 seeds) + ThemeProvider/useTheme | `ac379ef` |
+| 8.1.b | `/theme list/<name>` slash + `saveTheme` persistence | `1344d46` |
+| 8.1.c | App.tsx ThemeProvider wrap + Hud color consumption | `aa1901d` |
+| 8.2.a | Stats aggregator (sessions+cost+by-model) + ASCII chart | `38b6d8f` |
+| 8.2.b | `/stats` slash + StatsView (Overview/Models tabs, range cycle) | `5be5f8f` |
+| 8.3.a | `truncateAfter` session API + `/rewind` + MessageSelector | `553a9d0` |
+| 8.3.b | File checkpoint scaffolding (off-by-default; SHA1 capture only) | `81ade86` (rewritten `19b6de2`) |
+| 8.4.a | Plan-mode permission gate (writes/destructive blocked) | `9c05f5f` (rewritten `573e794`) |
+| 8.4.b | Plan storage + `/plan on/off/show/write/apply` + `## Plan` injection | `1696ed6` (rewritten `1b8f859`) |
+| 8.5.a | IDE detect probes (vscode/jetbrains/cursor/windsurf) | `d2cfc59` |
+| 8.5.b | `McpManager.addServer/removeServer` + `/ide` connect/disconnect | `f5f8baf` |
+
+Merge commits: `36f29ef` (M1), `5600e91` (M3), `0e709d9` (M2). Merge order M1→M3→M2 chosen so the highest-blast-radius change (permission-mode gate in M2) lands last on a stable base.
+
+### Divergences
+- **M1 `/theme`**: interactive arrow-key picker deferred — list mode + named-set used (`/theme list`, `/theme <name>`). Sufficient for first iteration.
+- **M1 `/stats`**: dialog-routed (`stats` dialog kind) rather than a standalone screen, consistent with existing dialog patterns.
+- **M2 `/rewind`**: headless slash supports `/rewind` (list) + `/rewind <n>` (truncate); standalone `<MessageSelector>` component with tests but not yet wired into `App.tsx`'s dialog dispatcher — UI-mount is a follow-up.
+- **M2 file-checkpoint restore**: `restore()` returns `{ok:false, reason:'git-backed restore not yet implemented'}` even when the flag is on. Capture-side stores SHA1s; the destructive restore path is deliberately a stub for safety.
+- **M2 plan-mode order**: gate runs *before* the permission cache check so a remembered "allow write" rule cannot bypass plan mode (covered by an explicit test).
+- **M3 `SlashContext`**: extended with optional `mcpManager?` for `/ide` to mutate the live manager — backward-compatible.
+- **M3 `McpManager`**: gained `addServer`/`removeServer` (private `_removeClientByName`); name-collision is "close + recreate".
+
+### Out-of-scope follow-ups (queued for Phase 10)
+- Full file-checkpointing rewind (git-stash + checkout safety proof).
+- `/rewind` dialog wiring in App.tsx.
+- Heatmap calendar view for stats.
+- Theme animations / shimmer.
+- Polymorphic task system (long-running bash, MCP monitors, dream).
+- Ultraplan (remote CCR) — won't ship.
