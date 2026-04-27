@@ -279,9 +279,6 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           onCancel={() => { setMentionActive(false); setMentionQuery('') }}
         />
       )}
-      {slashActive && (
-        <SlashSuggest candidates={slashCandidates} selectedIndex={slashCursor} />
-      )}
       <Box
         borderStyle="round"
         borderColor={props.disabled ? P.muted : P.primary}
@@ -305,6 +302,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           </>
         )}
       </Box>
+      {slashActive && (
+        <SlashSuggest candidates={slashCandidates} selectedIndex={slashCursor} />
+      )}
     </Box>
   )
 }

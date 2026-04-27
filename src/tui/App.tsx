@@ -402,6 +402,7 @@ export function App(props: AppProps): React.JSX.Element {
         queueLength={session.queue.size()}
         mode={hintMode}
         sessionPluginCount={props.sessionPluginCount}
+        hiddenSegments={props.config.statusBar?.hidden ?? []}
       />
       <Hud
         providerId={session.providerId || '—'}

@@ -3,8 +3,8 @@ import { Box, Text } from 'ink'
 import { defaultPalette } from '../theme'
 
 // Original braille avocado mark. Each line is right-padded to the longest
-// line (15 cells) so the figure has a consistent rectangular bounding box
-// and adjacent columns don't shift between rows.
+// line so the figure has a consistent rectangular bounding box and adjacent
+// columns don't shift between rows.
 const RAW_LINES: ReadonlyArray<string> = [
   '⣶⣄⡀          ⢀⣴',
   '⣿⣿⣻⣷⣦⡀      ⣾⣿',

@@ -35,6 +35,12 @@ import { DoctorCommand } from './slash/doctor'
 import { RewindCommand } from './slash/rewind'
 import { TasksCommand } from './slash/tasks'
 import { TaskManager } from './core/tasks/manager'
+import { ThemeCommand } from './slash/theme'
+import { StatsCommand } from './slash/stats'
+import { PlanCommand } from './slash/plan'
+import { IdeCommand } from './slash/ide'
+import { StatusBarCommand } from './slash/statusBar'
+import { createPluginCommand } from './slash/plugin'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -376,7 +382,32 @@ async function runInteractive(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand, RewindCommand, TasksCommand].forEach(c => slash.register(c))
+  ;[
+    ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand,
+    CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand,
+    HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand,
+    RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
+    StatusBarCommand,
+  ].forEach(c => slash.register(c))
+  // /plugin slash dispatches to subcommands. Heavy operations
+  // (install/update from the marketplace) live as top-level CLI subcommands;
+  // the slash version stubs them with a hint so users don't get silent failures.
+  slash.register(createPluginCommand({
+    list: async () => {
+      const all = await loadPlugins({ home: os.homedir() })
+      return all.map(p => ({
+        name: p.manifest.name,
+        version: p.manifest.version,
+        description: p.manifest.description,
+        enabled: true,
+      }))
+    },
+    search: async () => [],
+    install: async (n) => { throw new Error(`run \`nuka plugin install ${n}\` from the shell`) },
+    uninstall: async (n) => { throw new Error(`uninstall via \`rm -rf ~/.nuka/plugins/${n}\``) },
+    enable: async () => { throw new Error('plugin enable: edit ~/.nuka/config.yaml plugins.enabled') },
+    update: async () => ({ changed: false }),
+  }))
 
   // Phase 10 §4.3 — singleton TaskManager for the lifetime of the CLI process.
   const taskManager = new TaskManager({ home: os.homedir() })

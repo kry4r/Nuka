@@ -117,6 +117,19 @@ export const StatusLineConfigSchema = z
   .optional()
 export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
 
+/**
+ * `/status-bar` — controls which categorised segments render in the bottom
+ * StatusBar. `hidden` is a list of segment names; everything else shows.
+ * Known segment names: model, cwd, git, ctx, cost, mcp, auto, queue, tasks,
+ * plugins, hint. Unknown names are ignored.
+ */
+export const StatusBarConfigSchema = z
+  .object({
+    hidden: z.array(z.string()).default([]),
+  })
+  .optional()
+export type StatusBarConfig = z.infer<typeof StatusBarConfigSchema>
+
 export const RewindConfigSchema = z
   .object({
     /**
@@ -140,6 +153,7 @@ export const ConfigSchema = z.object({
   vim: VimConfigSchema,
   rewind: RewindConfigSchema,
   statusLine: StatusLineConfigSchema,
+  statusBar: StatusBarConfigSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.

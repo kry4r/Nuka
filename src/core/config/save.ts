@@ -64,6 +64,14 @@ export async function saveTheme(home: string, themeName: string): Promise<void> 
   await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
 }
 
+export async function saveStatusBarHidden(home: string, hidden: string[]): Promise<void> {
+  const obj = await readConfig(home)
+  obj.statusBar = { ...(obj.statusBar ?? {}), hidden }
+  await mkdir(path.join(home, '.nuka'), { recursive: true })
+  if (obj.active?.providerId) ConfigSchema.parse(obj)
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+}
+
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
