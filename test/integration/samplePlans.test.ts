@@ -18,6 +18,7 @@ const PLANS = [
   '03-theme-switch.yaml',
   '04-stats-view.yaml',
   '05-plan-mode-lockout.yaml',
+  '06-slash-text-output.yaml',
 ]
 
 describe('sample plans', () => {

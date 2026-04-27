@@ -41,6 +41,8 @@ import { PlanCommand } from './slash/plan'
 import { IdeCommand } from './slash/ide'
 import { StatusBarCommand } from './slash/statusBar'
 import { createPluginCommand } from './slash/plugin'
+import { SkillCommand } from './slash/skill'
+import { McpCommand } from './slash/mcp'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -387,7 +389,7 @@ async function runInteractive(): Promise<void> {
     CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand,
     HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
-    StatusBarCommand,
+    StatusBarCommand, SkillCommand, McpCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
   // (install/update from the marketplace) live as top-level CLI subcommands;

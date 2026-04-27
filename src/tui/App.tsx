@@ -30,6 +30,9 @@ import { resolveTheme } from '../core/theme/themes'
 import { StatsView } from './Stats/StatsView'
 import { DoctorReport } from './Doctor/DoctorReport'
 import { MessageSelector } from './Rewind/MessageSelector'
+import { Wizard } from './Onboarding/Wizard'
+import { saveWizardPatch } from '../core/onboarding/save'
+import os from 'node:os'
 import { StatusLine } from './StatusLine/StatusLine'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
@@ -85,6 +88,7 @@ type Dialog =
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
   | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
+  | { kind: 'onboarding-wizard' }
 
 export type AppProps = {
   sessions: SessionManager
@@ -180,6 +184,7 @@ export function App(props: AppProps): React.JSX.Element {
         config: props.config,
         costTracker: props.costTracker,
         taskManager: props.taskManager,
+        mcpManager: props.mcpManager,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {
@@ -192,6 +197,16 @@ export function App(props: AppProps): React.JSX.Element {
         }
       }
       else if (res.type === 'effect') await handleSlashEffect(res.effect)
+      else if (res.type === 'text') {
+        // Render the slash output as an inline assistant-styled message so
+        // the user can see what /status-bar, /vim, /tasks, etc. returned.
+        session.messages.push({
+          role: 'assistant',
+          content: [{ type: 'text', text: `[/${parsed.name}]\n${res.text}` }],
+          id: `slash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          ts: Date.now(),
+        })
+      }
       return
     }
 
@@ -327,7 +342,7 @@ export function App(props: AppProps): React.JSX.Element {
             session.model = model
             setDialog(null)
           }}
-          onAddProvider={() => { /* Phase 1: no-op stub; wizard lives in a follow-up */ setDialog(null) }}
+          onAddProvider={() => setDialog({ kind: 'onboarding-wizard' })}
           onRefresh={async (providerId) => props.providers.fetchRemoteModels(providerId)}
           onCancel={() => setDialog(null)}
         />
@@ -345,6 +360,15 @@ export function App(props: AppProps): React.JSX.Element {
       )}
       {dialog?.kind === 'doctor' && (
         <DoctorReport report={dialog.report} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === 'onboarding-wizard' && (
+        <Wizard
+          onDone={async (patch) => {
+            try { await saveWizardPatch(os.homedir(), patch) } catch { /* ignore */ }
+            setDialog(null)
+          }}
+          onCancel={() => setDialog(null)}
+        />
       )}
       {dialog?.kind === 'message-selector' && (
         <MessageSelector

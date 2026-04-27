@@ -144,9 +144,12 @@ describe('mountApp({ target: "app", slash })', () => {
       // mounted-app: the prompt input clears after a successful slash
       // submit.
       await h.waitFor({ notContains: '/plan on' }, 500)
-      // Sanity: still rendering the app, not crashed.
+      // Phase 11 — slash text-results are now rendered into the message
+      // stream as `[/<name>]\n...`, replacing the Welcome banner. Assert
+      // both the rendered tag and the banner from PlanCommand.
       const f = h.frames().pop() ?? ''
-      expect(f).toContain('NUKA')
+      expect(f).toContain('[/plan]')
+      expect(f).toContain('Plan mode ON')
     } finally {
       h.unmount()
     }

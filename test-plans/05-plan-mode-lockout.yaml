@@ -40,7 +40,11 @@ steps:
       timeoutMs: 1500
   - assert:
       notContains: "/plan on"
+  # Phase 11 — text results from slashes now render in the message
+  # stream; assert the rendered tag plus the banner from PlanCommand.
   - assert:
-      contains: "NUKA"
+      contains: "[/plan]"
+  - assert:
+      contains: "Plan mode ON"
 cleanup:
   unmount: true

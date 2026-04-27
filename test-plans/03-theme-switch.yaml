@@ -45,7 +45,10 @@ steps:
       timeoutMs: 1500
   - assert:
       notContains: "/theme list"
+  # Phase 11 — text results from slashes are now rendered into the
+  # message stream as `[/theme]\n...` blocks; the Welcome banner is
+  # replaced by Messages once the first message lands.
   - assert:
-      contains: "NUKA"
+      contains: "[/theme]"
 cleanup:
   unmount: true

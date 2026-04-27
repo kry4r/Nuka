@@ -1,0 +1,19 @@
+name: 06-slash-text-output
+description: |
+  Type a slash command that returns text and verify the output is rendered
+  in the message stream. Catches regressions where the App swallows the
+  text branch of the SlashResult discriminated union.
+
+setup:
+  slash:
+    - StatusBarCommand
+    - HelpCommand
+
+steps:
+  - render: app
+  - keystroke: '/help'
+  - wait: { ms: 30 }
+  - keystroke: "\r"
+  - wait: { ms: 50 }
+  - assert: { contains: '/help' }
+  - assert: { contains: 'help' }
