@@ -26,16 +26,23 @@ function mockFetch(opts: {
 }
 
 describe('PROVIDER_TEMPLATES', () => {
-  it('exports anthropic + openai with the required shape', () => {
-    expect(PROVIDER_TEMPLATES).toHaveLength(2)
+  it('exports anthropic + openai + custom with the required shape', () => {
+    expect(PROVIDER_TEMPLATES).toHaveLength(3)
     const ids = PROVIDER_TEMPLATES.map(t => t.id).sort()
-    expect(ids).toEqual(['anthropic', 'openai'])
+    expect(ids).toEqual(['anthropic', 'custom', 'openai'])
     for (const t of PROVIDER_TEMPLATES) {
-      expect(t.defaultModel.length).toBeGreaterThan(0)
-      expect(t.defaultModels.length).toBeGreaterThan(0)
-      expect(t.defaultModels).toContain(t.defaultModel)
-      expect(t.apiKeyEnvVar).toMatch(/_API_KEY$/)
-      expect(t.helpUrl).toMatch(/^https?:\/\//)
+      if (t.id === 'custom') {
+        // Free-form template — fields filled in by the customDetails screen.
+        expect(t.defaultModel).toBe('')
+        expect(t.defaultModels).toHaveLength(0)
+        expect(t.helpUrl).toMatch(/^https?:\/\//)
+      } else {
+        expect(t.defaultModel.length).toBeGreaterThan(0)
+        expect(t.defaultModels.length).toBeGreaterThan(0)
+        expect(t.defaultModels).toContain(t.defaultModel)
+        expect(t.apiKeyEnvVar).toMatch(/_API_KEY$/)
+        expect(t.helpUrl).toMatch(/^https?:\/\//)
+      }
     }
   })
 })

@@ -30,6 +30,8 @@ type LocalUI = {
   cursor: number
   /** typed buffer for apiKey */
   keyBuf: string
+  /** typed buffers + active field index for customDetails */
+  custom: { name: string; baseUrl: string; model: string; format: 'anthropic' | 'openai'; field: 0 | 1 | 2 | 3 }
 }
 
 export function Wizard(props: {
@@ -42,7 +44,11 @@ export function Wizard(props: {
   initial?: WizardState
 }): React.JSX.Element {
   const [state, dispatch] = useReducer(reducer, props.initial ?? initialState())
-  const [ui, setUi] = useState<LocalUI>({ cursor: 0, keyBuf: '' })
+  const [ui, setUi] = useState<LocalUI>({
+    cursor: 0,
+    keyBuf: '',
+    custom: { name: '', baseUrl: '', model: '', format: 'openai', field: 0 },
+  })
 
   const stateRef = useRef(state)
   stateRef.current = state
@@ -65,7 +71,7 @@ export function Wizard(props: {
         state.kind === 'pickModel' && state.selected
           ? Math.max(0, state.models.indexOf(state.selected))
           : 0
-      setUi({ cursor: seedCursor, keyBuf: seedKey })
+      setUi(prev => ({ ...prev, cursor: seedCursor, keyBuf: seedKey }))
     }
   }, [state])
 
@@ -90,6 +96,59 @@ export function Wizard(props: {
           const t = s.choices[u.cursor]
           if (t) dispatch({ type: 'pickedProvider', template: t })
         } else if (key.leftArrow) dispatch({ type: 'back' })
+        return
+      }
+      case 'customDetails': {
+        // Tab cycles fields, Enter advances when all required fields filled.
+        if (key.tab) {
+          setUi(prev => ({
+            ...prev,
+            custom: { ...prev.custom, field: ((prev.custom.field + 1) % 4) as 0 | 1 | 2 | 3 },
+          }))
+          return
+        }
+        if (key.return) {
+          const c = u.custom
+          if (!c.baseUrl.trim() || !c.model.trim()) return
+          dispatch({
+            type: 'enteredCustom',
+            details: {
+              name: c.name.trim() || 'Custom',
+              format: c.format,
+              baseUrl: c.baseUrl.trim(),
+              model: c.model.trim(),
+            },
+          })
+          return
+        }
+        if (key.leftArrow) { dispatch({ type: 'back' }); return }
+        if (key.backspace || key.delete) {
+          setUi(prev => {
+            const f = prev.custom.field
+            const c = { ...prev.custom }
+            if (f === 0) c.name = c.name.slice(0, -1)
+            else if (f === 1) c.baseUrl = c.baseUrl.slice(0, -1)
+            else if (f === 2) c.model = c.model.slice(0, -1)
+            return { ...prev, custom: c }
+          })
+          return
+        }
+        if (u.custom.field === 3) {
+          // Format toggle: 'a' / 'o' / left-right.
+          if (input === 'a') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'anthropic' } }))
+          else if (input === 'o') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'openai' } }))
+          return
+        }
+        if (input && !key.ctrl && !key.meta) {
+          setUi(prev => {
+            const f = prev.custom.field
+            const c = { ...prev.custom }
+            if (f === 0) c.name = c.name + input
+            else if (f === 1) c.baseUrl = c.baseUrl + input
+            else if (f === 2) c.model = c.model + input
+            return { ...prev, custom: c }
+          })
+        }
         return
       }
       case 'apiKey': {
@@ -170,6 +229,9 @@ export function Wizard(props: {
   if (state.kind === 'pickProvider') {
     return <PickProvider choices={state.choices} cursor={ui.cursor} />
   }
+  if (state.kind === 'customDetails') {
+    return <CustomDetailsScreen ui={ui.custom} />
+  }
   if (state.kind === 'apiKey') {
     return <EnterKey provider={state.provider} value={ui.keyBuf} />
   }
@@ -198,6 +260,34 @@ function Welcome(): React.JSX.Element {
       <Text color={P.primary} bold>Welcome to Nuka</Text>
       <Text color={P.fg}>Let's get a provider configured so you can start chatting.</Text>
       <Text color={P.muted}>Press Enter to begin · Esc to cancel</Text>
+    </Box>
+  )
+}
+
+function CustomDetailsScreen(props: {
+  ui: { name: string; baseUrl: string; model: string; format: 'anthropic' | 'openai'; field: 0 | 1 | 2 | 3 }
+}): React.JSX.Element {
+  const { ui: u } = props
+  const Field = (i: 0 | 1 | 2 | 3, label: string, val: string, hint?: string) => (
+    <Box>
+      <Box width={10}>
+        <Text color={u.field === i ? P.primary : P.muted} bold={u.field === i}>{label}</Text>
+      </Box>
+      <Text color={P.muted}>│ </Text>
+      <Text color={P.fg}>{val}</Text>
+      {u.field === i && <Text color={P.fg} inverse> </Text>}
+      {hint && <Text color={P.muted}>  {hint}</Text>}
+    </Box>
+  )
+  return (
+    <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
+      <Text color={P.primary} bold>Custom provider</Text>
+      <Text color={P.muted}>Tab switches fields · Enter to confirm · Esc to cancel</Text>
+      <Box height={1} />
+      {Field(0, 'name',    u.name || '(Custom)')}
+      {Field(1, 'baseUrl', u.baseUrl, 'e.g. https://api.openai.com/v1')}
+      {Field(2, 'model',   u.model,   'e.g. gpt-4o or claude-sonnet-4-6')}
+      {Field(3, 'format',  u.format,  'press a/o for anthropic/openai')}
     </Box>
   )
 }

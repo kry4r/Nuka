@@ -4,7 +4,7 @@
 // Each template carries enough info to render the picker, prefill
 // sensible defaults, and run a cheap "is this key valid?" probe.
 
-export type ProviderTemplateId = 'anthropic' | 'openai'
+export type ProviderTemplateId = 'anthropic' | 'openai' | 'custom'
 
 export type ProviderTemplate = {
   /** stable, machine-readable id */
@@ -53,6 +53,17 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     ],
     apiKeyEnvVar: 'OPENAI_API_KEY',
     helpUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    // Free-form provider — user supplies the name, baseUrl, format and model.
+    id: 'custom',
+    type: 'openai',
+    name: 'Custom (OpenAI-compatible)',
+    baseUrl: '',
+    defaultModel: '',
+    defaultModels: [],
+    apiKeyEnvVar: '',
+    helpUrl: 'https://github.com/kry4r/Nuka#custom-providers',
   },
 ]
 

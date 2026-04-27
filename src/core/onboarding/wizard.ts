@@ -27,6 +27,7 @@ export type ConfigPatch = {
 export type WizardKind =
   | 'welcome'
   | 'pickProvider'
+  | 'customDetails'
   | 'apiKey'
   | 'pickModel'
   | 'verifying'
@@ -34,10 +35,19 @@ export type WizardKind =
   | 'error'
   | 'cancelled'
 
+/** Free-form fields filled in for the 'custom' template. */
+export type CustomDetails = {
+  name: string
+  format: 'anthropic' | 'openai'
+  baseUrl: string
+  model: string
+}
+
 export type WizardState =
   | { kind: 'welcome' }
   | { kind: 'pickProvider'; choices: ProviderTemplate[] }
-  | { kind: 'apiKey'; provider: ProviderTemplate; key: string }
+  | { kind: 'customDetails'; provider: ProviderTemplate; details: CustomDetails }
+  | { kind: 'apiKey'; provider: ProviderTemplate; key: string; custom?: CustomDetails }
   | {
       kind: 'pickModel'
       provider: ProviderTemplate
@@ -66,6 +76,7 @@ export type WizardState =
 export type WizardEvent =
   | { type: 'start' }
   | { type: 'pickedProvider'; template: ProviderTemplate }
+  | { type: 'enteredCustom'; details: CustomDetails }
   | { type: 'enteredKey'; key: string }
   | { type: 'pickedModel'; model: string }
   | { type: 'probeOk'; models?: string[] }
@@ -91,15 +102,47 @@ export function reducer(state: WizardState, ev: WizardEvent): WizardState {
 
     case 'pickProvider': {
       if (ev.type === 'pickedProvider') {
+        if (ev.template.id === 'custom') {
+          return {
+            kind: 'customDetails',
+            provider: ev.template,
+            details: { name: '', format: 'openai', baseUrl: '', model: '' },
+          }
+        }
         return { kind: 'apiKey', provider: ev.template, key: '' }
       }
       if (ev.type === 'back') return { kind: 'welcome' }
       return state
     }
 
+    case 'customDetails': {
+      if (ev.type === 'enteredCustom') {
+        const provider: ProviderTemplate = {
+          ...state.provider,
+          name: ev.details.name || state.provider.name,
+          type: ev.details.format,
+          baseUrl: ev.details.baseUrl,
+          defaultModel: ev.details.model,
+          defaultModels: ev.details.model ? [ev.details.model] : [],
+        }
+        return { kind: 'apiKey', provider, key: '', custom: ev.details }
+      }
+      if (ev.type === 'back') return { kind: 'pickProvider', choices: PROVIDER_TEMPLATES }
+      return state
+    }
+
     case 'apiKey': {
       if (ev.type === 'enteredKey') {
         const key = ev.key
+        // Custom flow skips pickModel — model already chosen in customDetails.
+        if (state.custom) {
+          return {
+            kind: 'verifying',
+            provider: state.provider,
+            key,
+            model: state.custom.model || state.provider.defaultModel,
+          }
+        }
         return {
           kind: 'pickModel',
           provider: state.provider,
@@ -109,6 +152,9 @@ export function reducer(state: WizardState, ev: WizardEvent): WizardState {
         }
       }
       if (ev.type === 'back') {
+        if (state.custom) {
+          return { kind: 'customDetails', provider: state.provider, details: state.custom }
+        }
         return { kind: 'pickProvider', choices: PROVIDER_TEMPLATES }
       }
       return state
