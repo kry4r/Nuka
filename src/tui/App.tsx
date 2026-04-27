@@ -125,6 +125,9 @@ export function App(props: AppProps): React.JSX.Element {
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
   const [mcpTick, setMcpTick] = useState(0)
+  // Bumped whenever we mutate session.messages directly so React re-renders.
+  const [, setMessageTick] = useState(0)
+  const bumpMessages = useCallback(() => setMessageTick(t => t + 1), [])
   const pendingAttachments = useRef<string[]>([])
 
   useEffect(() => {
@@ -206,6 +209,7 @@ export function App(props: AppProps): React.JSX.Element {
           id: `slash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           ts: Date.now(),
         })
+        bumpMessages()
       }
       return
     }
