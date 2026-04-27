@@ -22,6 +22,8 @@ export type PromptInputProps = {
   vim?: boolean
   /** Slash registry — when provided, typing `/` shows command suggestions. */
   slash?: SlashRegistry
+  /** Notified whenever the slash submenu opens/closes; lets parent hide chrome. */
+  onSlashActiveChange?: (active: boolean) => void
 }
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
@@ -44,6 +46,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   useEffect(() => {
     if (slashCursor > slashCandidates.length - 1) setSlashCursor(0)
   }, [slashCandidates.length, slashCursor])
+  useEffect(() => {
+    props.onSlashActiveChange?.(slashActive)
+  }, [slashActive, props.onSlashActiveChange])
 
   // Vim controller state (only used when props.vim is true).
   const vimRef = useRef<VimState>(makeState(props.value, 'insert'))

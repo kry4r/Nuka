@@ -128,6 +128,11 @@ export function App(props: AppProps): React.JSX.Element {
   // Bumped whenever we mutate session.messages directly so React re-renders.
   const [, setMessageTick] = useState(0)
   const bumpMessages = useCallback(() => setMessageTick(t => t + 1), [])
+  // True while the PromptInput's slash submenu is open. While true we
+  // hide StatusBar / Hud so the dropdown doesn't push them off-screen
+  // (mirrors Nuka-Code's PromptInputFooter: when suggestions are shown,
+  // the rest of the footer is replaced).
+  const [slashOpen, setSlashOpen] = useState(false)
   const pendingAttachments = useRef<string[]>([])
 
   useEffect(() => {
@@ -416,38 +421,43 @@ export function App(props: AppProps): React.JSX.Element {
         onAttachFile={p => { pendingAttachments.current.push(p) }}
         vim={props.config.vim?.enabled === true}
         slash={props.slash}
+        onSlashActiveChange={setSlashOpen}
       />
-      <StatusBar
-        model={session.model}
-        cwd={props.cwd}
-        gitBranch={props.gitBranch}
-        contextUsed={contextUsed}
-        contextMax={contextMax}
-        cost={cost}
-        mcpCount={mcpCount}
-        mcpHealth={mcpHealth}
-        autoMode="off"
-        queueLength={session.queue.size()}
-        mode={hintMode}
-        sessionPluginCount={props.sessionPluginCount}
-        hiddenSegments={props.config.statusBar?.hidden ?? []}
-      />
-      <Hud
-        providerId={session.providerId || '—'}
-        model={session.model}
-        sessionId={session.id}
-        contextUsed={contextUsed}
-        contextMax={contextMax}
-        inputTokens={session.totalUsage.inputTokens}
-        outputTokens={session.totalUsage.outputTokens}
-        pluginCount={props.pluginCount ?? 0}
-        agentInFlight={props.agentInFlight ?? 0}
-        gitBranch={props.gitBranch?.branch ?? null}
-        costTracker={props.costTracker}
-        tick={mcpTick}
-        taskManager={props.taskManager}
-      />
-      {props.config.statusLine && (
+      {!slashOpen && (
+        <StatusBar
+          model={session.model}
+          cwd={props.cwd}
+          gitBranch={props.gitBranch}
+          contextUsed={contextUsed}
+          contextMax={contextMax}
+          cost={cost}
+          mcpCount={mcpCount}
+          mcpHealth={mcpHealth}
+          autoMode="off"
+          queueLength={session.queue.size()}
+          mode={hintMode}
+          sessionPluginCount={props.sessionPluginCount}
+          hiddenSegments={props.config.statusBar?.hidden ?? []}
+        />
+      )}
+      {!slashOpen && (
+        <Hud
+          providerId={session.providerId || '—'}
+          model={session.model}
+          sessionId={session.id}
+          contextUsed={contextUsed}
+          contextMax={contextMax}
+          inputTokens={session.totalUsage.inputTokens}
+          outputTokens={session.totalUsage.outputTokens}
+          pluginCount={props.pluginCount ?? 0}
+          agentInFlight={props.agentInFlight ?? 0}
+          gitBranch={props.gitBranch?.branch ?? null}
+          costTracker={props.costTracker}
+          tick={mcpTick}
+          taskManager={props.taskManager}
+        />
+      )}
+      {!slashOpen && props.config.statusLine && (
         <StatusLine
           config={props.config.statusLine}
           ctx={{

@@ -31,6 +31,54 @@ describe('PromptInput slash dropdown', () => {
     }
   })
 
+  it('hides the StatusBar / Hud while the submenu is open', async () => {
+    const slash = new SlashRegistry()
+    slash.register(HelpCommand)
+    slash.register(ExitCommand)
+
+    const h = mountApp({ target: 'app', slash })
+    try {
+      await wait()
+      // Baseline frame includes the categorised StatusBar labels (session/runtime/hint).
+      const baseline = h.frames().pop() ?? ''
+      expect(baseline).toMatch(/session|runtime|hint/)
+      // Open the submenu.
+      h.stdin.write('/')
+      await wait()
+      const open = h.frames().pop() ?? ''
+      expect(open).toContain('/help')
+      // While open, the categorised status bar rows are gone.
+      expect(open).not.toMatch(/session\s+⬢|runtime\s+\d/)
+      // Close the submenu.
+      h.stdin.write('\u007F') // backspace
+      await wait()
+      const closed = h.frames().pop() ?? ''
+      expect(closed).toMatch(/session|runtime|hint/)
+    } finally {
+      h.unmount()
+    }
+  })
+
+  it('lists /mcp and /skill when those slashes are registered', async () => {
+    const { McpCommand } = await import('../../../src/slash/mcp')
+    const { SkillCommand } = await import('../../../src/slash/skill')
+    const slash = new SlashRegistry()
+    slash.register(McpCommand)
+    slash.register(SkillCommand)
+    slash.register(HelpCommand)
+    const h = mountApp({ target: 'app', slash })
+    try {
+      await wait()
+      h.stdin.write('/')
+      await wait()
+      const frame = h.frames().pop() ?? ''
+      expect(frame).toContain('/mcp')
+      expect(frame).toContain('/skill')
+    } finally {
+      h.unmount()
+    }
+  })
+
   it('paginates beyond the visible window when many commands registered', async () => {
     const slash = new SlashRegistry()
     // Register 20 dummy commands so the dropdown must scroll.

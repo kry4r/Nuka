@@ -99,15 +99,18 @@ export function Wizard(props: {
         return
       }
       case 'customDetails': {
-        // Tab cycles fields, Enter advances when all required fields filled.
-        if (key.tab) {
+        // ↑/↓ or Tab cycle fields. Enter on the LAST field submits;
+        // Enter on any other field moves to the next.
+        const cycleField = (delta: number) =>
           setUi(prev => ({
             ...prev,
-            custom: { ...prev.custom, field: ((prev.custom.field + 1) % 4) as 0 | 1 | 2 | 3 },
+            custom: { ...prev.custom, field: (((prev.custom.field + delta) % 4 + 4) % 4) as 0 | 1 | 2 | 3 },
           }))
-          return
-        }
+        if (key.upArrow) { cycleField(-1); return }
+        if (key.downArrow || key.tab) { cycleField(1); return }
         if (key.return) {
+          // Enter on a non-final field acts like ↓.
+          if (u.custom.field < 3) { cycleField(1); return }
           const c = u.custom
           if (!c.baseUrl.trim() || !c.model.trim()) return
           dispatch({
@@ -134,9 +137,9 @@ export function Wizard(props: {
           return
         }
         if (u.custom.field === 3) {
-          // Format toggle: 'a' / 'o' / left-right.
-          if (input === 'a') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'anthropic' } }))
-          else if (input === 'o') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'openai' } }))
+          // Format toggle on the last field — type 'a' for anthropic, 'o' for openai.
+          if (input === 'a' || input === 'A') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'anthropic' } }))
+          else if (input === 'o' || input === 'O') setUi(prev => ({ ...prev, custom: { ...prev.custom, format: 'openai' } }))
           return
         }
         if (input && !key.ctrl && !key.meta) {
@@ -282,7 +285,7 @@ function CustomDetailsScreen(props: {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Custom provider</Text>
-      <Text color={P.muted}>Tab switches fields · Enter to confirm · Esc to cancel</Text>
+      <Text color={P.muted}>↑/↓ switches fields · Enter advances/confirms · Esc to cancel</Text>
       <Box height={1} />
       {Field(0, 'name',    u.name || '(Custom)')}
       {Field(1, 'baseUrl', u.baseUrl, 'e.g. https://api.openai.com/v1')}
