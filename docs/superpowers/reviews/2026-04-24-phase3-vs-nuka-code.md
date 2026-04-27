@@ -556,3 +556,50 @@ Spec target was ≤ 360 KB; actual **361.4 KB** — 0.4 % over. The overage is t
 - Bundle split: production CLI vs. testing helpers, to bring the production bundle back under 320 KB.
 - Plan recording mode (capture user keystrokes in a live session and emit a YAML plan).
 - Per-step retry / `flaky: true` annotations.
+
+---
+
+## Appendix — Phase 10 Gap Closure
+
+Phase 10 (bundle split + harness routing + task system + doctor + statusline + rewind UI) landed via three parallel worktrees merged in order M1 → M3 → M2. Post-merge: `npm test` **1246 passing** (1159 baseline + 87 new), `npm run typecheck` clean, `dist/cli.js` **256 KB**, `dist/test-runner.js` **215 KB**.
+
+| Task ID | Feature | Landing commit |
+|---|---|---|
+| 10.1.a | Build-script split (cli.js + test-runner.js); minifyWhitespace dropped CLI to 237 KB pre-merge | `25cc1d6` |
+| 10.1.b | `cli.tsx` lazy-imports `dist/test-runner.js` via `import.meta.url`; src fallback for `tsx` mode | `c91c7b1` |
+| 10.2.a | `mountApp({slash})` + `setRawMode` shim + `runPlan({slash})` | `138f356` |
+| 10.2.b | Four sample plan upgrades (real wizard, /theme list, /plan on banner, /stats dialog kind) | `4343776` |
+| 10.3.a | Task types + persist + manager + run-bash | `4ed61c0` |
+| 10.3.b | Run-agent + monitor-mcp via injected async-iterables | `b1f4a6e` |
+| 10.3.c | `/tasks list/show/cancel` + HUD `tasks N` segment | `97e2b18` |
+| 10.4.a | Doctor diagnostics core (7 checks, 5s timeout, parallel) | `31df7b2` |
+| 10.4.b | `nuka doctor` subcommand + `/doctor` dialog | `8a5a284` |
+| 10.5.a | `/rewind` dialog wiring (`message-selector` kind in App.tsx) | `56f9c34` |
+| 10.5.b | StatusLine template + command-output customization | `62be98c` |
+
+Merge commits: `9631398` (M1), `9f65d02` (M3), `a7894e1` (M2). All commits authored as `Nidhog <Nidhogxt@outlook.com>`.
+
+### Bundle ceiling — closed
+Phase 9 ended at 361.4 KB (0.4 % over the 360 KB target). Phase 10 split the testing helpers into a separately-built lazy-loaded bundle (`dist/test-runner.js`); production `dist/cli.js` is now **256 KB** — well under the new 320 KB ceiling, and 105 KB smaller than Phase 9.
+
+### Divergences
+- **10.1**: Externalizing alone saved only 38 KB (361 → 323) — still 3 KB over ceiling. Added `minifyWhitespace: true, legalComments: 'none'` (no identifier minification, just whitespace + comments) which dropped to 237 KB at branch-tip; final `main` size 256 KB after M2/M3 merges.
+- **10.1**: `cli.tsx` test-plan branch uses `new URL('./test-runner.js', import.meta.url)` so esbuild can't statically resolve and inline the testing module. A try/catch fallback to `core/testing/cli-entry.ts` keeps `tsx src/cli.tsx --test-plan` working in dev mode.
+- **10.2.b plan downgrades** (still partial — expected and acceptable):
+  - `02-onboarding`: drives wizard via `target:'wizard'` and Enter — asserts "Choose a provider" appears (real effect).
+  - `03-theme-switch`: `/theme list` returns text but App doesn't surface text results in the frame; plan asserts on prompt-clear (only frame-visible side effect). YAML header points to `test/slash/theme.test.ts` for the actual theme-set flow.
+  - `05-plan-mode-lockout`: `/plan on` mutates session state but App has no banner UI; plan asserts on prompt-clear.
+- **10.3**: `local_agent` and `monitor_mcp` runners use injected async-iterables (`agentRunner`, `eventStream`) rather than directly coupling to `dispatchAgent`/`McpManager` — keeps tests trivial and decouples task-system from the rest of the agent pipeline.
+- **10.4**: Providers check does NOT call the real API — config-presence only (`ok` with configured count, `warn` if no resolver). Skipping the live probe avoids latency/cost in `/doctor` and CI; users get auth diagnostics from the Phase 7 `providerProbe` directly.
+- **10.4**: LSP check reports registered defs (not live `client.status`) since `LspClient` only acquires status after lazy-spawn on first file open. Calling status without spawning is impossible by design.
+- **10.5.a**: Headless `/rewind <n>` form preserved alongside the new `/rewind` dialog form; the message-selector dialog uses the existing `<MessageSelector>` component shipped in Phase 8.
+- **10.5.b**: `StatusLine` is opt-in via `config.statusLine`; mounts BENEATH the existing HUD rather than replacing it (preserves all Phase 7/8 HUD tests). Command-output via `child_process.exec` with 1s timeout; first line stripped.
+
+### Out-of-scope follow-ups (queued for Phase 11)
+- Plan recording mode (capture user keystrokes → emit YAML).
+- Per-step retry / `flaky: true` annotations in plans.
+- `nuka doctor --fix` auto-remediation.
+- Distributed task execution.
+- `/theme` interactive arrow-key picker.
+- Sandbox toggle.
+- Voice / buddy / remote-control gateway (won't ship).
