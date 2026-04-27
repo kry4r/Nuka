@@ -31,6 +31,8 @@ import { HistoryCommand } from './slash/history'
 import { MemdirCommand, setMemdirSynthCallable } from './slash/memdir'
 import { DeleteSessionCommand } from './slash/delete-session'
 import { VimCommand } from './slash/vim'
+import { DoctorCommand } from './slash/doctor'
+import { RewindCommand } from './slash/rewind'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -189,6 +191,45 @@ if (testPlanIdx !== -1) {
       process.exit(result.ok ? 0 : 1)
     } catch (err) {
       process.stderr.write(`test-plan failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
+} else if (argv[0] === 'doctor') {
+  // nuka doctor — environment diagnostics
+  ;(async () => {
+    try {
+      const { runDoctor } = await import('./core/doctor/run')
+      const report = await runDoctor({
+        home: os.homedir(),
+        cwd: process.cwd(),
+      })
+
+      const GREEN = '\x1b[32m'
+      const YELLOW = '\x1b[33m'
+      const RED   = '\x1b[31m'
+      const RESET = '\x1b[0m'
+
+      for (const check of report.checks) {
+        let icon: string
+        let color: string
+        if (check.status === 'ok') { icon = '✓'; color = GREEN }
+        else if (check.status === 'warn') { icon = '⚠'; color = YELLOW }
+        else { icon = '✗'; color = RED }
+        process.stdout.write(`  ${color}${icon}${RESET} ${check.name}: ${check.detail}\n`)
+        if (check.remedy) {
+          process.stdout.write(`      → ${check.remedy}\n`)
+        }
+      }
+      process.stdout.write('\n')
+      if (report.ok) {
+        process.stdout.write(`${GREEN}All checks passed.${RESET}\n`)
+        process.exit(0)
+      } else {
+        process.stdout.write(`${RED}Some checks failed.${RESET}\n`)
+        process.exit(1)
+      }
+    } catch (err) {
+      process.stderr.write(`doctor failed: ${(err as Error).message}\n`)
       process.exit(1)
     }
   })()
@@ -420,7 +461,7 @@ async function runInteractive(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand].forEach(c => slash.register(c))
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand, RewindCommand].forEach(c => slash.register(c))
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({

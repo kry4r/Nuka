@@ -9,6 +9,8 @@ export type DialogDescriptor =
   | { kind: 'config-editor' }
   | { kind: 'session-picker' }
   | { kind: 'stats' }
+  | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
+  | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
 
 export type SessionEffect =
   | { kind: 'new-session' }
