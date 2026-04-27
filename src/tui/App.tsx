@@ -31,6 +31,7 @@ import { StatsView } from './Stats/StatsView'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
 import type { ToolRegistry } from '../core/tools/registry'
+import type { TaskManager } from '../core/tasks/manager'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
@@ -103,6 +104,8 @@ export type AppProps = {
   pluginCount?: number
   /** Number of agents currently in flight (for HUD). */
   agentInFlight?: number
+  /** Phase 10 §4.3 — singleton task manager surfaced via SlashContext + HUD. */
+  taskManager?: TaskManager
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -171,6 +174,7 @@ export function App(props: AppProps): React.JSX.Element {
         providers: props.providers,
         config: props.config,
         costTracker: props.costTracker,
+        taskManager: props.taskManager,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {
@@ -389,6 +393,7 @@ export function App(props: AppProps): React.JSX.Element {
         gitBranch={props.gitBranch?.branch ?? null}
         costTracker={props.costTracker}
         tick={mcpTick}
+        taskManager={props.taskManager}
       />
     </Box>
     </ThemeProvider>

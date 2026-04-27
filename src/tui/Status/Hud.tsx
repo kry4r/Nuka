@@ -12,6 +12,7 @@ import { Box, Text } from 'ink'
 import { defaultPalette } from '../theme'
 import { useTheme } from '../../core/theme/context'
 import { useUsage, type UsageSource } from './useUsage'
+import type { TaskManager } from '../../core/tasks/manager'
 
 export type CostTrackerLike = {
   current(sessionId: string): { inputTokens?: number; outputTokens?: number; usd?: number } | null
@@ -32,6 +33,8 @@ export type HudProps = {
   costTracker?: CostTrackerLike
   /** Re-render trigger (e.g. agent event tick). */
   tick?: unknown
+  /** Phase 10 §4.3 — when set, render `tasks N` while N>0. */
+  taskManager?: TaskManager
 }
 
 function fmtTokens(n: number): string {
@@ -62,6 +65,18 @@ export function Hud(props: HudProps): React.JSX.Element {
   // Prefer theme context colors; fall back to the static default palette so
   // legacy tests (mounted without a ThemeProvider) continue to pass.
   const theme = useTheme()
+
+  // Phase 10 §4.3 — re-render on task state changes so `tasks N` stays live.
+  const [taskTick, setTaskTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!props.taskManager) return
+    return props.taskManager.on('change', () => setTaskTick(t => t + 1))
+  }, [props.taskManager])
+  void taskTick
+
+  const runningTasks = props.taskManager
+    ? props.taskManager.list().filter(t => t.state === 'running').length
+    : 0
   const P = {
     primary: theme.colors.accent,
     muted: theme.colors.muted,
@@ -108,6 +123,12 @@ export function Hud(props: HudProps): React.JSX.Element {
           <Text color={P.primary}>{fmtUsd(snap.costUsd)}</Text>
           {'   '}
           <Text color={P.muted}>plugins {props.pluginCount} · agents {props.agentInFlight} in-flight</Text>
+          {runningTasks > 0 && (
+            <>
+              {'   '}
+              <Text color={P.primary}>tasks {runningTasks}</Text>
+            </>
+          )}
           {'   '}
           <Text color={P.muted}>git:{branch}</Text>
         </Text>
