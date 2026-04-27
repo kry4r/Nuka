@@ -1,12 +1,14 @@
 // src/tui/PromptInput/PromptInput.tsx
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
 import { MentionPanel } from './MentionPanel'
+import { SlashSuggest } from './SlashSuggest'
 import { fuzzyFileSearch } from './fuzzyFileSearch'
 import { makeState, step, type State as VimState, type Key as VimKey } from '../../core/vim/controller'
 import { bufferToText } from '../../core/vim/mode'
+import type { SlashRegistry } from '../../slash/registry'
 
 export type PromptInputProps = {
   value: string
@@ -18,6 +20,8 @@ export type PromptInputProps = {
   onAttachFile?: (path: string) => void
   /** When true, route keystrokes through the vim controller. Defaults to false. */
   vim?: boolean
+  /** Slash registry — when provided, typing `/` shows command suggestions. */
+  slash?: SlashRegistry
 }
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
@@ -27,6 +31,19 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionMatches, setMentionMatches] = useState<string[]>([])
   const [mentionCursor, setMentionCursor] = useState(0)
+  const [slashCursor, setSlashCursor] = useState(0)
+
+  // Slash suggestion candidates: active iff value starts with `/` and registry given.
+  const slashCandidates = useMemo(() => {
+    if (!props.slash || !props.value.startsWith('/')) return []
+    const prefix = props.value.slice(1).split(/\s/)[0] ?? ''
+    if (props.value.includes(' ')) return [] // hide once user starts args
+    return props.slash.suggest(prefix).map(c => ({ name: c.name, description: c.description }))
+  }, [props.slash, props.value])
+  const slashActive = slashCandidates.length > 0
+  useEffect(() => {
+    if (slashCursor > slashCandidates.length - 1) setSlashCursor(0)
+  }, [slashCandidates.length, slashCursor])
 
   // Vim controller state (only used when props.vim is true).
   const vimRef = useRef<VimState>(makeState(props.value, 'insert'))
@@ -171,11 +188,46 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       return
     }
 
+    // Slash suggestion overlay: navigate / accept while active.
+    if (slashActive) {
+      if (key.upArrow) {
+        setSlashCursor(c => Math.max(0, c - 1))
+        return
+      }
+      if (key.downArrow) {
+        setSlashCursor(c => Math.min(slashCandidates.length - 1, c + 1))
+        return
+      }
+      if (key.tab) {
+        const chosen = slashCandidates[slashCursor]
+        if (chosen) props.onChange('/' + chosen.name + ' ')
+        return
+      }
+      if (key.escape) {
+        // Clearing the slash drops the suggestion; let the App-level esc handler
+        // run on the next keypress for primed-quit etc.
+        props.onChange('')
+        return
+      }
+      // Enter falls through to normal submit so the user can run the command
+      // they've typed (or the highlighted one if value matches a candidate).
+    }
+
     // Normal mode
     if (key.return) {
       if (props.value.trim()) {
-        history.push(props.value)
-        props.onSubmit(props.value)
+        // If a slash suggestion is highlighted and the typed text doesn't
+        // already exactly match a candidate, expand to the highlighted one.
+        let toSubmit = props.value
+        if (slashActive) {
+          const exact = slashCandidates.find(c => '/' + c.name === props.value)
+          if (!exact) {
+            const chosen = slashCandidates[slashCursor]
+            if (chosen) toSubmit = '/' + chosen.name
+          }
+        }
+        history.push(toSubmit)
+        props.onSubmit(toSubmit)
       }
       return
     }
@@ -226,6 +278,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           }}
           onCancel={() => { setMentionActive(false); setMentionQuery('') }}
         />
+      )}
+      {slashActive && (
+        <SlashSuggest candidates={slashCandidates} selectedIndex={slashCursor} />
       )}
       <Box
         borderStyle="round"

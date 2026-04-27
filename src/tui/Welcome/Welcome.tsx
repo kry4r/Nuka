@@ -14,21 +14,31 @@ export type WelcomeProps = {
 export function Welcome(props: WelcomeProps): React.JSX.Element {
   const { cwd, gitBranch, model, version, tip } = props
   const git = gitBranch
-    ? `${gitBranch.branch}${gitBranch.dirty ? ' *' : ' · clean'}`
+    ? `${gitBranch.branch}${gitBranch.dirty ? ' *' : ''}`
     : '(not a git repo)'
+
+  // Truncate cwd from the left so the leaf directory stays visible.
+  const cwdDisplay = cwd.length > 50 ? '…' + cwd.slice(cwd.length - 49) : cwd
+
   return (
     <Box flexDirection="column" paddingX={2} paddingY={1}>
       <Box>
         <Box marginRight={3}>
           <Logo />
         </Box>
-        <Box flexDirection="column">
-          <Text color={P.primary} bold>NUKA</Text>
-          <Text color={P.muted}>Avocado Agent · v{version}</Text>
+        <Box flexDirection="column" flexGrow={1}>
+          <Box>
+            <Text color={P.primary} bold>NUKA</Text>
+            <Text color={P.muted}>  Avocado Agent · v{version}</Text>
+          </Box>
           <Box height={1} />
-          <Text color={P.muted}>cwd   <Text color={P.fg}>{cwd}</Text></Text>
-          <Text color={P.muted}>git   <Text color={P.fg}>{git}</Text></Text>
-          <Text color={P.muted}>model <Text color={P.fg}>{model}</Text></Text>
+          <Row label="model" value={model} valueColor={P.primary} />
+          <Row label="cwd"   value={cwdDisplay} valueColor={P.fg} />
+          <Row
+            label="git"
+            value={git}
+            valueColor={gitBranch?.dirty ? P.warn : P.fg}
+          />
         </Box>
       </Box>
       <Box marginTop={1}>
@@ -37,10 +47,23 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
       </Box>
       <Box marginTop={1}>
         <Text color={P.muted}>
-          Type <Text color={P.primary}>/</Text> for commands,{' '}
-          <Text color={P.primary}>?</Text> for help, <Text color={P.primary}>esc</Text> to cancel.
+          Type <Text color={P.primary}>/</Text> for commands ·{' '}
+          <Text color={P.primary}>?</Text> for help ·{' '}
+          <Text color={P.primary}>esc</Text> to cancel
         </Text>
       </Box>
+    </Box>
+  )
+}
+
+function Row(props: { label: string; value: string; valueColor: string }): React.JSX.Element {
+  return (
+    <Box>
+      <Box width={7}>
+        <Text color={P.muted}>{props.label}</Text>
+      </Box>
+      <Text color={P.muted}>│ </Text>
+      <Text color={props.valueColor}>{props.value}</Text>
     </Box>
   )
 }

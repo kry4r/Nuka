@@ -387,6 +387,7 @@ export function App(props: AppProps): React.JSX.Element {
         cwd={props.cwd}
         onAttachFile={p => { pendingAttachments.current.push(p) }}
         vim={props.config.vim?.enabled === true}
+        slash={props.slash}
       />
       <StatusBar
         model={session.model}
