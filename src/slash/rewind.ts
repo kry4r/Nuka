@@ -54,12 +54,11 @@ export const RewindCommand: SlashCommand = {
 
     const trimmed = args.trim()
     if (trimmed === '') {
-      const lines = ['Last assistant messages (newest first):']
-      recent.forEach((m, i) => {
-        lines.push(`  ${i + 1}. ${firstLinePreview(m)}`)
-      })
-      lines.push('', 'Run `/rewind <n>` to truncate at the Nth entry.')
-      return { type: 'text', text: lines.join('\n') }
+      // No args → open interactive message-selector dialog in TUI
+      return {
+        type: 'dialog' as const,
+        dialog: { kind: 'message-selector' as const, messages: recent },
+      }
     }
 
     const n = Number.parseInt(trimmed, 10)
