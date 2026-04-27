@@ -1,30 +1,46 @@
 # 05-plan-mode-lockout.yaml
 #
-# DOWNGRADE NOTE: A full plan-mode lockout test would type "/plan on", wait
-# for the banner to appear, then verify that sending a message is blocked.
-# The headless harness has no slash commands registered (empty SlashRegistry),
-# so /plan never fires. Instead, we demonstrate the keystroke-reaches-input
-# surface: type "/plan on" and assert the literal characters appear, which
-# confirms the input pipeline is live. Document the upgrade path in comments.
+# Phase 10 §4.2 — partial upgrade.
 #
-# UPGRADE PATH: Once SlashRegistry in the harness is pre-populated with the
-# plan-mode command, replace the assert below with:
-#   - slash: "plan on"
-#   - assert: { contains: "Plan mode" }
-name: "plan mode lockout (downgraded)"
+# /plan on flips session.mode = 'plan' and returns a text result
+# ("Plan mode ON — writes/exec are blocked until /plan apply.").
+# The current App does NOT render plan-mode in the StatusBar/HUD, and
+# slash text-results are not surfaced into the rendered frame either —
+# only `dialog` and `effect` results are observable. So we cannot
+# assert the "Plan mode ON" banner against the frame.
+#
+# What we CAN observe end-to-end is the slash dispatch itself: after
+# submitting /plan on the PromptInput value clears (because the
+# command was routed and run by SlashRegistry rather than buffered as
+# user-message text). That clear is the visible side effect the
+# harness can witness.
+#
+# DOWNGRADE NOTE: A full plan-mode lockout test would assert a banner
+# in the rendered frame AND attempt to send a normal message and see
+# it blocked. The UI banner and the message-block path are tracked in
+# the unit-test suite at test/slash/plan.test.ts for now; this plan
+# only verifies the slash routing reaches PlanCommand.run.
+name: "plan-mode slash routes through registry"
 description: >
-  Demonstrates the /plan on surface by typing the command literal and
-  asserting it appears in the input buffer. Downgraded from full plan-mode
-  activation because slash commands are not registered in the headless harness.
+  Renders the app, types /plan on, submits it, and asserts the prompt
+  no longer contains the typed string (it was consumed by the slash
+  dispatcher). Banner-rendering for plan mode is deferred (no UI yet).
+setup:
+  slash:
+    - PlanCommand
 steps:
   - render: app
   - assert:
       contains: "NUKA"
-  # Type the /plan on command — appears in the prompt input.
-  - keystroke: "/plan on"
+  - slash: "plan on"
+  # After Enter the prompt clears because the slash was dispatched.
   - wait:
-      ms: 50
+      until:
+        notContains: "/plan on"
+      timeoutMs: 1500
   - assert:
-      contains: "/plan on"
+      notContains: "/plan on"
+  - assert:
+      contains: "NUKA"
 cleanup:
   unmount: true

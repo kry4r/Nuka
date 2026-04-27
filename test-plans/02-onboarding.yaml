@@ -1,23 +1,34 @@
 # 02-onboarding.yaml
 #
-# Exercises the onboarding wizard (target: wizard). The wizard is a standalone
-# Ink component that does not require a full App or provider. The first screen
-# shows "Welcome to Nuka".
+# Phase 10 §4.2 — onboarding wizard, fully upgraded.
 #
-# DOWNGRADE NOTE: Advancing beyond the welcome screen requires Enter to
-# register via ink-testing-library. The harness header documents that
-# `useInput` does not always receive a real `setRawMode`, so keystroke
-# navigation can be swallowed. We therefore only assert the welcome banner
-# rather than navigating further. This still demonstrates the wizard surface
-# and proves mountApp({ target: 'wizard' }) works end-to-end.
-name: "onboarding wizard welcome screen"
+# The setRawMode shim added in 10.2.a lets useInput consumers receive
+# real keystrokes from ink-testing-library. We now drive the wizard:
+# render the welcome screen, press Enter, and assert the next screen
+# (the provider picker) renders.
+#
+# Note: there is no `/init` slash command. The wizard is launched via
+# `nuka init` or the in-app onboarding pre-prompt; the harness mounts
+# it directly via target: 'wizard'.
+name: "onboarding wizard advances past welcome"
 description: >
-  Mounts the wizard and asserts the welcome banner renders. Downgraded from
-  multi-step wizard navigation because keystroke dispatch via ink-testing-library
-  is unreliable when setRawMode is absent.
+  Mounts the wizard, asserts the welcome screen renders, presses Enter,
+  and asserts the provider-picker ("Choose a provider") appears.
+  End-to-end demonstration that the harness setRawMode shim delivers
+  Enter to useInput hooks.
 steps:
   - render: wizard
   - assert:
       contains: "Welcome to Nuka"
+  # Press Enter to advance past the welcome screen.
+  - keystroke: "\r"
+  - wait:
+      until:
+        contains: "Choose a provider"
+      timeoutMs: 1500
+  - assert:
+      contains: "Choose a provider"
+  - assert:
+      contains: "Anthropic"
 cleanup:
   unmount: true
