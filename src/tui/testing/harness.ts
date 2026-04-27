@@ -20,6 +20,11 @@
 // does not always receive a real `setRawMode`, so some keys can be swallowed
 // across re-renders. `waitFor` polls `frames()` (with `setImmediate` flushes
 // between polls) rather than reading once after `stdin.write`.
+//
+// Phase 10 §4.2 — `setRawMode` shim. Some hosts (CI, vitest) provide a
+// process.stdin without setRawMode; ink hooks gate keystroke delivery on
+// that method's existence. We monkey-patch a no-op shim before render so
+// `useInput` consumers receive characters from the test stdin.
 
 import React from 'react'
 import { render } from 'ink-testing-library'
@@ -29,6 +34,7 @@ import { ProviderResolver } from '../../core/provider/resolver'
 import { SessionManager } from '../../core/session/manager'
 import { ToolRegistry } from '../../core/tools/registry'
 import { SlashRegistry } from '../../slash/registry'
+import { CostTracker } from '../../core/cost/tracker'
 import { PermissionBridge } from '../../core/permission/bridge'
 import { App } from '../App'
 import { Wizard } from '../Onboarding/Wizard'
@@ -83,7 +89,7 @@ export type Mocks = {
 }
 
 export type MountOpts =
-  | { target?: 'app'; config?: Config; mocks?: Mocks; cwd?: string }
+  | { target?: 'app'; config?: Config; mocks?: Mocks; cwd?: string; slash?: SlashRegistry }
   | { target: 'wizard'; mocks?: Mocks }
   | { target: 'custom'; node: React.ReactNode }
 
@@ -102,7 +108,12 @@ export type Harness = {
  * Plan authors who need richer wiring should pass `target:'custom'` and pass
  * a fully-constructed <App/> as `node`.
  */
-export function makeMinimalAppDeps(config: Config | undefined, mocks: Mocks = {}, cwd: string = process.cwd()) {
+export function makeMinimalAppDeps(
+  config: Config | undefined,
+  mocks: Mocks = {},
+  cwd: string = process.cwd(),
+  slashOverride?: SlashRegistry,
+) {
   const cfg: Config = config ?? ({
     providers: [],
     active: { providerId: '' },
@@ -110,9 +121,10 @@ export function makeMinimalAppDeps(config: Config | undefined, mocks: Mocks = {}
   const sessions = new SessionManager()
   const providerOverrides = mocks.provider ? { [mocks.provider.id]: mocks.provider } : {}
   const providers = new ProviderResolver(cfg, { providers: providerOverrides })
-  const slash = new SlashRegistry()
+  const slash = slashOverride ?? new SlashRegistry()
   const tools = new ToolRegistry()
   const permissionBridge = new PermissionBridge()
+  const costTracker = new CostTracker()
 
   // Determine an active session so the App can render. Prefer the mock
   // provider; otherwise the first configured provider; otherwise blank.
@@ -126,12 +138,20 @@ export function makeMinimalAppDeps(config: Config | undefined, mocks: Mocks = {}
   sessions.start({ providerId: activeId, model: activeModel })
 
   return {
-    sessions, providers, slash, tools, permissionBridge,
+    sessions, providers, slash, tools, permissionBridge, costTracker,
     config: cfg, cwd,
   }
 }
 
 export function mountApp(opts: MountOpts = {}): Harness {
+  // Phase 10 §4.2 — setRawMode shim. Some hosts/CI runners give us a stdin
+  // without setRawMode; ink's useInput hook gates keystroke delivery on it.
+  // Patch a no-op once so subsequent renders pick it up.
+  const stdinAny = process.stdin as { setRawMode?: (m: boolean) => unknown; isTTY?: boolean }
+  if (stdinAny.setRawMode === undefined) {
+    stdinAny.setRawMode = () => process.stdin
+  }
+
   let node: React.ReactNode
   if (opts.target === 'custom') {
     node = opts.node
@@ -141,7 +161,7 @@ export function mountApp(opts: MountOpts = {}): Harness {
       onCancel: () => {},
     })
   } else {
-    const deps = makeMinimalAppDeps(opts.config, opts.mocks, opts.cwd)
+    const deps = makeMinimalAppDeps(opts.config, opts.mocks, opts.cwd, opts.slash)
     node = React.createElement(App, {
       sessions: deps.sessions,
       slash: deps.slash,
@@ -156,6 +176,7 @@ export function mountApp(opts: MountOpts = {}): Harness {
       gitBranch: { branch: 'main', dirty: false },
       version: '0.0.0-test',
       tools: deps.tools,
+      costTracker: deps.costTracker,
     })
   }
 
