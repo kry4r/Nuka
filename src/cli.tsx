@@ -33,6 +33,8 @@ import { DeleteSessionCommand } from './slash/delete-session'
 import { VimCommand } from './slash/vim'
 import { DoctorCommand } from './slash/doctor'
 import { RewindCommand } from './slash/rewind'
+import { TasksCommand } from './slash/tasks'
+import { TaskManager } from './core/tasks/manager'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -374,7 +376,10 @@ async function runInteractive(): Promise<void> {
   tools.register(makeWebSearchTool(config.search) as any)
 
   const slash = new SlashRegistry()
-  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand, RewindCommand].forEach(c => slash.register(c))
+  ;[ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand, CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand, HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand, RewindCommand, TasksCommand].forEach(c => slash.register(c))
+
+  // Phase 10 §4.3 — singleton TaskManager for the lifetime of the CLI process.
+  const taskManager = new TaskManager({ home: os.homedir() })
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({
@@ -565,6 +570,7 @@ async function runInteractive(): Promise<void> {
       tools={tools}
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
       costTracker={costTracker}
+      taskManager={taskManager}
     />,
   )
 

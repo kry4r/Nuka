@@ -5,6 +5,10 @@ import { render } from 'ink-testing-library'
 import { Hud } from '../../../src/tui/Status/Hud'
 import { ThemeProvider } from '../../../src/core/theme/context'
 import { findTheme } from '../../../src/core/theme/themes'
+import { TaskManager } from '../../../src/core/tasks/manager'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import * as path from 'node:path'
 
 describe('Status HUD', () => {
   it('renders all six fields with a known mock state', () => {
@@ -98,6 +102,62 @@ describe('Status HUD', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).toContain('99.5%')
+  })
+
+  it('renders "tasks N" when taskManager has running tasks', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'nuka-hud-'))
+    const tm = new TaskManager({ home })
+    tm.enqueue({
+      kind: 'local_agent',
+      description: 'long',
+      agentRunner: async function* (signal) {
+        while (!signal.aborted) {
+          yield { text: 'tick' }
+          await new Promise(r => setTimeout(r, 50))
+        }
+      },
+    })
+    // Allow the event loop to flush so state === 'running' is observable.
+    await new Promise(r => setTimeout(r, 5))
+    const { lastFrame } = render(
+      <Hud
+        providerId="anthropic"
+        model="m"
+        sessionId="s1"
+        contextUsed={0}
+        contextMax={200000}
+        inputTokens={0}
+        outputTokens={0}
+        pluginCount={0}
+        agentInFlight={0}
+        gitBranch="main"
+        taskManager={tm}
+      />,
+    )
+    const flat = (lastFrame() ?? '').replace(/\s+/g, ' ')
+    expect(flat).toContain('tasks 1')
+    await tm.cancel(tm.list()[0]!.id)
+  })
+
+  it('omits "tasks" segment when no tasks are running', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'nuka-hud-'))
+    const tm = new TaskManager({ home })
+    const { lastFrame } = render(
+      <Hud
+        providerId="anthropic"
+        model="m"
+        sessionId="s1"
+        contextUsed={0}
+        contextMax={200000}
+        inputTokens={0}
+        outputTokens={0}
+        pluginCount={0}
+        agentInFlight={0}
+        gitBranch="main"
+        taskManager={tm}
+      />,
+    )
+    expect(lastFrame() ?? '').not.toMatch(/tasks \d/)
   })
 
   it('renders correctly when wrapped in a ThemeProvider', () => {

@@ -11,6 +11,7 @@ const CMDS: Array<[string, string]> = [
   ['/btw <text>', 'Queue a message without interrupting the current turn'],
   ['/compact', 'Summarize older messages to free context'],
   ['/cost', 'Show cost and token breakdown'],
+  ['/tasks', 'List/show/cancel background tasks'],
 ]
 
 export const HelpCommand: SlashCommand = {

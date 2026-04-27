@@ -3,6 +3,7 @@ import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
 import type { CostTracker } from '../core/cost/tracker'
 import type { McpManager } from '../core/mcp/manager'
+import type { TaskManager } from '../core/tasks/manager'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
@@ -32,6 +33,8 @@ export type SlashContext = {
   costTracker?: CostTracker
   /** Phase 8 §4.5 — optional; wired by App when an McpManager is available. */
   mcpManager?: McpManager
+  /** Phase 10 §4.3 — optional; wired by cli.tsx when the task system is enabled. */
+  taskManager?: TaskManager
 }
 
 export interface SlashCommand {
