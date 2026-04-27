@@ -28,6 +28,9 @@ import type { PermissionCall, PermissionDecision } from '../core/permission/type
 import { ThemeProvider } from '../core/theme/context'
 import { resolveTheme } from '../core/theme/themes'
 import { StatsView } from './Stats/StatsView'
+import { DoctorReport } from './Doctor/DoctorReport'
+import { MessageSelector } from './Rewind/MessageSelector'
+import { StatusLine } from './StatusLine/StatusLine'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
 import type { ToolRegistry } from '../core/tools/registry'
@@ -79,6 +82,8 @@ type Dialog =
   | { kind: 'config-editor' }
   | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
   | { kind: 'stats' }
+  | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
+  | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
 
 export type AppProps = {
   sessions: SessionManager
@@ -334,6 +339,23 @@ export function App(props: AppProps): React.JSX.Element {
       {dialog?.kind === 'stats' && (
         <StatsView onExit={() => setDialog(null)} />
       )}
+      {dialog?.kind === 'doctor' && (
+        <DoctorReport report={dialog.report} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === 'message-selector' && (
+        <MessageSelector
+          messages={dialog.messages}
+          onSelect={async (messageId) => {
+            setDialog(null)
+            try {
+              await props.sessions.truncateAfter(messageId)
+            } catch {
+              // ignore — message may have been removed already
+            }
+          }}
+          onCancel={() => setDialog(null)}
+        />
+      )}
       {dialog?.kind === 'session-picker' && dialog.metas === 'loading' && (
         <Box borderStyle="round" borderColor="cyan" paddingX={1}>
           <Text color="cyan">Loading sessions…</Text>
@@ -390,6 +412,20 @@ export function App(props: AppProps): React.JSX.Element {
         costTracker={props.costTracker}
         tick={mcpTick}
       />
+      {props.config.statusLine && (
+        <StatusLine
+          config={props.config.statusLine}
+          ctx={{
+            provider: session.providerId || '—',
+            model: session.model,
+            ctxPct: contextMax > 0 ? (contextUsed / contextMax) * 100 : 0,
+            cost,
+            plugins: props.pluginCount ?? 0,
+            tasks: 0,
+            branch: props.gitBranch?.branch ?? null,
+          }}
+        />
+      )}
     </Box>
     </ThemeProvider>
   )

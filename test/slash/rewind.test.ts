@@ -48,18 +48,23 @@ describe('recentAssistantMessages / firstLinePreview', () => {
 })
 
 describe('/rewind', () => {
-  it('no args → lists last 10 assistant messages', async () => {
+  it('no args → opens message-selector dialog with recent messages', async () => {
     const { ctx: c, sessions } = ctx()
     sessions.active()!.messages.push(a('a1', 'first'), a('a2', 'second'))
     const res = await RewindCommand.run('', c)
-    expect(res.type).toBe('text')
-    if (res.type === 'text') {
-      expect(res.text).toContain('1. second')
-      expect(res.text).toContain('2. first')
+    expect(res.type).toBe('dialog')
+    if (res.type === 'dialog') {
+      expect(res.dialog.kind).toBe('message-selector')
+      if (res.dialog.kind === 'message-selector') {
+        expect(res.dialog.messages).toHaveLength(2)
+        // newest first
+        expect(res.dialog.messages[0]?.id).toBe('a2')
+        expect(res.dialog.messages[1]?.id).toBe('a1')
+      }
     }
   })
 
-  it('empty transcript → friendly message', async () => {
+  it('empty transcript → text message (no dialog)', async () => {
     const { ctx: c } = ctx()
     const res = await RewindCommand.run('', c)
     expect(res.type).toBe('text')
