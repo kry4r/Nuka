@@ -105,6 +105,18 @@ export const VimConfigSchema = z
   })
   .optional()
 
+export const StatusLineConfigSchema = z
+  .object({
+    /** Template string with {provider}, {model}, {ctxPct}, {cost}, {plugins}, {tasks}, {branch} */
+    format: z.string().optional(),
+    /** Shell command spawned every intervalMs; first stdout line appended to rendered output */
+    command: z.string().optional(),
+    /** Interval in ms for command re-run (default 5000) */
+    intervalMs: z.number().int().positive().default(5000),
+  })
+  .optional()
+export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
+
 export const RewindConfigSchema = z
   .object({
     /**
@@ -127,6 +139,7 @@ export const ConfigSchema = z.object({
   plugins: PluginsConfigSchema,
   vim: VimConfigSchema,
   rewind: RewindConfigSchema,
+  statusLine: StatusLineConfigSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.

@@ -30,6 +30,7 @@ import { resolveTheme } from '../core/theme/themes'
 import { StatsView } from './Stats/StatsView'
 import { DoctorReport } from './Doctor/DoctorReport'
 import { MessageSelector } from './Rewind/MessageSelector'
+import { StatusLine } from './StatusLine/StatusLine'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { McpManager } from '../core/mcp/manager'
 import type { ToolRegistry } from '../core/tools/registry'
@@ -411,6 +412,20 @@ export function App(props: AppProps): React.JSX.Element {
         costTracker={props.costTracker}
         tick={mcpTick}
       />
+      {props.config.statusLine && (
+        <StatusLine
+          config={props.config.statusLine}
+          ctx={{
+            provider: session.providerId || '—',
+            model: session.model,
+            ctxPct: contextMax > 0 ? (contextUsed / contextMax) * 100 : 0,
+            cost,
+            plugins: props.pluginCount ?? 0,
+            tasks: 0,
+            branch: props.gitBranch?.branch ?? null,
+          }}
+        />
+      )}
     </Box>
     </ThemeProvider>
   )
