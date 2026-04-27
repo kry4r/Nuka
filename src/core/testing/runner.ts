@@ -13,6 +13,8 @@ import { mountApp, type Harness, type Mocks } from '../../tui/testing/harness'
 import { MockProvider } from './mockProvider'
 import type { Plan, Step, AssertSpec, ProviderResponse } from './plan'
 import { matches as matchAssertion, snapshotDiff } from './assertions'
+import type { SlashRegistry } from '../../slash/registry'
+import { buildSlashRegistryFromNames } from './slashRegistry'
 
 export type RunOpts = {
   cwd?: string
@@ -22,6 +24,12 @@ export type RunOpts = {
   clock?: () => number
   /** Override the harness factory; lets tests inject custom mounts. */
   mountFn?: typeof mountApp
+  /**
+   * Phase 10 §4.2 — explicit slash registry override. When provided it
+   * takes precedence over `plan.setup.slash` (so vitest tests can inject
+   * a pre-built registry without going through the export-name lookup).
+   */
+  slash?: SlashRegistry
 }
 
 export type StepResult = {
@@ -49,6 +57,13 @@ export async function runPlan(plan: Plan, opts: RunOpts = {}): Promise<RunResult
   for (const r of plan.mockResponses) mock.append(r)
   const mocks: Mocks = { provider: mock }
 
+  // Phase 10 §4.2 — if the plan opts in to slash routing, build the
+  // registry from the export-name list. opts.slash always wins.
+  let slashRegistry: SlashRegistry | undefined = opts.slash
+  if (!slashRegistry && plan.setup?.slash && plan.setup.slash.length > 0) {
+    slashRegistry = await buildSlashRegistryFromNames(plan.setup.slash)
+  }
+
   let harness: Harness | undefined
   const stepResults: StepResult[] = []
   const startTs = Date.now()
@@ -60,7 +75,7 @@ export async function runPlan(plan: Plan, opts: RunOpts = {}): Promise<RunResult
     if (target === 'wizard') {
       harness = mountFn({ target: 'wizard', mocks })
     } else {
-      harness = mountFn({ target: 'app', mocks, cwd })
+      harness = mountFn({ target: 'app', mocks, cwd, slash: slashRegistry })
     }
     return harness
   }
@@ -150,9 +165,22 @@ async function executeStep(step: Step, index: number, ctx: StepCtx): Promise<voi
     }
     case 'slash': {
       const h = ctx.ensureMounted()
-      // shortcut: type the command + ENTER
+      // Phase 10 §4.2 — type the command, settle, THEN send Enter on its
+      // own. ink-testing-library batches chunks within a single
+      // stdin.write into one keypress event; if "/stats\r" lands as one
+      // chunk, the Enter is swallowed. Sending the carriage return as a
+      // separate write (with a microtask flush AND a real macrotask
+      // delay between) delivers a `key.return` to PromptInput's
+      // useInput hook so onSubmit fires.
       const text = step.command.startsWith('/') ? step.command : '/' + step.command
-      h.stdin.write(text + '\r')
+      h.stdin.write(text)
+      await ctx.flush()
+      await new Promise(r => setTimeout(r, 5))
+      h.stdin.write('\r')
+      // Allow async slash dispatch (registry.find -> cmd.run -> setDialog
+      // -> re-render) to settle before the next step samples the frame.
+      await ctx.flush()
+      await new Promise(r => setTimeout(r, 5))
       await ctx.flush()
       ctx.appendStepResult({
         index, ok: true, kind: 'slash',

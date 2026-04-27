@@ -1,30 +1,51 @@
 # 03-theme-switch.yaml
 #
-# DOWNGRADE NOTE: A real theme-switch would require the /config slash command
-# to be registered and the Config screen to render a theme picker. The harness
-# mountApp builds a SlashRegistry with zero commands registered, so /config is
-# a no-op. Instead, we verify the baseline app renders and that typing `/config`
-# appears in the input echoed back — demonstrating keystroke-to-input-buffer
-# reachability without requiring slash dispatch.
+# Phase 10 §4.2 — partial upgrade.
 #
-# If slash dispatch is later wired in the harness, upgrade step 3 to:
-#   - slash: "config"
-#   - assert: { contains: "theme" }
-name: "theme switch surface (downgraded)"
+# /theme list and /theme <name> both return TEXT results (e.g.
+# "Theme switched to: default-light"). The current App does not surface
+# slash text-results into the rendered frame — only `dialog` and
+# `effect` results are observable. Driving /theme through the
+# registered SlashRegistry therefore has no visible footprint other
+# than the prompt clearing once the slash dispatches.
+#
+# DOWNGRADE NOTE: A full /theme test would assert the persisted theme
+# in ~/.nuka/config.yaml after the run. The plan-step YAML schema has
+# no file-read assertion, so this end-to-end check is left to the
+# unit test at test/slash/theme.test.ts. The plan below verifies the
+# routing reaches ThemeCommand.run by:
+#   1. typing /theme list,
+#   2. submitting (Enter),
+#   3. asserting the prompt no longer contains the typed text — the
+#      command was consumed by the registry rather than buffered as
+#      regular user input. This is the only frame-visible side effect
+#      of a text-returning slash in the current App.
+#
+# We CANNOT use /config to open the ConfigEditor dialog as a proxy
+# because ConfigEditor's useInput consumes the same Enter keystroke
+# that opens it (calling onOpen, which closes the dialog), so the
+# dialog flashes shut on the same render tick — see Phase 10 review.
+name: "theme slash routes through registry"
 description: >
-  Verifies the app renders its header and that keystrokes reach the input
-  buffer. Downgraded from full /config theme-picker flow because the headless
-  harness does not register slash commands.
+  Renders the app, registers ThemeCommand via setup.slash, types
+  /theme list, submits it, and asserts the prompt input clears
+  (slash routing succeeded). Full /theme persistence to config is
+  unit-tested at test/slash/theme.test.ts.
+setup:
+  slash:
+    - ThemeCommand
 steps:
   - render: app
   - assert:
       contains: "NUKA"
-  # Type a slash command prefix — visible in the prompt area.
-  - keystroke: "/con"
+  - slash: "theme list"
   - wait:
-      ms: 50
-  # The typed characters appear in the prompt/input line.
+      until:
+        notContains: "/theme list"
+      timeoutMs: 1500
   - assert:
-      contains: "/con"
+      notContains: "/theme list"
+  - assert:
+      contains: "NUKA"
 cleanup:
   unmount: true

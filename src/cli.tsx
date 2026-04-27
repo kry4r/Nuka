@@ -77,116 +77,29 @@ const argv = process.argv.slice(2)
 
 // ---------------------------------------------------------------------------
 // --test-plan <path>  [--update-snapshots]  [--reporter=tap|json|pretty]
+//
+// Phase 10 §4.1 — the testing helpers (parser, mock provider, harness,
+// runner, reporters) live in a separate `dist/test-runner.js` bundle that
+// is lazy-loaded only on `--test-plan`. We compute the import URL via
+// `import.meta.url` so esbuild cannot statically resolve it; the production
+// `dist/cli.js` therefore omits every testing module.
+//
+// Source/dev mode (`tsx src/cli.tsx`) doesn't have a built test-runner;
+// the catch falls back to the in-tree `core/testing/cli-entry` module.
 // ---------------------------------------------------------------------------
 const testPlanIdx = argv.findIndex(a => a === '--test-plan' || a.startsWith('--test-plan='))
 if (testPlanIdx !== -1) {
   ;(async () => {
     try {
-      // Resolve path argument.
-      let planPath: string
-      const flag = argv[testPlanIdx]!
-      if (flag.startsWith('--test-plan=')) {
-        planPath = flag.slice('--test-plan='.length)
-      } else {
-        planPath = argv[testPlanIdx + 1] ?? ''
-      }
-      if (!planPath) {
-        process.stderr.write('--test-plan requires a file path\n')
-        process.exit(2)
-      }
-      planPath = path.resolve(planPath)
-
-      const updateSnapshots = argv.includes('--update-snapshots')
-
-      // --reporter=<tap|json|pretty>  (default: pretty)
-      type Reporter = 'tap' | 'json' | 'pretty'
-      const reporterArg = argv.find(a => a.startsWith('--reporter='))
-      let reporter: Reporter = 'pretty'
-      if (reporterArg) {
-        const val = reporterArg.slice('--reporter='.length)
-        if (val === 'tap' || val === 'json' || val === 'pretty') reporter = val
-        else {
-          process.stderr.write(`unknown reporter ${JSON.stringify(val)}; expected tap, json, or pretty\n`)
-          process.exit(2)
-        }
-      }
-
-      // Read & parse plan.
-      const { readFile } = await import('node:fs/promises')
-      const { parsePlan, PlanError } = await import('./core/testing/plan')
-      const { runPlan } = await import('./core/testing/runner')
-
-      let yamlText: string
+      let mod: typeof import('./core/testing/cli-entry')
+      const distUrl = new URL('./test-runner.js', import.meta.url).href
       try {
-        yamlText = await readFile(planPath, 'utf8')
-      } catch (err) {
-        process.stderr.write(`cannot read plan file: ${(err as Error).message}\n`)
-        process.exit(2)
+        mod = (await import(distUrl)) as typeof import('./core/testing/cli-entry')
+      } catch {
+        const srcUrl = new URL('./core/testing/cli-entry.ts', import.meta.url).href
+        mod = (await import(srcUrl)) as typeof import('./core/testing/cli-entry')
       }
-
-      let plan: import('./core/testing/plan').Plan
-      try {
-        plan = parsePlan(yamlText)
-      } catch (err) {
-        if (err instanceof PlanError) {
-          const loc = err.line ? ` (line ${err.line}${err.column ? `:${err.column}` : ''})` : ''
-          process.stderr.write(`plan parse error${loc}: ${err.message}\n`)
-        } else {
-          process.stderr.write(`plan parse error: ${(err as Error).message}\n`)
-        }
-        process.exit(2)
-      }
-
-      const result = await runPlan(plan, { cwd: path.dirname(planPath), updateSnapshots })
-
-      if (reporter === 'json') {
-        process.stdout.write(JSON.stringify(result) + '\n')
-        process.exit(result.ok ? 0 : 1)
-        return
-      }
-
-      if (reporter === 'tap') {
-        const n = result.steps.length
-        process.stdout.write(`TAP version 13\n1..${n}\n`)
-        for (const s of result.steps) {
-          const num = s.index + 1
-          if (s.ok) {
-            process.stdout.write(`ok ${num} - step ${s.index} (${s.kind})\n`)
-          } else {
-            process.stdout.write(`not ok ${num} - step ${s.index} (${s.kind})\n`)
-            if (s.message) {
-              for (const line of s.message.split('\n')) {
-                process.stdout.write(`  # ${line}\n`)
-              }
-            }
-          }
-        }
-        process.exit(result.ok ? 0 : 1)
-        return
-      }
-
-      // pretty reporter (default)
-      const GREEN = '\x1b[32m'
-      const RED   = '\x1b[31m'
-      const RESET = '\x1b[0m'
-      let passed = 0
-      let failed = 0
-      for (const s of result.steps) {
-        if (s.ok) {
-          process.stdout.write(`  ${GREEN}\u2713${RESET} step ${s.index} (${s.kind})\n`)
-          passed++
-        } else {
-          process.stdout.write(`  ${RED}\u2717${RESET} step ${s.index} (${s.kind})\n`)
-          if (s.message) {
-            for (const line of s.message.split('\n')) {
-              process.stdout.write(`    ${line}\n`)
-            }
-          }
-          failed++
-        }
-      }
-      process.stdout.write(`\n${passed} passed, ${failed} failed\n`)
-      process.exit(result.ok ? 0 : 1)
+      process.exit(await mod.runTestPlanCli(argv))
     } catch (err) {
       process.stderr.write(`test-plan failed: ${(err as Error).message}\n`)
       process.exit(1)

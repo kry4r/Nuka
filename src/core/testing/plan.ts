@@ -49,6 +49,13 @@ export type Step =
 export type PlanSetup = {
   config?: unknown
   mockResponses?: ProviderResponse[]
+  /**
+   * Phase 10 §4.2 — opt-in slash command registration. Each entry is the
+   * exported symbol name from `src/slash/*.ts` (e.g. `ThemeCommand`,
+   * `PlanCommand`). The runner imports & registers these so plans can
+   * drive `/theme`, `/plan on`, etc., end-to-end.
+   */
+  slash?: string[]
 }
 
 export type Plan = {
@@ -152,6 +159,18 @@ function validateSetup(v: unknown, doc: Document, lc: LineCounter): PlanSetup {
   if (o['config'] !== undefined) out.config = o['config']
   if (o['mockResponses'] !== undefined) {
     out.mockResponses = validateMockResponses(o['mockResponses'], 'setup.mockResponses', doc, lc)
+  }
+  if (o['slash'] !== undefined) {
+    if (!Array.isArray(o['slash'])) {
+      throw new PlanError('setup.slash: must be an array of slash-command export names', { path: 'setup.slash' })
+    }
+    const arr = o['slash'] as unknown[]
+    out.slash = arr.map((n, i) => {
+      if (typeof n !== 'string' || n.length === 0) {
+        throw new PlanError(`setup.slash[${i}]: each entry must be a non-empty string`, { path: `setup.slash[${i}]` })
+      }
+      return n
+    })
   }
   return out
 }
