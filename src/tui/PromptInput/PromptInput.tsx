@@ -205,6 +205,11 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     }
   }, { isActive: !props.disabled })
 
+  const showCursor = !props.disabled && (!props.vim || vimMode === 'insert')
+  const valueText = props.value
+  const placeholder = props.placeholder ?? ''
+  const isEmpty = valueText.length === 0
+
   return (
     <Box flexDirection="column">
       {mentionActive && (
@@ -222,15 +227,28 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           onCancel={() => { setMentionActive(false); setMentionQuery('') }}
         />
       )}
-      <Box>
-        <Text color={P.primary}>▎ </Text>
+      <Box
+        borderStyle="round"
+        borderColor={props.disabled ? P.muted : P.primary}
+        paddingX={1}
+      >
         {props.vim && (
-          <Text color={vimMode === 'insert' ? P.muted : P.warn}>
+          <Text color={vimMode === 'insert' ? P.muted : P.warn} bold>
             [{vimMode.toUpperCase().slice(0, 1)}]{' '}
           </Text>
         )}
         <Text color={P.primary}>{'> '}</Text>
-        <Text color={P.fg}>{props.value || (props.placeholder ?? '')}</Text>
+        {isEmpty ? (
+          <>
+            {showCursor && <Text color={P.fg} inverse> </Text>}
+            <Text color={P.muted}>{placeholder}</Text>
+          </>
+        ) : (
+          <>
+            <Text color={P.fg}>{valueText}</Text>
+            {showCursor && <Text color={P.fg} inverse> </Text>}
+          </>
+        )}
       </Box>
     </Box>
   )
