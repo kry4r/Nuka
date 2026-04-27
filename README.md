@@ -6,8 +6,8 @@
 
 **A plugin-first, agent-swarm CLI coding assistant.**
 
-[![tests](https://img.shields.io/badge/tests-1159%20passing-brightgreen)]()
-[![bundle](https://img.shields.io/badge/bundle-361%20KB-blue)]()
+[![tests](https://img.shields.io/badge/tests-1246%20passing-brightgreen)]()
+[![bundle](https://img.shields.io/badge/bundle-256%20KB-blue)]()
 [![status](https://img.shields.io/badge/status-active-success)]()
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
@@ -210,8 +210,9 @@ Full 13-step test plan: `docs/superpowers/specs/2026-04-24-phase5-marketplace-ag
 | **7** | 13 | onboarding wizard · cost tracker · auto-memory · vim mode · status HUD |
 | **8** | 11 | theme switcher · `/stats` · `/rewind` · plan-mode gate · IDE bridge |
 | **9** | 8 | self-driving TUI test harness · YAML plans · `nuka --test-plan` · 5 sample plans |
+| **10** | 11 | bundle split · task system (`/tasks`) · `nuka doctor` · statusline customization · `/rewind` dialog |
 
-1159 tests · 361 KB bundle · 0 vendored deps for new features.
+1246 tests · 256 KB production bundle (+ 215 KB lazy testing bundle) · 0 vendored deps for new features.
 
 ---
 

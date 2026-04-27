@@ -6,8 +6,8 @@
 
 **插件优先、Agent 蜂群的 CLI 编程助手。**
 
-[![tests](https://img.shields.io/badge/tests-1159%20passing-brightgreen)]()
-[![bundle](https://img.shields.io/badge/bundle-361%20KB-blue)]()
+[![tests](https://img.shields.io/badge/tests-1246%20passing-brightgreen)]()
+[![bundle](https://img.shields.io/badge/bundle-256%20KB-blue)]()
 [![status](https://img.shields.io/badge/status-active-success)]()
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
@@ -212,8 +212,9 @@ nuka config show [--scope user]
 | **7** | 13 | 引导向导 · 成本追踪 · 自动记忆 · Vim 模式 · 状态 HUD |
 | **8** | 11 | 主题切换 · `/stats` · `/rewind` · 计划模式 · IDE 桥接 |
 | **9** | 8 | 自驱 TUI 测试框架 · YAML 计划 · `nuka --test-plan` · 5 个示例 |
+| **10** | 11 | 包体拆分 · 任务系统 (`/tasks`) · `nuka doctor` · 状态栏定制 · `/rewind` 弹窗 |
 
-1159 个测试 · 361 KB 包体 · 0 新增 vendored 依赖。
+1246 个测试 · 256 KB 生产包体（+ 215 KB 懒加载测试包体）· 0 新增 vendored 依赖。
 
 ---
 
