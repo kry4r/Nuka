@@ -54,34 +54,6 @@ describe('ToolCall', () => {
     expect(f).not.toContain('─')
   })
 
-  it('renders [mcp] badge and server·tool display when source is mcp', () => {
-    const { lastFrame } = render(
-      <ToolCall name="mcp__github__listRepos" argSummary="{}" status="ok" source="mcp" />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('[mcp]')
-    // Should show "github · listRepos" not the raw namespaced name
-    expect(f).toContain('github')
-    expect(f).toContain('listRepos')
-    expect(f).not.toContain('mcp__github__listRepos')
-  })
-
-  it('renders server · tool format for mcp tools', () => {
-    const { lastFrame } = render(
-      <ToolCall name="mcp__github__listRepos" argSummary="{}" status="ok" source="mcp" />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('github · listRepos')
-  })
-
-  it('falls back to raw name for mcp source when name is not parseable', () => {
-    const { lastFrame } = render(
-      <ToolCall name="notAnMcpName" argSummary="{}" status="ok" source="mcp" />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('notAnMcpName')
-  })
-
   it('renders no badge when source is undefined', () => {
     const { lastFrame } = render(
       <ToolCall name="Bash" argSummary="cmd" status="ok" />,

@@ -14,11 +14,11 @@ function mkTool(name: string): Tool {
 }
 
 describe('filterTools', () => {
-  const all = [mkTool('Read'), mkTool('Bash'), mkTool('Write'), mkTool('mcp__fs__read')]
+  const all = [mkTool('Read'), mkTool('Bash'), mkTool('Write'), mkTool('plugin__fs__read')]
 
   it('returns all tools when neither allow nor deny is set', () => {
     const out = filterTools(all, {})
-    expect(out.map(t => t.name)).toEqual(['Read', 'Bash', 'Write', 'mcp__fs__read'])
+    expect(out.map(t => t.name)).toEqual(['Read', 'Bash', 'Write', 'plugin__fs__read'])
   })
 
   it('allowedTools acts as a strict whitelist', () => {
@@ -28,7 +28,7 @@ describe('filterTools', () => {
 
   it('deniedTools removes matching names', () => {
     const out = filterTools(all, { deniedTools: ['Bash'] })
-    expect(out.map(t => t.name)).toEqual(['Read', 'Write', 'mcp__fs__read'])
+    expect(out.map(t => t.name)).toEqual(['Read', 'Write', 'plugin__fs__read'])
   })
 
   it('both: intersection then subtraction', () => {
@@ -36,9 +36,9 @@ describe('filterTools', () => {
     expect(out.map(t => t.name)).toEqual(['Read', 'Write'])
   })
 
-  it('allowedTools matches MCP namespaced names exactly', () => {
-    const out = filterTools(all, { allowedTools: ['mcp__fs__read'] })
-    expect(out.map(t => t.name)).toEqual(['mcp__fs__read'])
+  it('allowedTools matches plugin-namespaced names exactly', () => {
+    const out = filterTools(all, { allowedTools: ['plugin__fs__read'] })
+    expect(out.map(t => t.name)).toEqual(['plugin__fs__read'])
   })
 
   it('empty allowedTools produces an empty list (strict whitelist)', () => {
@@ -48,7 +48,7 @@ describe('filterTools', () => {
 
   it('empty deniedTools is a no-op', () => {
     const out = filterTools(all, { deniedTools: [] })
-    expect(out.map(t => t.name)).toEqual(['Read', 'Bash', 'Write', 'mcp__fs__read'])
+    expect(out.map(t => t.name)).toEqual(['Read', 'Bash', 'Write', 'plugin__fs__read'])
   })
 
   it('unknown name in allow/deny is silently ignored', () => {

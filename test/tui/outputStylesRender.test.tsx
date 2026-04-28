@@ -2,21 +2,20 @@
 import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render } from 'ink-testing-library'
-import { Text } from 'ink'
 import { MessageRow } from '../../src/tui/Messages/MessageRow'
 import {
   registerOutputStyle,
   clearRegistry,
-  type OutputStyleProps,
 } from '../../src/core/plugin/outputStyles'
 import type { Message } from '../../src/core/message/types'
 
-// Minimal assistant message with a tool_use block
+// Minimal assistant message with a tool_use block.
+// Uses the plugin-namespacing convention; MCP-style namespacing is gone.
 const assistantMsg: Message = {
   role: 'assistant',
   id: 'a1',
   ts: 1,
-  content: [{ type: 'tool_use', id: 'tu1', name: 'mcp__github__listRepos', input: {} }],
+  content: [{ type: 'tool_use', id: 'tu1', name: 'plugin__github__listRepos', input: {} }],
 }
 
 describe('outputStyles rendering', () => {
@@ -28,28 +27,28 @@ describe('outputStyles rendering', () => {
     const { lastFrame } = render(
       <MessageRow
         m={assistantMsg}
-        resolveToolSource={() => 'mcp'}
+        resolveToolSource={() => 'plugin'}
       />,
     )
     const f = lastFrame() ?? ''
-    // Default ToolCall renders "github · listRepos" for mcp tools
-    expect(f).toContain('github')
+    // Default ToolCall renders the namespaced name verbatim.
+    expect(f).toContain('plugin__github__listRepos')
   })
 
   it('uses custom component path when a matching style is registered (acceptance criterion 2)', async () => {
-    // Register a style that matches all mcp__github__* tools
+    // Register a style that matches all plugin__github__* tools.
     // The componentPath points to a non-existent module — the fallback will be shown
     // because the dynamic import will fail. This test verifies the registry lookup path.
     registerOutputStyle({
       name: 'github-style',
-      matchToolName: 'mcp__github__*',
+      matchToolName: 'plugin__github__*',
       componentPath: '/nonexistent/component.js',
     })
 
     const { lastFrame } = render(
       <MessageRow
         m={assistantMsg}
-        resolveToolSource={() => 'mcp'}
+        resolveToolSource={() => 'plugin'}
       />,
     )
     // Component load fails gracefully — falls back to default
@@ -60,19 +59,19 @@ describe('outputStyles rendering', () => {
 
   it('unmatched tool falls back to default ToolCall', () => {
     registerOutputStyle({
-      name: 'plugin-style',
-      matchToolName: 'plugin__my__tool',
+      name: 'unrelated-style',
+      matchToolName: 'plugin__other__tool',
       componentPath: '/fake.js',
     })
     const { lastFrame } = render(
       <MessageRow
         m={assistantMsg}
-        resolveToolSource={() => 'mcp'}
+        resolveToolSource={() => 'plugin'}
       />,
     )
     const f = lastFrame() ?? ''
-    // Default MCP rendering
-    expect(f).toContain('github')
+    // Default rendering of the namespaced name
+    expect(f).toContain('plugin__github__listRepos')
   })
 })
 
@@ -88,14 +87,14 @@ describe('OutputStyleErrorBoundary', () => {
     // and that the fallback is rendered when the component fails to load.
     registerOutputStyle({
       name: 'throw-style',
-      matchToolName: 'mcp__github__*',
+      matchToolName: 'plugin__github__*',
       componentPath: '/path/that/does/not/exist/at/all.js',
     })
 
     const { lastFrame } = render(
       <MessageRow
         m={assistantMsg}
-        resolveToolSource={() => 'mcp'}
+        resolveToolSource={() => 'plugin'}
       />,
     )
     // Should render (fallback or initial state — not crash)

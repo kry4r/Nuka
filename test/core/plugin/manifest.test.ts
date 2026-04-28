@@ -8,7 +8,9 @@ describe('PluginManifestSchema', () => {
     expect(result.tools).toEqual([])
     expect(result.slashCommands).toEqual([])
     expect(result.skills).toEqual([])
-    expect(result.mcpServers).toEqual({})
+    // Phase 11 M3: mcpServers was removed; the manifest no longer
+    // exposes that key on the parsed result.
+    expect((result as Record<string, unknown>).mcpServers).toBeUndefined()
   })
 
   it('rejects a name with spaces', () => {
@@ -19,12 +21,12 @@ describe('PluginManifestSchema', () => {
     expect(() => PluginManifestSchema.parse({ name: 'up-PER' })).toThrow()
   })
 
-  it('accepts mcpServers with a stdio entry', () => {
+  it('accepts a bin map (npm semantics, schema only)', () => {
     const result = PluginManifestSchema.parse({
-      name: 'a',
-      mcpServers: { s: { type: 'stdio', command: 'node' } },
+      name: 'with-bin',
+      bin: { mytool: 'bin/mytool.js' },
     })
-    expect(result.mcpServers.s).toMatchObject({ type: 'stdio', command: 'node' })
+    expect(result.bin).toEqual({ mytool: 'bin/mytool.js' })
   })
 
   describe('metadata fields', () => {

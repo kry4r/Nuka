@@ -27,7 +27,7 @@ describe('Messages', () => {
         id: 'a2',
         ts: 3,
         content: [
-          { type: 'tool_use', id: 'tu1', name: 'mcp__fs__read', input: { path: '/tmp/x' } },
+          { type: 'tool_use', id: 'tu1', name: 'plugin__example__read', input: { path: '/tmp/x' } },
         ],
       },
     ]
@@ -35,12 +35,12 @@ describe('Messages', () => {
       <Messages
         items={items}
         streaming={null}
-        resolveToolSource={() => 'mcp'}
+        resolveToolSource={() => 'plugin'}
       />,
     )
     const f = lastFrame() ?? ''
-    // MCP tools render as "server · tool" format
-    expect(f).toContain('fs · read')
-    expect(f).toContain('[mcp]')
+    // Plugin tools render with their full namespaced name and a [plugin] badge.
+    expect(f).toContain('plugin__example__read')
+    expect(f).toContain('[plugin]')
   })
 })
