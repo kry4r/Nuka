@@ -10,6 +10,7 @@ export function makeListMcpResourcesTool(manager: McpManager): Tool<{ server?: s
       properties: { server: { type: 'string' } },
     },
     source: 'builtin',
+    tags: [],
     needsPermission: () => 'none',
     async run(input, _ctx) {
       const clients = input.server
@@ -53,6 +54,7 @@ export function makeReadMcpResourceTool(manager: McpManager): Tool<{ server: str
       },
     },
     source: 'builtin',
+    tags: [],
     needsPermission: () => 'none',
     async run(input, ctx) {
       const c = manager.findClient(input.server)

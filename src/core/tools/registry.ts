@@ -47,4 +47,23 @@ export class ToolRegistry {
   bySource(source: Tool['source']): Tool[] {
     return this.list().filter(t => t.source === source)
   }
+
+  /**
+   * Return tools whose `tags` array intersects the input. Exact string match
+   * per tag, no globbing. Tools with no/empty `tags` are never matched here
+   * (they're reachable only via the `core` rule or by name).
+   *
+   * Empty `tags` input returns `[]` — callers should treat "no requires" as
+   * "no additional tools" rather than "all tools" (see spec §4.3).
+   */
+  queryByTags(tags: string[]): Tool[] {
+    if (!tags || tags.length === 0) return []
+    const want = new Set(tags)
+    return this.list().filter(t => {
+      const have = t.tags
+      if (!have || have.length === 0) return false
+      for (const tag of have) if (want.has(tag)) return true
+      return false
+    })
+  }
 }

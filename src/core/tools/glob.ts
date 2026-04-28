@@ -2,7 +2,7 @@
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import picomatch from 'picomatch'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type GlobInput = { pattern: string; path?: string }
 
@@ -26,7 +26,7 @@ async function walk(root: string, signal: AbortSignal): Promise<{ p: string; mti
   return out
 }
 
-export const GlobTool: Tool<GlobInput> = {
+export const GlobTool = defineTool<GlobInput>({
   name: 'Glob',
   description: 'List files matching a glob pattern, sorted by mtime desc.',
   parameters: {
@@ -38,6 +38,7 @@ export const GlobTool: Tool<GlobInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'fs.read'],
   needsPermission: () => 'none',
   async run(input, ctx) {
     const root = input.path ?? ctx.cwd
@@ -53,4 +54,4 @@ export const GlobTool: Tool<GlobInput> = {
       return { isError: true, output: (err as Error).message }
     }
   },
-}
+})

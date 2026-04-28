@@ -1,4 +1,5 @@
 import type { Tool } from './types'
+import { defineTool } from './define'
 
 export type SearchEndpointConfig = {
   endpoint: string
@@ -8,7 +9,7 @@ export type SearchEndpointConfig = {
 }
 
 export function makeWebSearchTool(cfg: SearchEndpointConfig | undefined): Tool<{ query: string }> {
-  return {
+  return defineTool<{ query: string }>({
     name: 'WebSearch',
     description: 'Search the web via the configured search provider. Returns a plain-text summary.',
     parameters: {
@@ -17,6 +18,7 @@ export function makeWebSearchTool(cfg: SearchEndpointConfig | undefined): Tool<{
       properties: { query: { type: 'string' } },
     },
     source: 'builtin',
+    tags: ['core', 'net.read'],
     needsPermission: () => 'network',
     async run(input, ctx) {
       if (!cfg) return { output: 'WebSearch is not configured. Set `search.endpoint` in config.', isError: true }
@@ -32,5 +34,5 @@ export function makeWebSearchTool(cfg: SearchEndpointConfig | undefined): Tool<{
       const text = await res.text()
       return { output: text, isError: false }
     },
-  }
+  })
 }

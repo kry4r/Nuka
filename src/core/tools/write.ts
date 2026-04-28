@@ -2,11 +2,11 @@
 import { writeFile, rename, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type WriteInput = { path: string; content: string }
 
-export const WriteTool: Tool<WriteInput> = {
+export const WriteTool = defineTool<WriteInput>({
   name: 'Write',
   description: 'Write content to a file (atomic; parent dir must exist).',
   parameters: {
@@ -18,6 +18,7 @@ export const WriteTool: Tool<WriteInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'fs.write'],
   needsPermission: () => 'write',
   async run(input) {
     try {
@@ -31,4 +32,4 @@ export const WriteTool: Tool<WriteInput> = {
       return { isError: true, output: (err as Error).message }
     }
   },
-}
+})

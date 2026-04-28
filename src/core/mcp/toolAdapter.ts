@@ -19,6 +19,7 @@ export async function mcpToolsFor(client: McpClient): Promise<Tool[]> {
       description: truncateDescription(d.description ?? ''),
       parameters: d.inputSchema ?? { type: 'object', properties: {} },
       source: 'mcp' as const,
+      tags: [],
       annotations,
       // M1.16: map _meta fields to Tool.searchHint / Tool.alwaysLoad
       ...(d._meta?.searchHint !== undefined ? { searchHint: d._meta.searchHint } : {}),

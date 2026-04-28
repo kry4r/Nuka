@@ -87,6 +87,7 @@ export function makeLspDiagnosticsTool(manager: LspManager): Tool<{ path: string
       },
     },
     source: 'builtin',
+    tags: [],
     annotations: { readOnly: true, destructive: false, openWorld: false, parallelSafe: true },
     needsPermission: () => 'none',
     async run(input) {
@@ -133,6 +134,7 @@ export function makeLspDefinitionTool(
       },
     },
     source: 'builtin',
+    tags: [],
     annotations: { readOnly: true, destructive: false, openWorld: false, parallelSafe: true },
     needsPermission: () => 'none',
     async run(input) {
@@ -176,6 +178,7 @@ export function makeLspReferencesTool(
       },
     },
     source: 'builtin',
+    tags: [],
     annotations: { readOnly: true, destructive: false, openWorld: false, parallelSafe: true },
     needsPermission: () => 'none',
     async run(input) {

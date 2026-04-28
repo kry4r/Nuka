@@ -106,6 +106,7 @@ export async function wirePlugin(
       ...raw,
       name: `plugin__${plugin.manifest.name}__${raw.name}`,
       source: 'plugin',
+      tags: raw.tags ?? [],
       ...(pluginConfig !== undefined
         ? {
             run: async (input: unknown, ctx: import('../tools/types').ToolContext) =>

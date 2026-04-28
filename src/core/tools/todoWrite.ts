@@ -1,4 +1,5 @@
 import type { Tool } from './types'
+import { defineTool } from './define'
 
 export type Todo = { title: string; status: 'pending' | 'in_progress' | 'completed' }
 
@@ -11,7 +12,7 @@ export function createTodoStore(): TodoState {
 }
 
 export function makeTodoWriteTool(store: TodoState): Tool<{ items: Todo[] }> {
-  return {
+  return defineTool<{ items: Todo[] }>({
     name: 'TodoWrite',
     description: 'Replace the session todo list. Input is the complete new list of { title, status } items.',
     parameters: {
@@ -32,6 +33,7 @@ export function makeTodoWriteTool(store: TodoState): Tool<{ items: Todo[] }> {
       },
     },
     source: 'builtin',
+    tags: ['core', 'session'],
     needsPermission: () => 'none',
     async run(input) {
       store.items = input.items.map(x => ({ title: x.title, status: x.status }))
@@ -45,5 +47,5 @@ export function makeTodoWriteTool(store: TodoState): Tool<{ items: Todo[] }> {
         : '(no todos)'
       return { output: pretty, isError: false }
     },
-  }
+  })
 }

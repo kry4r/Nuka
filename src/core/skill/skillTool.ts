@@ -11,6 +11,7 @@ export function makeSkillTool(skills: Skill[]): Tool<{ name: string }> {
       required: ['name'],
     },
     source: 'skill',
+    tags: [],
     needsPermission: () => 'none',
     async run({ name }) {
       const skill = skills.find((s) => s.name === name)

@@ -5,6 +5,7 @@ import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { AgentRegistry } from './registry'
 import { dispatchAgent } from './dispatch'
+import { defineTool } from '../tools/define'
 
 export const DISPATCH_AGENT_TOOL_NAME = 'dispatch_agent'
 
@@ -38,7 +39,7 @@ export function makeDispatchAgentTool(deps: {
     `Use when a narrower expertise or tighter tool scope is more appropriate than handling the task yourself. ` +
     `Available: ${summary}.`
 
-  return {
+  return defineTool<DispatchAgentInput>({
     name: DISPATCH_AGENT_TOOL_NAME,
     description,
     parameters: {
@@ -63,6 +64,7 @@ export function makeDispatchAgentTool(deps: {
       additionalProperties: false,
     },
     source: 'builtin',
+    tags: ['core', 'agent'],
     // readOnly + parallelSafe so the main loop dispatches sibling sub-agents
     // concurrently even when both calls are to dispatch_agent itself. Each
     // sub-session has its own state (messages, permission cache, tool
@@ -101,5 +103,5 @@ export function makeDispatchAgentTool(deps: {
       })
       return { output: result.output, isError: result.isError }
     },
-  }
+  })
 }

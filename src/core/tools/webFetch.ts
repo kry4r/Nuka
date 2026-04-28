@@ -1,7 +1,7 @@
-import type { Tool } from './types'
+import { defineTool } from './define'
 import { htmlToMarkdown } from './htmlToMarkdown'
 
-export const WebFetchTool: Tool<{ url: string; maxBytes?: number }> = {
+export const WebFetchTool = defineTool<{ url: string; maxBytes?: number }>({
   name: 'WebFetch',
   description: 'GET an HTTP(S) URL and return the body. HTML bodies are converted to Markdown.',
   parameters: {
@@ -13,6 +13,7 @@ export const WebFetchTool: Tool<{ url: string; maxBytes?: number }> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'net.read'],
   needsPermission: () => 'network',
   async run(input, ctx) {
     const maxBytes = input.maxBytes ?? 1_000_000
@@ -35,4 +36,4 @@ export const WebFetchTool: Tool<{ url: string; maxBytes?: number }> = {
     }
     return { output: text, isError: false }
   },
-}
+})

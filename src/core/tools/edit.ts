@@ -1,6 +1,6 @@
 // src/core/tools/edit.ts
 import { readFile, writeFile } from 'node:fs/promises'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type EditInput = {
   path: string
@@ -21,7 +21,7 @@ function countOccurrences(hay: string, needle: string): number {
   }
 }
 
-export const EditTool: Tool<EditInput> = {
+export const EditTool = defineTool<EditInput>({
   name: 'Edit',
   description: 'Exact string replacement in a file.',
   parameters: {
@@ -35,6 +35,7 @@ export const EditTool: Tool<EditInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'fs.write'],
   needsPermission: () => 'write',
   async run(input) {
     try {
@@ -58,4 +59,4 @@ export const EditTool: Tool<EditInput> = {
       return { isError: true, output: (err as Error).message }
     }
   },
-}
+})
