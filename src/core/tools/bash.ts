@@ -1,11 +1,11 @@
 // src/core/tools/bash.ts
 import { spawn } from 'node:child_process'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type BashInput = { command: string; timeout?: number; cwd?: string }
 const DEFAULT_TIMEOUT = 120_000
 
-export const BashTool: Tool<BashInput> = {
+export const BashTool = defineTool<BashInput>({
   name: 'Bash',
   description: 'Run a shell command and capture its output.',
   parameters: {
@@ -18,6 +18,7 @@ export const BashTool: Tool<BashInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'shell', 'exec'],
   needsPermission: () => 'exec',
   async run(input, ctx) {
     const timeout = input.timeout ?? DEFAULT_TIMEOUT
@@ -85,4 +86,4 @@ export const BashTool: Tool<BashInput> = {
       })
     })
   },
-}
+})

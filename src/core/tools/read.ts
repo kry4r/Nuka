@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type ReadInput = { path: string; offset?: number; limit?: number }
 
@@ -9,7 +9,7 @@ function looksBinary(buf: Buffer): boolean {
   return false
 }
 
-export const ReadTool: Tool<ReadInput> = {
+export const ReadTool = defineTool<ReadInput>({
   name: 'Read',
   description: 'Read a text file and return its contents with line numbers.',
   parameters: {
@@ -22,6 +22,7 @@ export const ReadTool: Tool<ReadInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'fs.read'],
   needsPermission: () => 'none',
   async run(input) {
     try {
@@ -42,4 +43,4 @@ export const ReadTool: Tool<ReadInput> = {
       return { isError: true, output: (err as Error).message }
     }
   },
-}
+})

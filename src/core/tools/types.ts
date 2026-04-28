@@ -34,11 +34,47 @@ export type ToolContext = {
   session?: Session
 }
 
+/**
+ * Describes how a tool's `run` is realised at call time.
+ *
+ * - `in-process` (default): the author supplies `run` directly.
+ * - `spawn`: the platform synthesises a `run` that spawns an external process
+ *   (see {@link executeSpawn} in spawnRuntime.ts) and adapts its stdout/exit
+ *   code into a {@link ToolResult}.
+ *
+ * `'mcp'` is intentionally NOT a runtime kind here — MCP support is being
+ * removed in Phase 11 / M3 and the existing MCP code path stays untouched
+ * for now (see spec §3 for the deprecation plan).
+ */
+export type ToolRuntime =
+  | { kind: 'in-process' }
+  | {
+      kind: 'spawn'
+      command: string
+      args?: (input: unknown) => string[]
+      env?: NodeJS.ProcessEnv
+      parseOutput?: (stdout: string) => unknown
+    }
+
 export interface Tool<I = unknown> {
   name: string
   description: string
   parameters: Record<string, unknown>
   source: 'builtin' | 'skill' | 'mcp' | 'plugin'
+  /**
+   * Capability tags used by the activation algorithm (see spec §4.3 and
+   * §7). `['core']` means "always available"; other tags such as `'fs.read'`
+   * or `'net.read'` are matched against `Skill.requires`.
+   *
+   * Required at the type level — the registry treats an empty array as
+   * "no tags" (the tool is reachable only via the `core` rule or by name).
+   */
+  tags: string[]
+  /**
+   * Optional runtime hint for tools that wrap an external process. Default
+   * is `{ kind: 'in-process' }` — the author's `run` is used as-is.
+   */
+  runtime?: ToolRuntime
   /** Optional custom validator; if absent, validateWithJsonSchema is used. */
   validateInput?: (input: unknown) => ValidationResult<I>
   /** Optional per-tool result size cap (string output only). */

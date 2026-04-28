@@ -1,7 +1,7 @@
 import { execa } from 'execa'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Tool } from './types'
+import { defineTool } from './define'
 
 type GrepInput = {
   pattern: string
@@ -54,7 +54,7 @@ async function fallback(input: GrepInput, cwd: string): Promise<{ output: string
   return { isError: false, output: matches.join('\n') }
 }
 
-export const GrepTool: Tool<GrepInput> = {
+export const GrepTool = defineTool<GrepInput>({
   name: 'Grep',
   description: 'Search file contents using ripgrep (falls back to a naive scanner).',
   parameters: {
@@ -69,6 +69,7 @@ export const GrepTool: Tool<GrepInput> = {
     },
   },
   source: 'builtin',
+  tags: ['core', 'fs.read'],
   needsPermission: () => 'none',
   async run(input, ctx) {
     const root = input.path ?? ctx.cwd
@@ -89,4 +90,4 @@ export const GrepTool: Tool<GrepInput> = {
       return { isError: true, output: (err as Error).message }
     }
   },
-}
+})
