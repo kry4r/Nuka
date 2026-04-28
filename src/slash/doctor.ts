@@ -12,7 +12,7 @@ export { type DoctorReport }
 
 export const DoctorCommand: SlashCommand = {
   name: 'doctor',
-  description: 'Run environment diagnostics (node, providers, plugins, MCP, LSP, config, disk)',
+  description: 'Run environment diagnostics (node, providers, plugins, LSP, config, disk)',
   usage: '/doctor',
   async run(_args: string, ctx: SlashContext) {
     const { runDoctor } = await import('../core/doctor/run')
@@ -20,7 +20,6 @@ export const DoctorCommand: SlashCommand = {
       home: os.homedir(),
       cwd: process.cwd(),
       providers: ctx.providers,
-      mcp: ctx.mcpManager,
     })
     return {
       type: 'dialog' as const,

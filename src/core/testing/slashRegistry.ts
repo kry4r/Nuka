@@ -36,7 +36,6 @@ const REGISTRY: Record<string, Loader> = {
   VimCommand:           async () => (await import('../../slash/vim')).VimCommand,
   StatusBarCommand:     async () => (await import('../../slash/statusBar')).StatusBarCommand,
   SkillCommand:         async () => (await import('../../slash/skill')).SkillCommand,
-  McpCommand:           async () => (await import('../../slash/mcp')).McpCommand,
   TasksCommand:         async () => (await import('../../slash/tasks')).TasksCommand,
   DoctorCommand:        async () => (await import('../../slash/doctor')).DoctorCommand,
 }

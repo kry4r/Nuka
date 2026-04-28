@@ -12,7 +12,6 @@
 import { randomUUID } from 'node:crypto'
 import { runBash } from './run-bash'
 import { runAgent } from './run-agent'
-import { runMonitorMcp } from './monitor-mcp'
 import {
   appendOutputSync,
   ensureTasksDirSync,
@@ -138,17 +137,6 @@ export class TaskManager {
       } catch (err) {
         if (signal.aborted) return // already marked killed
         this.fail(task, (err as Error)?.message ?? 'agent error')
-      }
-      return
-    }
-    if (spec.kind === 'monitor_mcp') {
-      try {
-        const result = await runMonitorMcp({ spec, outputFile: task.outputFile, signal })
-        if (result.error !== undefined) this.fail(task, result.error)
-        else this.complete(task, 0)
-      } catch (err) {
-        if (signal.aborted) return
-        this.fail(task, (err as Error)?.message ?? 'monitor error')
       }
       return
     }

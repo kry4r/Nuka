@@ -1,6 +1,5 @@
 // src/core/permission/bridge.ts
 import type { PermissionCall, PermissionDecision } from './types'
-import type { ElicitationPayload, ElicitationResult } from '../mcp/elicitation'
 import type { LoadedPlugin, PluginUserConfigField } from '../plugin/manifest'
 
 export type AnnotationBadge = 'read-only' | 'destructive' | 'network'
@@ -17,11 +16,6 @@ export type PermissionHandler = (
   resolve: (d: PermissionDecision) => void,
 ) => void
 
-export type ElicitationHandler = (
-  payload: ElicitationPayload,
-  resolve: (r: ElicitationResult) => void,
-) => void
-
 export type PluginConfigPayload = {
   plugin: LoadedPlugin
   fields: PluginUserConfigField[]
@@ -35,15 +29,10 @@ export type PluginConfigHandler = (
 
 export class PermissionBridge {
   private handler: PermissionHandler | null = null
-  private elicitationHandler: ElicitationHandler | null = null
   private pluginConfigHandler: PluginConfigHandler | null = null
 
   setHandler(h: PermissionHandler | null): void {
     this.handler = h
-  }
-
-  setElicitationHandler(h: ElicitationHandler | null): void {
-    this.elicitationHandler = h
   }
 
   setPluginConfigHandler(h: PluginConfigHandler | null): void {
@@ -57,22 +46,6 @@ export class PermissionBridge {
         return
       }
       this.handler(payload, resolve)
-    })
-  }
-
-  /**
-   * Open an elicitation dialog. Resolves with the user's choice.
-   * When no elicitation UI is attached, this resolves with
-   * `{ action: 'decline' }` so the server gets a clean signal instead of
-   * hanging.
-   */
-  elicit(payload: ElicitationPayload): Promise<ElicitationResult> {
-    return new Promise<ElicitationResult>((resolve) => {
-      if (!this.elicitationHandler) {
-        resolve({ action: 'decline' })
-        return
-      }
-      this.elicitationHandler(payload, resolve)
     })
   }
 

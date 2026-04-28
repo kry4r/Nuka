@@ -42,7 +42,6 @@ import { IdeCommand } from './slash/ide'
 import { StatusBarCommand } from './slash/statusBar'
 import { createPluginCommand } from './slash/plugin'
 import { SkillCommand } from './slash/skill'
-import { McpCommand } from './slash/mcp'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -63,9 +62,6 @@ import { loadSkills } from './core/skill/loader'
 import { makeSkillTool } from './core/skill/skillTool'
 import { SessionStore, DebouncedMetaWriter } from './core/session/store'
 import { sessionsDir } from './core/session/paths'
-import { McpManager } from './core/mcp/manager'
-import { mcpToolsFor } from './core/mcp/toolAdapter'
-import { makeListMcpResourcesTool, makeReadMcpResourceTool } from './core/mcp/resourceTools'
 import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
@@ -73,7 +69,6 @@ import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { validatePlugin, formatReport } from './core/plugin/validate'
-import type { McpServerConfig } from './core/mcp/types'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
 import { Wizard } from './tui/Onboarding/Wizard'
@@ -217,7 +212,7 @@ if (testPlanIdx !== -1) {
     try {
       const manifest = await readManifestFrom(path.resolve(source))
       process.stdout.write(`About to install plugin '${manifest.name}' into ~/.nuka/plugins/${manifest.name}\n`)
-      process.stdout.write(`  tools: ${manifest.tools.length}  slash: ${manifest.slashCommands.length}  skills: ${manifest.skills.length}  mcp: ${Object.keys(manifest.mcpServers).length}\n`)
+      process.stdout.write(`  tools: ${manifest.tools.length}  slash: ${manifest.slashCommands.length}  skills: ${manifest.skills.length}\n`)
       const confirm = async (): Promise<boolean> => {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
         const answer: string = await new Promise(res => rl.question('Proceed? [y/N] ', res))
@@ -226,9 +221,9 @@ if (testPlanIdx !== -1) {
       }
       const result = await installPluginFromPath({ source: path.resolve(source), home: os.homedir(), force, confirm })
       process.stdout.write(`installed '${result.name}' → ${result.targetDir}\n`)
-      process.stdout.write(`  tools: ${result.toolsCount}, slash: ${result.slashCount}, skills: ${result.skillsCount}, mcp: ${result.mcpCount}\n`)
-      if (!result.mcpCount && !result.toolsCount && !result.slashCount && !result.skillsCount) {
-        process.stdout.write('(plugin contributes no tools/slash/skills/mcp — verify manifest)\n')
+      process.stdout.write(`  tools: ${result.toolsCount}, slash: ${result.slashCount}, skills: ${result.skillsCount}\n`)
+      if (!result.toolsCount && !result.slashCount && !result.skillsCount) {
+        process.stdout.write('(plugin contributes no tools/slash/skills — verify manifest)\n')
       }
       process.exit(0)
     } catch (err) {
@@ -389,7 +384,7 @@ async function runInteractive(): Promise<void> {
     CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand,
     HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
-    StatusBarCommand, SkillCommand, McpCommand,
+    StatusBarCommand, SkillCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
   // (install/update from the marketplace) live as top-level CLI subcommands;
@@ -421,7 +416,6 @@ async function runInteractive(): Promise<void> {
     extraDirs,
     checkUserConfig: true,
   })
-  const mcpServers: Record<string, McpServerConfig> = { ...(config.mcp?.servers ?? {}) }
   const hooks: import('./core/hooks/types').HookEntry[] = []
   const agents = new AgentRegistry()
 
@@ -443,13 +437,13 @@ async function runInteractive(): Promise<void> {
   for (const p of readyPlugins) {
     const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
     const result = await wirePlugin(p, {
-      tools, slash, skills, mcpServers, hooks, agents, lsp: lspManager,
+      tools, slash, skills, hooks, agents, lsp: lspManager,
       pluginConfig: pluginConfig ?? undefined,
     })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
-    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} mcp=${result.mcpAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded} lsp=${result.lspAdded}`)
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded} lsp=${result.lspAdded}`)
   }
 
   // Register LSP tools when at least one server is configured
@@ -463,30 +457,6 @@ async function runInteractive(): Promise<void> {
   tools.register(makeSkillTool(skills) as any)
 
   const permBridge = new PermissionBridge()
-  const mcpManager = Object.keys(mcpServers).length > 0
-    ? new McpManager({
-        servers: mcpServers,
-        maxResultChars: config.mcp?.maxResultChars,
-        connectTimeoutMs: config.mcp?.connectTimeoutMs,
-        requestTimeoutMs: config.mcp?.requestTimeoutMs,
-        permissionBridge: permBridge,
-      })
-    : null
-
-  if (mcpManager) {
-    tools.register(makeListMcpResourcesTool(mcpManager) as any)
-    tools.register(makeReadMcpResourceTool(mcpManager) as any)
-
-    void (async () => {
-      await mcpManager.startAll()
-      for (const c of mcpManager.listClients()) {
-        if (c.status.kind === 'connected') {
-          const mcpTools = await mcpToolsFor(c)
-          mcpTools.forEach(t => tools.register(t as any))
-        }
-      }
-    })()
-  }
 
   const askUser = (payload: import('./core/permission/bridge').PermissionPayload) =>
     permBridge.ask({ ...payload, suggestedPattern: suggestPattern(payload.call) })
@@ -510,14 +480,13 @@ async function runInteractive(): Promise<void> {
   const gitBranch = currentGitBranch(cwd)
 
   process.on('SIGINT', () => {
-    const mcpCleanup = mcpManager ? mcpManager.closeAll() : Promise.resolve()
     const lspCleanup = lspManager.closeAll().catch(() => {})
     // Phase 7 §5.2 — flush cost tracker on exit. Best-effort.
     const costFlush = writeCostFile(defaultCostPath(), costTracker.snapshot()).catch(() => {})
     // Phase 7 §5.3 — synth a memory entry from this session's transcript.
     // Hard-bounded by synth's 5s internal timeout; failures are swallowed.
     const memSynth = synthOnExit()
-    Promise.all([mcpCleanup, lspCleanup, costFlush, memSynth]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    Promise.all([lspCleanup, costFlush, memSynth]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
   const activeSession = sessions.active()!
@@ -599,7 +568,6 @@ async function runInteractive(): Promise<void> {
       cwd={cwd}
       gitBranch={gitBranch}
       version={MACRO_VERSION}
-      mcpManager={mcpManager ?? undefined}
       tools={tools}
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
       costTracker={costTracker}
@@ -617,7 +585,7 @@ async function runInteractive(): Promise<void> {
         const config = await permBridge.promptPluginConfig({ plugin: p, fields })
         if (config !== null) {
           await writeUserConfig(os.homedir(), p.manifest.name, config)
-          const result = await wirePlugin(p, { tools, slash, skills, mcpServers, hooks, agents, pluginConfig: config })
+          const result = await wirePlugin(p, { tools, slash, skills, hooks, agents, pluginConfig: config })
           if (result.errors.length > 0) {
             for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
           }

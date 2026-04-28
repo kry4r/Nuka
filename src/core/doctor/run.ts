@@ -4,17 +4,31 @@
 // `runDoctor(deps)` runs all checks in parallel (each capped at 5 s) and
 // returns a `DoctorReport`. The individual check modules live under `checks/`.
 
-import { withTimeout } from '../mcp/client'
 import { nodeCheck } from './checks/node'
 import { providersCheck } from './checks/providers'
 import { pluginsCheck } from './checks/plugins'
-import { mcpCheck } from './checks/mcp'
 import { lspCheck } from './checks/lsp'
 import { configCheck } from './checks/config'
 import { diskCheck } from './checks/disk'
 import type { ProviderResolver } from '../provider/resolver'
-import type { McpManager } from '../mcp/manager'
 import type { LspManager } from '../lsp/manager'
+
+/** Reject after `ms` milliseconds with a `${label} timeout` error. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms)
+    p.then(
+      value => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      err => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
 
 export type CheckStatus = 'ok' | 'warn' | 'fail'
 
@@ -39,8 +53,6 @@ export type DoctorDeps = {
   providers?: ProviderResolver
   /** If absent, plugins check uses default home-based plugin discovery */
   plugins?: { dirs: string[] }
-  /** If absent, mcp check is skipped */
-  mcp?: McpManager
   /** If absent, lsp check is skipped */
   lsp?: LspManager
 }
@@ -53,7 +65,6 @@ const ALL_CHECKS: Array<{ name: string; fn: RawCheckFn }> = [
   { name: 'node',      fn: nodeCheck },
   { name: 'providers', fn: providersCheck },
   { name: 'plugins',   fn: pluginsCheck },
-  { name: 'mcp',       fn: mcpCheck },
   { name: 'lsp',       fn: lspCheck },
   { name: 'config',    fn: configCheck },
   { name: 'disk',      fn: diskCheck },
