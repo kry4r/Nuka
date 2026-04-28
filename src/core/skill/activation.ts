@@ -50,3 +50,34 @@ export function activeToolsFor(
   }
   return out
 }
+
+/**
+ * Compute the union of `activeToolsFor(s, registry)` across all matched
+ * skills. See spec §4.3.
+ *
+ * - `skills` is empty → return `registry.list()` (full set). This preserves
+ *   current loop behaviour when no skill is active: the model sees every
+ *   registered tool unchanged.
+ *
+ * - Otherwise → union by `tool.name` of `activeToolsFor(s, registry)` for
+ *   each skill in `skills`. Result is deduplicated by name, preserving the
+ *   encounter order of the first occurrence of each tool.
+ */
+export function activeToolsForMany(
+  skills: Skill[],
+  registry: ToolRegistry,
+): Tool[] {
+  if (skills.length === 0) return registry.list()
+
+  const seen = new Set<string>()
+  const out: Tool[] = []
+  for (const skill of skills) {
+    for (const t of activeToolsFor(skill, registry)) {
+      if (!seen.has(t.name)) {
+        seen.add(t.name)
+        out.push(t)
+      }
+    }
+  }
+  return out
+}

@@ -13,6 +13,7 @@ import { appendMessage } from '../session/session'
 import type { AssistantMessage, ContentBlock, Message } from '../message/types'
 import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
+import { activeToolsForMany } from '../skill/activation'
 import { createProgressPump } from './progressPump'
 import type { AutoCompactOpts } from '../compact/auto'
 import { maybeAutoCompact } from '../compact/auto'
@@ -185,11 +186,14 @@ export async function* runAgent(
   deps: RunAgentDeps,
   signal: AbortSignal,
 ): AsyncIterable<AgentEvent> {
-  if (deps.skills && deps.skills.length > 0) {
-    const matched = matchKeywordSkills(deps.skills, input.text)
-    for (const skill of matched) {
-      appendMessage(session, makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`), deps.persist)
-    }
+  // Compute matched skills once per runAgent call; used both for system-message
+  // injection below and for per-turn tool narrowing inside the while loop.
+  const matchedSkills: Skill[] = (deps.skills && deps.skills.length > 0)
+    ? matchKeywordSkills(deps.skills, input.text)
+    : []
+
+  for (const skill of matchedSkills) {
+    appendMessage(session, makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`), deps.persist)
   }
   appendMessage(session, makeUserMessage(input), deps.persist)
 
@@ -211,9 +215,12 @@ export async function* runAgent(
       ? buildSystemPrompt(deps.systemPromptInput())
       : ''
 
-    // M2.9: Filter tool specs: alwaysLoad tools always included; shouldDefer
-    // tools excluded unless already un-deferred via searchHint or manual unlock.
-    const toolSpecs = deps.tools.list().flatMap(tool => {
+    // M2.9 / Phase 11 M2: Filter tool specs by matched skills (activeToolsForMany
+    // returns full registry when no skills matched, preserving existing behaviour).
+    // On top of narrowing, alwaysLoad tools always pass through; shouldDefer tools
+    // are excluded unless already un-deferred via searchHint or manual unlock.
+    const narrowed = activeToolsForMany(matchedSkills, deps.tools)
+    const toolSpecs = narrowed.flatMap(tool => {
       if (tool.alwaysLoad) return [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
       if (tool.shouldDefer?.(input)) {
         if (!session.unDeferredToolNames.has(tool.name)) return []
