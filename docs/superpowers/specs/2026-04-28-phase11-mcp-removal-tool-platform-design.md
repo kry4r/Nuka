@@ -83,7 +83,15 @@ On skill activation the host calls:
 ToolRegistry.queryByTags(tags: string[]): Tool[]
 ```
 
-which returns all tools whose `tags` intersect `tags`. The matched set is the tool list passed to the model for the skill's turn(s). Skills with no `requires` get the unfiltered builtin set (current behaviour).
+which returns all tools whose `tags` intersect `tags`.
+
+**`requires` is additive, not a filter.** The tool set passed to the model for a skill's turn is:
+
+```
+activeTools(skill) = (tools tagged 'core' or alwaysLoad=true) ∪ queryByTags(skill.requires)
+```
+
+This means skills always retain the basic file/shell/edit toolkit and only declare *additional* capabilities they need. Skills with no `requires` (or no frontmatter `requires` field) get exactly the core set — which is current behaviour for any skill that doesn't opt in. To strip the core set entirely, a skill writes `requires: []` plus `requiresStrict: true` (escape hatch; not implemented in this phase).
 
 ### 4.4 Plugin manifest changes
 
@@ -92,7 +100,7 @@ which returns all tools whose `tags` intersect `tags`. The matched set is the to
 - **DROP** `mcpServers` field
 - **DROP** `outputStyles[].matchToolSource: 'mcp'` literal
 - `tools` field semantics unchanged (relative module paths) but each module's default export is now expected to be a `Tool` produced by `defineTool` — manifest does not need a new field
-- `bin` field is added for clarity but follows npm semantics (`{ "bin": { "my-cli": "./bin/my-cli.js" } }`); install pipeline links into `~/.nuka/bin/<name>` so the same plugin's CLI is usable from the terminal
+- **ADD** `bin?: Record<string,string>` field (npm semantics, e.g. `{ "my-cli": "./bin/my-cli.js" }`). The schema landing happens in M3 alongside the `mcpServers` removal so manifest consumers see one breaking schema change, not two. The actual install-time symlinking of `~/.nuka/bin/<name>` lands in M4.
 
 ### 4.5 Plugin wiring (`src/core/plugin/wire.ts`)
 
@@ -140,11 +148,14 @@ Each file in `src/core/tools/{read,write,edit,bash,glob,grep,todoWrite,htmlToMar
 
 | Tool | Tags |
 |---|---|
-| `read` / `glob` / `grep` | `['fs.read']` |
-| `write` / `edit` | `['fs.write']` |
-| `bash` | `['shell','exec']` |
-| `webFetch` / `webSearch` | `['net.read']` |
-| `todoWrite` | `['session']` |
+| `read` / `glob` / `grep` | `['core','fs.read']` |
+| `write` / `edit` | `['core','fs.write']` |
+| `bash` | `['core','shell','exec']` |
+| `webFetch` / `webSearch` | `['core','net.read']` |
+| `todoWrite` | `['core','session']` |
+| `dispatch_agent` | `['core','agent']` |
+
+The `'core'` tag is what makes these tools always present in `activeTools(skill)` regardless of `requires` — see §4.3.
 
 Skills that previously got the unfiltered set continue to (no `requires`); ones that need the small set can opt in.
 
