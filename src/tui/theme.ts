@@ -1,24 +1,21 @@
 // src/tui/theme.ts
-export type Palette = {
-  primary: string
-  accent: string
-  fg: string
-  muted: string
-  warn: string
-  error: string
-  success: string
-}
+// Phase 12 M1 — Palette is now an alias for ThemeColors (12 semantic keys +
+// bg + bgPanel).  `defaultPalette` is the static default-dark fallback used
+// by components that import it directly.  Components that need the live
+// active-theme palette should use `useColors()` from the theme context.
 
-export const defaultPalette: Palette = {
-  primary: '#A3BE8C',
-  accent: '#6E8759',
-  fg: '#D8DEE9',
-  muted: '#4C566A',
-  warn: '#EBCB8B',
-  error: '#BF616A',
-  success: '#A3BE8C',
-}
+import type { ThemeColors } from '../core/theme/themes'
+import { defaultDark } from '../core/theme/themes'
 
+export type Palette = ThemeColors
+
+/** Static fallback palette (default-dark).  Use `useColors()` for live theming. */
+export const defaultPalette: Palette = defaultDark.colors
+
+/**
+ * Merge two palettes; the override takes precedence for keys it supplies.
+ * Kept for backwards-compatibility with any future theme-override needs.
+ */
 export function mergePalette(
   base: Palette,
   override?: Partial<Palette>,

@@ -252,7 +252,7 @@ export function Wizard(props: {
   }
   return (
     <Box>
-      <Text color={P.muted}>cancelled</Text>
+      <Text color={P.fgMuted}>cancelled</Text>
     </Box>
   )
 }
@@ -262,7 +262,7 @@ function Welcome(): React.JSX.Element {
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Welcome to Nuka</Text>
       <Text color={P.fg}>Let's get a provider configured so you can start chatting.</Text>
-      <Text color={P.muted}>Press Enter to begin · Esc to cancel</Text>
+      <Text color={P.fgMuted}>Press Enter to begin · Esc to cancel</Text>
     </Box>
   )
 }
@@ -274,18 +274,18 @@ function CustomDetailsScreen(props: {
   const Field = (i: 0 | 1 | 2 | 3, label: string, val: string, hint?: string) => (
     <Box>
       <Box width={10}>
-        <Text color={u.field === i ? P.primary : P.muted} bold={u.field === i}>{label}</Text>
+        <Text color={u.field === i ? P.primary : P.fgMuted} bold={u.field === i}>{label}</Text>
       </Box>
-      <Text color={P.muted}>│ </Text>
+      <Text color={P.fgMuted}>│ </Text>
       <Text color={P.fg}>{val}</Text>
       {u.field === i && <Text color={P.fg} inverse> </Text>}
-      {hint && <Text color={P.muted}>  {hint}</Text>}
+      {hint && <Text color={P.fgMuted}>  {hint}</Text>}
     </Box>
   )
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Custom provider</Text>
-      <Text color={P.muted}>↑/↓ switches fields · Enter advances/confirms · Esc to cancel</Text>
+      <Text color={P.fgMuted}>↑/↓ switches fields · Enter advances/confirms · Esc to cancel</Text>
       <Box height={1} />
       {Field(0, 'name',    u.name || '(Custom)')}
       {Field(1, 'baseUrl', u.baseUrl, 'e.g. https://api.openai.com/v1')}
@@ -300,7 +300,7 @@ function ErrorScreen(props: { message: string }): React.JSX.Element {
     <Box flexDirection="column" borderStyle="round" borderColor={P.error} paddingX={1}>
       <Text color={P.error} bold>Verification failed</Text>
       <Text color={P.fg}>{props.message}</Text>
-      <Text color={P.muted}>Enter retry · Esc cancel</Text>
+      <Text color={P.fgMuted}>Enter retry · Esc cancel</Text>
     </Box>
   )
 }

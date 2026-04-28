@@ -42,7 +42,7 @@ export function MessageSelector(props: MessageSelectorProps): React.JSX.Element 
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
         <Text color={P.warn}>No assistant messages to rewind to yet.</Text>
-        <Text color={P.muted}>(Esc to dismiss)</Text>
+        <Text color={P.fgMuted}>(Esc to dismiss)</Text>
       </Box>
     )
   }
@@ -55,7 +55,7 @@ export function MessageSelector(props: MessageSelectorProps): React.JSX.Element 
           {i === cursor ? '›' : ' '} {i + 1}. {firstLinePreview(m)}
         </Text>
       ))}
-      <Text color={P.muted}>↑/↓ move  Enter pick  Esc cancel</Text>
+      <Text color={P.fgMuted}>↑/↓ move  Enter pick  Esc cancel</Text>
     </Box>
   )
 }

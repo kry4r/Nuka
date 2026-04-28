@@ -6,7 +6,7 @@ import type { TaskManager } from '../core/tasks/manager'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
-  | { kind: 'config-editor' }
+  | { kind: 'config' }
   | { kind: 'session-picker' }
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
@@ -38,5 +38,13 @@ export interface SlashCommand {
   name: string            // without leading slash
   description: string
   usage?: string
+  /** Where this command originated. Defaults to 'builtin'. */
+  source?: 'builtin' | 'plugin' | 'skill'
+  /** Optional keyboard shortcut label (display-only). */
+  shortcut?: string
+  /** Positional / named arguments this command accepts. */
+  args?: { name: string; choices?: string[]; description?: string }[]
+  /** Example invocations shown in arg-hint card. */
+  examples?: string[]
   run(args: string, ctx: SlashContext): Promise<SlashResult>
 }

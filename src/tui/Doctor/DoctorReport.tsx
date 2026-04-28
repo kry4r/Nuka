@@ -42,12 +42,12 @@ export function DoctorReport({ report, onClose }: DoctorReportProps): React.JSX.
               {statusIcon(check.status)} {check.name}: {check.detail}
             </Text>
             {check.remedy && (
-              <Text color={P.muted}>  → {check.remedy}</Text>
+              <Text color={P.fgMuted}>  → {check.remedy}</Text>
             )}
           </Box>
         ))}
       </Box>
-      <Text color={P.muted} dimColor>Press Enter or Esc to dismiss</Text>
+      <Text color={P.fgMuted} dimColor>Press Enter or Esc to dismiss</Text>
     </Box>
   )
 }

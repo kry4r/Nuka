@@ -5,6 +5,9 @@ import { loadSkills } from '../core/skill/loader'
 export const SkillCommand: SlashCommand = {
   name: 'skill',
   description: 'List loaded skills (use the skill tool to invoke one)',
+  source: 'builtin',
+  usage: '/skill',
+  examples: ['/skill'],
   async run(): Promise<SlashResult> {
     const skills = await loadSkills({ home: os.homedir(), cwd: process.cwd() })
     if (skills.length === 0) {

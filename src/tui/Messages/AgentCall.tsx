@@ -34,15 +34,15 @@ export function AgentCall(props: {
   return (
     <Box flexDirection="column" marginLeft={2}>
       <Box>
-        <Text color={P.accent}>◆ </Text>
+        <Text color={P.primary}>◆ </Text>
         <Text color={P.fg} bold>[{props.agent}] </Text>
-        <Text color={P.muted}>{expanded ? props.task : shortTask}</Text>
+        <Text color={P.fgMuted}>{expanded ? props.task : shortTask}</Text>
         <Text color={iconColor}> {icon}</Text>
       </Box>
       {props.result !== undefined && (
-        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.muted}>
-          <Text color={P.muted}>{expanded ? props.result : (shortResult ?? '')}</Text>
-          <Text color={P.muted} dimColor>(from `{props.agent}`)</Text>
+        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.fgMuted}>
+          <Text color={P.fgMuted}>{expanded ? props.result : (shortResult ?? '')}</Text>
+          <Text color={P.fgMuted} dimColor>(from `{props.agent}`)</Text>
         </Box>
       )}
     </Box>

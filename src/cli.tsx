@@ -572,6 +572,9 @@ async function runInteractive(): Promise<void> {
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
       costTracker={costTracker}
       taskManager={taskManager}
+      todoStore={todoStore}
+      loadedPlugins={plugins.map(p => ({ name: p.manifest.name, description: p.manifest.description }))}
+      loadedSkills={skills.map(s => ({ name: s.name, description: s.description }))}
     />,
   )
 

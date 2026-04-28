@@ -1,45 +1,23 @@
-<div align="center">
-
-<img src="assets/logo.png" width="128" height="128" alt="Nuka" />
-
 # Nuka
 
-**A plugin-first, agent-swarm CLI coding assistant.**
-
-[![tests](https://img.shields.io/badge/tests-1246%20passing-brightgreen)]()
-[![bundle](https://img.shields.io/badge/bundle-256%20KB-blue)]()
-[![status](https://img.shields.io/badge/status-active-success)]()
-[![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
-
-Stream-rendered TUI · plugin marketplace · multi-expert agents · LSP-aware tools — all in a single ~240 KB bundle.
+A plugin-first CLI coding assistant. Stream-rendered TUI, multi-agent
+dispatch, LSP-aware tools, in a single ~285 KB bundle.
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-</div>
-
----
-
-## ✨ Highlights
-
-| | |
-|---|---|
-| **🎯 Plugin-first** | Tools, slash commands, hooks, agents, output renderers, LSP servers — all flow through one manifest. |
-| **🤖 Agent swarm** | Plugins declare specialist agents. Main agent dispatches with isolated sessions, filtered tools, up to 4 in parallel. |
-| **🔌 Provider-agnostic** | Anthropic + OpenAI today. New providers in ~150 LOC. |
-| **📦 Marketplace** | Install from URL index, git, npm, or `.mcpb`/`.dxt` bundles. Versioned cache. Dependency closure. |
-| **🛡️ Permission-aware** | Read-only / destructive / network annotations drive prompt UX. Per-session consent cache. |
-| **📁 LSP integration** | Stdio LSP servers. Diagnostics / definition / references as agent tools. Auto `didChange` on `Write`/`Edit`. |
-
----
-
-## 🚀 Quickstart
+## Install
 
 ```bash
 git clone https://github.com/kry4r/Nuka.git
-cd Nuka && npm install && npm run build && npm link
+cd Nuka
+npm install
+npm run build
+npm link
 ```
 
-Configure a provider in `~/.nuka/config.yaml`:
+## Configure
+
+`~/.nuka/config.yaml`:
 
 ```yaml
 providers:
@@ -50,77 +28,71 @@ providers:
 defaultProvider: anthropic
 ```
 
-Run:
+If no provider is configured Nuka launches in offline mode and you can
+add one through `/config` or by editing the file.
+
+## Run
 
 ```bash
 nuka
 ```
 
----
+Type a message and press enter, or `/` for slash commands. Press `?` for
+help.
 
-## 🏗 Architecture
+## TUI overview
 
-```
-                ┌─────────────────────┐
-                │     src/cli.tsx     │
-                │  providers·sessions │
-                │  permission·slash   │
-                └──────────┬──────────┘
-                           │
-                  ┌────────▼────────┐
-                  │  agent/loop.ts  │  streaming · parallel batches
-                  │                 │  hooks · channels · autocompact
-                  └─┬──────┬──────┬─┘
-                    │      │      │
-            ┌───────▼─┐ ┌──▼───┐ ┌▼──────────┐
-            │  Tools  │ │Skills│ │ Provider  │
-            └────┬────┘ └──────┘ └───────────┘
-                 │
-       ┌─────────┼─────────────────────────────┐
-       │         │                             │
-           ┌───▼────┐ ┌──────────┐ ┌─────────▼────┐
-           │Plugins │ │  Agents  │ │     LSP      │
-           │ wire   │ │ dispatch │ │ jsonrpc·docs │
-           │market  │ │ registry │ │ manager·tools│
-           └────────┘ └──────────┘ └──────────────┘
-```
-
-### Module map
+Four stacked zones, top to bottom:
 
 ```
-src/core/
-  agent/         loop · events · system prompt · progress pump
-  agents/        dispatch · registry · tool filter
-  config/        4-scope cascade (enterprise/user/project/local)
-  hooks/         lifecycle hooks (execa runner)
-  lsp/           jsonrpc · client · doc tracker · manager · tools
-  notifications/ channels (webhook/command)
-  permission/    checker · bridge · pattern cache
-  plugin/        manifest · install (bin linking) · deps · marketplace · userConfig
-  provider/      Anthropic · OpenAI adapters
-  skill/         loader · activation (requires→tags) · types
-  tools/         defineTool · spawnRuntime · registry (queryByTags) · content blocks
-src/slash/       /plugin · /help · plugin-contributed
-src/tui/         Ink renderer · dialogs · message rows
++- Conversation ---------------------+
+| Welcome / Messages / tool folds    |
++------------------------------------+
++- Tasks ----------------------------+    (Ctrl+T to collapse)
+| Plan checklist                     |
+| Subagents                          |
+| Backgrounds                        |
++------------------------------------+
++- Prompt ---------------------------+
+| > _                                |
++------------------------------------+
++- Status ---------------------------+
+| mode | model | cwd | ctx | $ | ⏱   |
++------------------------------------+
 ```
 
----
+`Conversation` grows to fill height; `Tasks`, `Prompt`, `Status` are
+fixed. `Tasks` is hidden when there is nothing to show.
 
-## 🧩 Plugin manifest
+Key bindings:
+
+| Key      | Action                                             |
+|----------|----------------------------------------------------|
+| `/`      | Open slash command list                            |
+| `@`      | File mention                                       |
+| `Ctrl+T` | Collapse / expand the Tasks panel                  |
+| `Esc`    | Close the open submenu, or cancel the running turn |
+| `Tab`    | Accept a slash candidate                           |
+| `?`      | `/help`                                            |
+
+Slash commands and dialogs (model picker, config editor, sessions,
+stats, doctor) render as a single-stack submenu that takes over the
+lower zones; `Esc` returns to the normal layout.
+
+## Plugin authoring
 
 ```yaml
+# plugin.yaml
 name: my-plugin
 version: 1.0.0
 
-# Capabilities
-tools:        [tools/foo.js]
-slashCommands:[slash/bar.js]
-skills:       [skills/baz.md]
-hooks:        hooks.json
-bin:          { my-cli: ./bin/my-cli.js }   # expose a terminal CLI
-lspServers:   [{ name: ts, command: typescript-language-server, ... }]
+tools:         [tools/foo.js]
+slashCommands: [slash/bar.js]
+skills:        [skills/baz.md]
+hooks:         hooks.json
+bin:           { my-cli: ./bin/my-cli.js }
+lspServers:    [{ name: ts, command: typescript-language-server }]
 
-# Multi-expert agents
 agents:
   - name: reviewer
     description: Reviews code for style + correctness
@@ -128,25 +100,16 @@ agents:
     allowedTools: [Read, Grep, Glob]
     keywords: [review, audit]
 
-# UI customization
-outputStyles: [{ name: gh, matchToolName: "plugin__my-plugin__*", componentPath: ... }]
-channels:     [{ name: slack, allowlist: [tool_result], dispatch: { type: webhook, url: ... } }]
-
-# Configuration
-userConfig:   { fields: [{ name: token, type: string, required: true }] }
-dependencies: [{ name: shared-lib, required: true }]
+userConfig:    { fields: [{ name: token, type: string, required: true }] }
+dependencies:  [{ name: shared-lib, required: true }]
 ```
 
----
-
-## 🔧 Building a plugin tool
-
-See `examples/plugin-cli-tool/` for a complete runnable example. The two key primitives:
+A complete runnable example lives in `examples/plugin-cli-tool/`.
 
 ### In-process tool
 
 ```js
-// tools/echo.js — export a plain object matching the Tool interface
+// tools/echo.js
 export default {
   name: 'echo',
   description: 'Echo input text uppercase',
@@ -167,13 +130,13 @@ export default {
 ### Spawn-wrapped CLI tool
 
 ```js
-// tools/git-log.js — wrap any CLI binary as a typed tool
+// tools/git-log.js
 export default {
   name: 'git-log',
   description: 'Last 5 git commits',
   parameters: { type: 'object', properties: {}, required: [] },
   source: 'plugin',
-  tags: ['git', 'vcs.read'],          // matched by skill `requires`
+  tags: ['git', 'vcs.read'],
   runtime: {
     kind: 'spawn',
     command: 'git',
@@ -181,23 +144,15 @@ export default {
     parseOutput: (stdout) => ({ commits: stdout.trim().split('\n').filter(Boolean) }),
   },
   needsPermission: () => 'none',
-  async run(_input, ctx) { /* provided by spawn runtime */ },
+  async run() { /* provided by spawn runtime */ },
 }
 ```
 
-### Terminal CLI via `bin`
+### Skill `requires`
 
-Add a `bin` field to `plugin.json` to symlink a Node script into `~/.nuka/bin/` on install:
-
-```json
-{ "bin": { "nuka-echo": "./bin/nuka-echo.js" } }
-```
-
-On install, Nuka creates `~/.nuka/bin/nuka-echo → <plugin>/bin/nuka-echo.js` (POSIX) or a `.cmd` shim (Windows). Add `~/.nuka/bin` to your `PATH` once and every plugin CLI is immediately available.
-
-### Skill `requires` for tool narrowing
-
-Skills declare `requires: [tag, ...]` in their frontmatter. On skill activation Nuka exposes the core tool set **plus** any tools whose `tags` intersect `requires`. This lets a deploy skill automatically unlock `git-log` without the model needing to be told:
+A skill's frontmatter can list capability tags. On activation, Nuka
+exposes the core tool set plus any tools whose `tags` intersect
+`requires`:
 
 ```markdown
 ---
@@ -209,90 +164,36 @@ requires: ["git", "vcs.read"]
 Use git-log to inspect recent commits before suggesting a release branch.
 ```
 
----
+## Test harness
 
-## 🤖 Auto-test mode
-
-Nuka ships a headless TUI test harness. Plans are YAML files in `test-plans/`
-that mount the app, send keystrokes, and assert on rendered frames.
+Nuka ships a headless TUI runner driven by YAML plans:
 
 ```bash
-# Run a plan (pretty reporter, default)
 nuka --test-plan test-plans/01-offline-boot.yaml
-
-# TAP output for CI
 nuka --test-plan test-plans/01-offline-boot.yaml --reporter=tap
-
-# Update snapshots
 nuka --test-plan test-plans/01-offline-boot.yaml --update-snapshots
-
-# Run all sample plans via vitest
 npx vitest run test/integration/samplePlans.test.ts
 ```
 
-Five sample plans live in `test-plans/`: offline boot, onboarding wizard,
-theme-switch surface, stats view, and plan-mode lockout.
+Sample plans (`test-plans/`): offline boot, onboarding wizard, theme
+surface, stats view, plan-mode lockout.
 
----
+## Configuration scopes
 
-## 🎬 Manual test flow
+Config is layered in four scopes (later overrides earlier):
 
-```bash
-# Sanity
-npm run typecheck && npm test && npm run build
-
-# Interactive
-nuka              # Type a prompt. /help for slash commands.
-
-# Plugin smoke
-mkdir -p ~/.nuka/plugins/hello/{tools,slash}
-# (copy plugin.yaml + greet.js + wave.js — see docs/superpowers/specs/)
-nuka              # /plugin list → see hello
-
-# Agent dispatch
-# Add `agents: [{ name: reviewer, ... }]` to hello/plugin.yaml
-nuka              # "dispatch reviewer to look at src/cli.tsx"
-                  # → indented [hello:reviewer] block
-
-# LSP
-npm install -g typescript-language-server
-# Add `lspServers: [{ name: ts, ... }]` to hello/plugin.yaml
-nuka              # "lsp_diagnostics for src/cli.tsx"
-
-# Validate
-nuka plugin validate ~/.nuka/plugins/hello
-
-# Config scopes
-nuka config show [--scope user]
+```
+enterprise -> user (~/.nuka/config.yaml) -> project (.nuka/) -> local (.nuka/local.yaml)
 ```
 
-Full 13-step test plan: `docs/superpowers/specs/2026-04-24-phase5-marketplace-agents-design.md`.
+`nuka config show [--scope user]` prints the resolved tree.
 
----
+## Contributing
 
-## 🛣 Phase history
+Issues and pull requests are welcome. Each significant change is
+preceded by a design spec and an implementation plan under
+`docs/superpowers/`.
 
-| Phase | Items | Highlight |
-|------:|------:|---|
-| 1–3 | foundation | agent loop · providers · MCP min · basic plugins |
-| **4a** | 21 | timeouts · truncation · listRoots · resource_link · image persist · validation · ContentBlock · hooks · elicitation · SSE · reconnect |
-| **4b** | 14 | parallel batches · annotation prompts · scheduling · aliases · userConfig · stderr buffer · LRU cache |
-| **5** | 16 | marketplace + git/npm/bundle · deps closure · `/plugin` TUI · **agents swarm** · outputStyles · channels · 4-scope config |
-| **6** | 1 | LSP integration |
-| **7** | 13 | onboarding wizard · cost tracker · auto-memory · vim mode · status HUD |
-| **8** | 11 | theme switcher · `/stats` · `/rewind` · plan-mode gate · IDE bridge |
-| **9** | 8 | self-driving TUI test harness · YAML plans · `nuka --test-plan` · 5 sample plans |
-| **10** | 11 | bundle split · task system (`/tasks`) · `nuka doctor` · statusline customization · `/rewind` dialog |
-| **11** | 4 | **MCP deleted** · `defineTool` + spawn runtime · skill `requires`→tags narrowing · `bin` linking · example plugin |
-
-1099+ tests · ~254 KB production bundle · 0 vendored deps for new features.
-
----
-
-## 📜 License
+## License
 
 TBD. All rights reserved by the maintainer until declared.
-
-## 🤝 Contributing
-
-Issues and PRs welcome. Each major change ships a design spec + plan + Gap Closure entry under `docs/superpowers/`.

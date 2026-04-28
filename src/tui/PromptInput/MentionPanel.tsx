@@ -13,7 +13,7 @@ export function MentionPanel(props: {
   if (props.matches.length === 0) {
     return (
       <Box paddingX={1}>
-        <Text color={P.muted}>  @{props.query}  (no matches)</Text>
+        <Text color={P.fgMuted}>  @{props.query}  (no matches)</Text>
       </Box>
     )
   }
@@ -21,7 +21,7 @@ export function MentionPanel(props: {
     <Box flexDirection="column" paddingX={1}>
       {props.matches.slice(0, 10).map((m, i) => (
         <Box key={m}>
-          <Text color={i === props.cursor ? P.primary : P.muted}>
+          <Text color={i === props.cursor ? P.primary : P.fgMuted}>
             {i === props.cursor ? '›' : ' '} {m}
           </Text>
         </Box>

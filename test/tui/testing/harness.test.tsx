@@ -112,13 +112,14 @@ describe('mountApp({ target: "app", slash })', () => {
       h.stdin.write('/stats')
       await wait()
       h.stdin.write('\r')
-      await h.waitFor({ contains: 'Stats' }, 500)
+      await h.waitFor({ contains: 'Overview' }, 500)
       const frame = h.frames().pop() ?? ''
-      // The StatsView renders the tab labels and the "no data yet" message
-      // for an empty cost tracker.
+      // StatsView now loads real on-disk stats asynchronously, so the body is
+      // environment-dependent. Assert the stable dialog chrome instead.
+      expect(frame).toContain('Stats')
       expect(frame).toContain('Overview')
       expect(frame).toContain('Models')
-      expect(frame).toContain('no data yet')
+      expect(frame).toContain('Tab: switch tab')
     } finally {
       h.unmount()
     }

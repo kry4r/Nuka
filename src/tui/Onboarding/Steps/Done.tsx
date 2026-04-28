@@ -12,7 +12,7 @@ export function Done(props: { config: ConfigPatch }): React.JSX.Element {
       <Text color={P.success} bold>All set</Text>
       <Text color={P.fg}>Provider: {props.config.name}</Text>
       <Text color={P.fg}>Default model: {props.config.selectedModel}</Text>
-      <Text color={P.muted}>Saving and continuing…</Text>
+      <Text color={P.fgMuted}>Saving and continuing…</Text>
     </Box>
   )
 }

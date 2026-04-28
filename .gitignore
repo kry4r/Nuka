@@ -3,5 +3,7 @@ dist/
 .env
 .env.local
 *.log
+core.*
 .DS_Store
 coverage/
+.claude

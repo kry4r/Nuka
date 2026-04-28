@@ -77,7 +77,7 @@ export function PermissionDialog(props: {
         </Box>
       )}
       <Text color={isDestructive ? P.error : P.warn} bold>{props.call.toolName} · {props.call.hint}</Text>
-      <Text color={P.muted}>{inputSummary}</Text>
+      <Text color={P.fgMuted}>{inputSummary}</Text>
       <Box height={1} />
       {options.map((o, i) => (
         <Text key={o.label} color={i === cursor ? P.primary : P.fg}>
@@ -85,7 +85,7 @@ export function PermissionDialog(props: {
         </Text>
       ))}
       <Box height={1} />
-      <Text color={P.muted}>↑↓ select · ⏎ confirm · esc reject</Text>
+      <Text color={P.fgMuted}>↑↓ select · ⏎ confirm · esc reject</Text>
     </Box>
   )
 }

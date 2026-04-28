@@ -15,7 +15,7 @@ export function Diff({
           ? P.success
           : line.startsWith('-') && !line.startsWith('---')
           ? P.error
-          : P.muted
+          : P.fgMuted
         return <Text key={i} color={color}>{line}</Text>
       })}
     </Box>

@@ -132,6 +132,7 @@ export async function wirePlugin(
     const renamed: SlashCommand = {
       ...raw,
       name: `${plugin.manifest.name}:${raw.name}`,
+      source: 'plugin',
     }
     try {
       deps.slash.register(renamed)

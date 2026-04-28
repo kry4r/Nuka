@@ -72,6 +72,25 @@ export async function saveStatusBarHidden(home: string, hidden: string[]): Promi
   await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
 }
 
+/**
+ * Phase 12 §4.7 — generic config patch helper used by ConfigSubmenu forms.
+ * Reads YAML, runs the supplied mutator against the parsed object,
+ * validates against ConfigSchema (only when there is an active provider, to
+ * preserve the offline-mode behaviour of saveVimEnabled / saveTheme), and
+ * writes back. Throws zod errors verbatim so the caller can pinpoint the
+ * offending field for an inline error flash.
+ */
+export async function saveConfigPatch(
+  home: string,
+  mutate: (obj: any) => void,
+): Promise<void> {
+  const obj = await readConfig(home)
+  mutate(obj)
+  await mkdir(path.join(home, '.nuka'), { recursive: true })
+  if (obj.active?.providerId) ConfigSchema.parse(obj)
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+}
+
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []

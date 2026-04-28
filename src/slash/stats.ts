@@ -8,7 +8,9 @@ import type { SlashCommand, SlashContext } from './types'
 export const StatsCommand: SlashCommand = {
   name: 'stats',
   description: 'Show usage stats (tokens, cost, models)',
+  source: 'builtin',
   usage: '/stats',
+  examples: ['/stats'],
   run: async (_args: string, _ctx: SlashContext) => {
     return { type: 'dialog', dialog: { kind: 'stats' } }
   },

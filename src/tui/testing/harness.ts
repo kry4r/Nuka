@@ -39,6 +39,8 @@ import { PermissionBridge } from '../../core/permission/bridge'
 import { App } from '../App'
 import { Wizard } from '../Onboarding/Wizard'
 import type { AssertSpec } from '../../core/testing/plan'
+import type { TodoState } from '../../core/tools/todoWrite'
+import type { TaskManager } from '../../core/tasks/manager'
 
 // --- Inline mini-matcher for waitFor() ------------------------------------
 // `runner.ts` (9.3) imports the canonical matcher from `assertions.ts`. We
@@ -89,7 +91,17 @@ export type Mocks = {
 }
 
 export type MountOpts =
-  | { target?: 'app'; config?: Config; mocks?: Mocks; cwd?: string; slash?: SlashRegistry }
+  | {
+      target?: 'app'
+      config?: Config
+      mocks?: Mocks
+      cwd?: string
+      slash?: SlashRegistry
+      /** Phase 12 M3 — inject a pre-populated todo store for Tasks panel tests. */
+      todoStore?: TodoState
+      /** Phase 12 M3 — inject a task manager for Tasks panel tests. */
+      taskManager?: TaskManager
+    }
   | { target: 'wizard'; mocks?: Mocks }
   | { target: 'custom'; node: React.ReactNode }
 
@@ -98,6 +110,9 @@ export type Harness = {
   frames: () => string[]
   unmount: () => void
   waitFor: (spec: AssertSpec, timeoutMs?: number) => Promise<void>
+  /** The PermissionBridge wired into the App (for tests that need to drive
+   *  the permission inline-submenu directly via `permissionBridge.ask(...)`). */
+  permissionBridge: PermissionBridge
 }
 
 /**
@@ -153,15 +168,23 @@ export function mountApp(opts: MountOpts = {}): Harness {
   }
 
   let node: React.ReactNode
+  // Always retain a PermissionBridge handle so the harness can expose it on
+  // every mount target — even `wizard`/`custom` callers can call
+  // `h.permissionBridge.ask(...)` (which simply resolves to denied if no
+  // App is mounted, since no handler will ever be set).
+  let bridge: PermissionBridge
   if (opts.target === 'custom') {
     node = opts.node
+    bridge = new PermissionBridge()
   } else if (opts.target === 'wizard') {
     node = React.createElement(Wizard, {
       onDone: () => {},
       onCancel: () => {},
     })
+    bridge = new PermissionBridge()
   } else {
     const deps = makeMinimalAppDeps(opts.config, opts.mocks, opts.cwd, opts.slash)
+    bridge = deps.permissionBridge
     node = React.createElement(App, {
       sessions: deps.sessions,
       slash: deps.slash,
@@ -177,6 +200,8 @@ export function mountApp(opts: MountOpts = {}): Harness {
       version: '0.0.0-test',
       tools: deps.tools,
       costTracker: deps.costTracker,
+      ...(opts.todoStore !== undefined ? { todoStore: opts.todoStore } : {}),
+      ...(opts.taskManager !== undefined ? { taskManager: opts.taskManager } : {}),
     })
   }
 
@@ -210,5 +235,6 @@ export function mountApp(opts: MountOpts = {}): Harness {
     frames,
     unmount: () => inst.unmount(),
     waitFor,
+    permissionBridge: bridge,
   }
 }

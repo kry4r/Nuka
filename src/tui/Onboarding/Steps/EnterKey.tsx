@@ -16,13 +16,13 @@ export function EnterKey(props: {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Enter API key for {props.provider.name}</Text>
-      <Text color={P.muted}>env: {props.provider.apiKeyEnvVar} · help: {props.provider.helpUrl}</Text>
+      <Text color={P.fgMuted}>env: {props.provider.apiKeyEnvVar} · help: {props.provider.helpUrl}</Text>
       <Box marginTop={1}>
         <Text color={P.fg}>key: </Text>
-        <Text color={P.accent}>{masked || ' '}</Text>
-        <Text color={P.muted}> ({props.value.length} chars)</Text>
+        <Text color={P.accentCool}>{masked || ' '}</Text>
+        <Text color={P.fgMuted}> ({props.value.length} chars)</Text>
       </Box>
-      <Text color={P.muted}>Enter submit · Esc cancel · ← back</Text>
+      <Text color={P.fgMuted}>Enter submit · Esc cancel · ← back</Text>
     </Box>
   )
 }

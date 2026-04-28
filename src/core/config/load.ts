@@ -12,6 +12,57 @@ const EMPTY: Config = {
   active: { providerId: '' },
 }
 
+/**
+ * Phase 12 §5.1 — map old StatusBar segment ids to the new six-segment
+ * id space. Called once at config load. Always-then-dedupe: every old
+ * id resolves to a new id (no drops); the post-mapping list is passed
+ * through `Array.from(new Set(...))` so collisions (e.g. both `git` and
+ * `cwd` already present) collapse cleanly.
+ *
+ * Mapping (spec §5.1):
+ *   model → model
+ *   cwd → cwd
+ *   git → cwd
+ *   ctx → context
+ *   cost → cost-time
+ *   auto → counts
+ *   queue → counts
+ *   tasks → counts
+ *   plugins → counts
+ *   hint → counts
+ *   (any new-id pass-through is a no-op)
+ */
+const STATUSBAR_SEGMENT_MIGRATION: Record<string, string> = {
+  model: 'model',
+  cwd: 'cwd',
+  git: 'cwd',
+  ctx: 'context',
+  cost: 'cost-time',
+  auto: 'counts',
+  queue: 'counts',
+  tasks: 'counts',
+  plugins: 'counts',
+  hint: 'counts',
+}
+
+export function migrateStatusBarHidden(input: readonly string[] | undefined): string[] {
+  if (!input || input.length === 0) return []
+  const mapped = input.map(id => STATUSBAR_SEGMENT_MIGRATION[id] ?? id)
+  return Array.from(new Set(mapped))
+}
+
+/**
+ * Apply the StatusBar segment-id migration to a (parsed) Config in-place
+ * (returns the same reference for chaining). Idempotent: applying twice
+ * is a no-op once all ids are in the new space.
+ */
+function applyStatusBarMigration<C extends Config>(cfg: C): C {
+  if (cfg.statusBar?.hidden) {
+    cfg.statusBar.hidden = migrateStatusBarHidden(cfg.statusBar.hidden)
+  }
+  return cfg
+}
+
 async function readYaml(p: string): Promise<unknown | null> {
   try {
     const text = await readFile(p, 'utf8')
@@ -130,6 +181,9 @@ export async function loadScopedConfig(opts?: {
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID
   if (envActive) effective.active = { providerId: envActive }
 
+  // Phase 12 §5.1 — migrate legacy statusBar.hidden segment ids on read.
+  applyStatusBarMigration(effective)
+
   return { effective, perScope, locked, sources }
 }
 
@@ -156,10 +210,15 @@ export async function loadConfig(opts: {
     theme: projectCfg.theme ?? globalCfg.theme,
     welcome: projectCfg.welcome ?? globalCfg.welcome,
     compact: projectCfg.compact ?? globalCfg.compact,
+    statusBar: projectCfg.statusBar ?? globalCfg.statusBar,
+    statusLine: projectCfg.statusLine ?? globalCfg.statusLine,
   }
 
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID
   if (envActive) merged.active = { providerId: envActive }
+
+  // Phase 12 §5.1 — migrate legacy statusBar.hidden segment ids on read.
+  applyStatusBarMigration(merged)
 
   return merged
 }

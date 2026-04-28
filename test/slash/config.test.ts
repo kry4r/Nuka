@@ -3,11 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { ConfigCommand } from '../../src/slash/config'
 
 describe('/config', () => {
-  it('opens the config editor dialog when at least one provider exists', async () => {
+  it('opens the config submenu when at least one provider exists', async () => {
     const ctx = { config: { providers: [{ id: 'p1' }] } } as any
     expect(await ConfigCommand.run('', ctx)).toEqual({
       type: 'dialog',
-      dialog: { kind: 'config-editor' },
+      dialog: { kind: 'config' },
     })
   })
 

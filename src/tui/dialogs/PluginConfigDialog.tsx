@@ -86,11 +86,11 @@ export function PluginConfigDialog(props: {
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Plugin configuration: {pluginLabel}</Text>
       {plugin.manifest.description && (
-        <Text color={P.muted}>{plugin.manifest.description}</Text>
+        <Text color={P.fgMuted}>{plugin.manifest.description}</Text>
       )}
       <Box height={1} />
       {fields.length === 0 ? (
-        <Text color={P.muted}>(no configuration fields)</Text>
+        <Text color={P.fgMuted}>(no configuration fields)</Text>
       ) : (
         fields.map((f, i) => {
           const active = i === cursor
@@ -100,9 +100,9 @@ export function PluginConfigDialog(props: {
               <Text color={active ? P.primary : P.fg}>
                 {active ? '›' : ' '} {label}
                 {f.description ? ` — ${f.description}` : ''}
-                <Text color={P.muted}> ({f.type})</Text>
+                <Text color={P.fgMuted}> ({f.type})</Text>
               </Text>
-              <Text color={active ? P.primary : P.muted}>
+              <Text color={active ? P.primary : P.fgMuted}>
                 {'  '}{values[f.name] ?? ''}{active ? '▌' : ''}
               </Text>
             </Box>
@@ -110,7 +110,7 @@ export function PluginConfigDialog(props: {
         })
       )}
       <Box height={1} />
-      <Text color={P.muted}>tab/↑↓ field · ⏎ save · esc skip plugin this session</Text>
+      <Text color={P.fgMuted}>tab/↑↓ field · ⏎ save · esc skip plugin this session</Text>
     </Box>
   )
 }

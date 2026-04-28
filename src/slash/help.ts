@@ -17,6 +17,10 @@ const CMDS: Array<[string, string]> = [
 export const HelpCommand: SlashCommand = {
   name: 'help',
   description: 'Show help',
+  source: 'builtin',
+  usage: '/help',
+  shortcut: '?',
+  examples: ['/help'],
   run: async (_args: string, _ctx: SlashContext) => {
     const rows = CMDS.map(([k, v]) => `  ${k.padEnd(18)} ${v}`).join('\n')
     return { type: 'text', text: `Commands:\n${rows}` }

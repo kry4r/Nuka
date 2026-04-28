@@ -29,7 +29,7 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
         <Box flexDirection="column" flexGrow={1}>
           <Box>
             <Text color={P.primary} bold>NUKA</Text>
-            <Text color={P.muted}>  Avocado Agent · v{version}</Text>
+            <Text color={P.fgMuted}>  Avocado Agent · v{version}</Text>
           </Box>
           <Box height={1} />
           <Row label="model" value={model} valueColor={P.primary} />
@@ -46,7 +46,7 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
         <Text color={P.fg}>{tip}</Text>
       </Box>
       <Box marginTop={1}>
-        <Text color={P.muted}>
+        <Text color={P.fgMuted}>
           Type <Text color={P.primary}>/</Text> for commands ·{' '}
           <Text color={P.primary}>?</Text> for help ·{' '}
           <Text color={P.primary}>esc</Text> to cancel
@@ -60,9 +60,9 @@ function Row(props: { label: string; value: string; valueColor: string }): React
   return (
     <Box>
       <Box width={7}>
-        <Text color={P.muted}>{props.label}</Text>
+        <Text color={P.fgMuted}>{props.label}</Text>
       </Box>
-      <Text color={P.muted}>│ </Text>
+      <Text color={P.fgMuted}>│ </Text>
       <Text color={props.valueColor}>{props.value}</Text>
     </Box>
   )

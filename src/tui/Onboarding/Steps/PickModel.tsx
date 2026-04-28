@@ -14,7 +14,7 @@ export function PickModel(props: {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Pick default model — {props.provider.name}</Text>
-      <Text color={P.muted}>↑↓ navigate · Enter select · ← back · Esc cancel</Text>
+      <Text color={P.fgMuted}>↑↓ navigate · Enter select · ← back · Esc cancel</Text>
       {props.models.map((m, i) => (
         <Text key={m} color={i === props.cursor ? P.primary : P.fg}>
           {i === props.cursor ? '›' : ' '} {m}

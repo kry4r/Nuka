@@ -1,12 +1,19 @@
 // src/slash/config.ts
 import type { SlashCommand } from './types'
 
+/**
+ * Phase 12 §4.7 — `/config` opens the new ConfigSubmenu (left-nav +
+ * right-form). Replaces the old ConfigEditor punt-to-$EDITOR flow.
+ */
 export const ConfigCommand: SlashCommand = {
   name: 'config',
-  description: 'Open config in $EDITOR (or run onboarding wizard if no provider configured)',
+  description: 'Open config submenu (categories: Provider, Model, Theme, StatusBar, …)',
+  source: 'builtin',
+  usage: '/config',
+  examples: ['/config'],
   run: async (_args, ctx) => {
-    // Offline boot: zero providers → hint at the wizard rather than dropping
-    // the user into a $EDITOR session on an empty file.
+    // Offline boot: zero providers → hint at the wizard rather than
+    // dropping the user into an empty submenu.
     if (ctx.config.providers.length === 0) {
       return {
         type: 'text',
@@ -15,6 +22,6 @@ export const ConfigCommand: SlashCommand = {
           'or open the config file directly with /model.',
       }
     }
-    return { type: 'dialog', dialog: { kind: 'config-editor' } }
+    return { type: 'dialog', dialog: { kind: 'config' } }
   },
 }

@@ -25,24 +25,24 @@ export function ToolCall(props: {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={P.accent}>⏺ </Text>
+        <Text color={P.accentCool}>⏺ </Text>
         <Text color={P.fg} bold>{displayName} </Text>
         {props.annotations?.openWorld && (
-          <Text color={P.muted} dimColor>(network) </Text>
+          <Text color={P.fgMuted} dimColor>(network) </Text>
         )}
         {props.source && props.source !== 'builtin' && (
-          <Text color={P.muted}>[{props.source}] </Text>
+          <Text color={P.fgMuted}>[{props.source}] </Text>
         )}
-        <Text color={P.muted}>{props.argSummary}</Text>
+        <Text color={P.fgMuted}>{props.argSummary}</Text>
         {props.durationMs != null && (
-          <Text color={P.muted}>  {(props.durationMs / 1000).toFixed(1)}s</Text>
+          <Text color={P.fgMuted}>  {(props.durationMs / 1000).toFixed(1)}s</Text>
         )}
         <Text color={iconColor}> {icon}</Text>
       </Box>
       {displayLines.length > 0 && (
-        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.muted}>
+        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.fgMuted}>
           {displayLines.map((line, i) => (
-            <Text key={i} color={P.muted}>{line.slice(0, 120)}</Text>
+            <Text key={i} color={P.fgMuted}>{line.slice(0, 120)}</Text>
           ))}
         </Box>
       )}

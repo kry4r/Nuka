@@ -5,6 +5,16 @@ import { render } from 'ink-testing-library'
 import { Text } from 'ink'
 import { listThemes, findTheme, resolveTheme, defaultDark } from '../../../src/core/theme/themes'
 import { ThemeProvider, useTheme } from '../../../src/core/theme/context'
+import type { ThemeColors } from '../../../src/core/theme/themes'
+
+// The 12 semantic keys + bg + bgPanel that every seed theme must expose.
+const REQUIRED_KEYS: Array<keyof ThemeColors> = [
+  'primary', 'primaryDeep', 'primarySoft',
+  'accentWarm', 'accentCool', 'accentInfo',
+  'success', 'warn', 'error',
+  'fg', 'fgMuted', 'fgFaint',
+  'bg', 'bgPanel',
+]
 
 describe('theme registry', () => {
   it('exports exactly five seed themes', () => {
@@ -44,17 +54,46 @@ describe('theme registry', () => {
     expect(t.colors.fg).toBe('#FFFFFF')
   })
 
-  it('all themes have the required color tokens', () => {
-    const requiredKeys: Array<keyof typeof defaultDark.colors> = [
-      'fg', 'bg', 'muted', 'accent', 'success', 'warn', 'error',
-      'plan', 'permission', 'userMsg', 'assistantMsg', 'diffAdd', 'diffDel',
-    ]
+  it('all seed themes expose all 14 required keys (12 semantic + bg + bgPanel) as non-empty strings', () => {
+    const nonBgKeys = REQUIRED_KEYS.filter(k => k !== 'bg')
     for (const theme of listThemes()) {
-      for (const key of requiredKeys) {
-        expect(typeof theme.colors[key], `${theme.name}.${key}`).toBe('string')
+      for (const key of nonBgKeys) {
+        const val = theme.colors[key]
+        expect(typeof val, `${theme.name}.${key} should be string`).toBe('string')
+        expect((val as string).length, `${theme.name}.${key} should be non-empty`).toBeGreaterThan(0)
       }
-      expect(typeof theme.colors.agent.primary).toBe('string')
-      expect(typeof theme.colors.agent.alt).toBe('string')
+      // bg is allowed to be an empty string (transparent terminal background)
+      expect(typeof theme.colors.bg, `${theme.name}.bg should be string`).toBe('string')
+    }
+  })
+
+  it('default-dark uses the avocado primary hex from spec §4.9', () => {
+    expect(defaultDark.colors.primary).toBe('#8FBF3F')
+  })
+
+  it('default-light only differs from default-dark in the five fg/bg keys', () => {
+    const light = findTheme('default-light')!
+    const dark = findTheme('default-dark')!
+    const semanticKeys: Array<keyof ThemeColors> = [
+      'primary', 'primaryDeep', 'primarySoft',
+      'accentWarm', 'accentCool', 'accentInfo',
+      'success', 'warn', 'error',
+    ]
+    for (const key of semanticKeys) {
+      expect(light.colors[key], `light.${key} should equal dark.${key}`).toBe(dark.colors[key])
+    }
+  })
+
+  it('solarized-light only differs from solarized-dark in the five fg/bg keys', () => {
+    const light = findTheme('solarized-light')!
+    const dark = findTheme('solarized-dark')!
+    const semanticKeys: Array<keyof ThemeColors> = [
+      'primary', 'primaryDeep', 'primarySoft',
+      'accentWarm', 'accentCool', 'accentInfo',
+      'success', 'warn', 'error',
+    ]
+    for (const key of semanticKeys) {
+      expect(light.colors[key], `solarized-light.${key} should equal solarized-dark.${key}`).toBe(dark.colors[key])
     }
   })
 })

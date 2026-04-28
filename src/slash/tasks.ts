@@ -69,7 +69,13 @@ async function runList(ctx: SlashContext): Promise<SlashResult> {
 export const TasksCommand: SlashCommand = {
   name: 'tasks',
   description: 'List, show, or cancel background tasks',
+  source: 'builtin',
   usage: '/tasks [show <id> | cancel <id>]',
+  args: [
+    { name: 'subcommand', choices: ['show', 'cancel'], description: 'Action to perform' },
+    { name: 'id', description: 'Task ID' },
+  ],
+  examples: ['/tasks', '/tasks show abc123', '/tasks cancel abc123'],
   run: async (args: string, ctx: SlashContext): Promise<SlashResult> => {
     const trimmed = args.trim()
     if (trimmed === '') return runList(ctx)

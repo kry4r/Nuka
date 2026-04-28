@@ -4,7 +4,6 @@ import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
 import { MentionPanel } from './MentionPanel'
-import { SlashSuggest } from './SlashSuggest'
 import { fuzzyFileSearch } from './fuzzyFileSearch'
 import { makeState, step, type State as VimState, type Key as VimKey } from '../../core/vim/controller'
 import { bufferToText } from '../../core/vim/mode'
@@ -15,6 +14,9 @@ export type PromptInputProps = {
   onChange: (v: string) => void
   onSubmit: (v: string) => void
   disabled: boolean
+  /** Whether the Prompt frame currently owns keyboard focus.
+   *  When omitted, falls back to `!disabled` for backwards compatibility. */
+  focused?: boolean
   placeholder?: string
   cwd?: string
   onAttachFile?: (path: string) => void
@@ -24,6 +26,8 @@ export type PromptInputProps = {
   slash?: SlashRegistry
   /** Notified whenever the slash submenu opens/closes; lets parent hide chrome. */
   onSlashActiveChange?: (active: boolean) => void
+  /** Notified whenever the slash cursor index changes; lets parent render SlashCard. */
+  onSlashCursorChange?: (cursor: number) => void
 }
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
@@ -35,20 +39,29 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const [mentionCursor, setMentionCursor] = useState(0)
   const [slashCursor, setSlashCursor] = useState(0)
 
-  // Slash suggestion candidates: active iff value starts with `/` and registry given.
+  // Slash mode: active as long as value starts with `/` and registry is given.
+  // The list ↔ arg-hint distinction lives inside SlashCard, not here.
+  const slashActive = useMemo(() => {
+    return !!(props.slash && props.value.startsWith('/'))
+  }, [props.slash, props.value])
+
+  // Slash list candidates (used for Tab completion and cursor bounds in list mode).
   const slashCandidates = useMemo(() => {
     if (!props.slash || !props.value.startsWith('/')) return []
-    const prefix = props.value.slice(1).split(/\s/)[0] ?? ''
-    if (props.value.includes(' ')) return [] // hide once user starts args
+    if (props.value.includes(' ')) return [] // arg-hint mode — no list candidates
+    const prefix = props.value.slice(1)
     return props.slash.suggest(prefix).map(c => ({ name: c.name, description: c.description }))
   }, [props.slash, props.value])
-  const slashActive = slashCandidates.length > 0
+
   useEffect(() => {
-    if (slashCursor > slashCandidates.length - 1) setSlashCursor(0)
+    if (slashCursor > Math.max(0, slashCandidates.length - 1)) setSlashCursor(0)
   }, [slashCandidates.length, slashCursor])
   useEffect(() => {
     props.onSlashActiveChange?.(slashActive)
   }, [slashActive, props.onSlashActiveChange])
+  useEffect(() => {
+    props.onSlashCursorChange?.(slashCursor)
+  }, [slashCursor, props.onSlashCursorChange])
 
   // Vim controller state (only used when props.vim is true).
   const vimRef = useRef<VimState>(makeState(props.value, 'insert'))
@@ -193,20 +206,28 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       return
     }
 
-    // Slash suggestion overlay: navigate / accept while active.
+    // Slash overlay: navigate / accept while active.
     if (slashActive) {
-      if (key.upArrow) {
-        setSlashCursor(c => Math.max(0, c - 1))
-        return
-      }
-      if (key.downArrow) {
-        setSlashCursor(c => Math.min(slashCandidates.length - 1, c + 1))
-        return
-      }
-      if (key.tab) {
-        const chosen = slashCandidates[slashCursor]
-        if (chosen) props.onChange('/' + chosen.name + ' ')
-        return
+      const argHintMode = props.value.includes(' ')
+      if (!argHintMode) {
+        // List mode: arrow keys navigate, Tab accepts.
+        if (key.upArrow) {
+          setSlashCursor(c => Math.max(0, c - 1))
+          return
+        }
+        if (key.downArrow) {
+          setSlashCursor(c => Math.min(slashCandidates.length - 1, c + 1))
+          return
+        }
+        if (key.tab) {
+          const chosen = slashCandidates[slashCursor]
+          if (chosen) props.onChange('/' + chosen.name + ' ')
+          return
+        }
+      } else {
+        // Arg-hint mode: Tab is no-op.
+        if (key.tab) return
+        if (key.upArrow || key.downArrow) return
       }
       if (key.escape) {
         // Clearing the slash drops the suggestion; let the App-level esc handler
@@ -221,10 +242,11 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     // Normal mode
     if (key.return) {
       if (props.value.trim()) {
-        // If a slash suggestion is highlighted and the typed text doesn't
-        // already exactly match a candidate, expand to the highlighted one.
+        // If in slash list mode and a candidate is highlighted but the typed
+        // text doesn't exactly match a command, expand to the highlighted one.
         let toSubmit = props.value
-        if (slashActive) {
+        const argHintMode = slashActive && props.value.includes(' ')
+        if (slashActive && !argHintMode && slashCandidates.length > 0) {
           const exact = slashCandidates.find(c => '/' + c.name === props.value)
           if (!exact) {
             const chosen = slashCandidates[slashCursor]
@@ -286,11 +308,11 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       )}
       <Box
         borderStyle="round"
-        borderColor={props.disabled ? P.muted : P.primary}
+        borderColor={(props.focused ?? !props.disabled) ? P.primary : P.fgMuted}
         paddingX={1}
       >
         {props.vim && (
-          <Text color={vimMode === 'insert' ? P.muted : P.warn} bold>
+          <Text color={vimMode === 'insert' ? P.fgMuted : P.warn} bold>
             [{vimMode.toUpperCase().slice(0, 1)}]{' '}
           </Text>
         )}
@@ -298,7 +320,7 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         {isEmpty ? (
           <>
             {showCursor && <Text color={P.fg} inverse> </Text>}
-            <Text color={P.muted}>{placeholder}</Text>
+            <Text color={P.fgMuted}>{placeholder}</Text>
           </>
         ) : (
           <>
@@ -307,9 +329,6 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           </>
         )}
       </Box>
-      {slashActive && (
-        <SlashSuggest candidates={slashCandidates} selectedIndex={slashCursor} />
-      )}
     </Box>
   )
 }

@@ -1,12 +1,13 @@
 // src/core/theme/context.tsx
 // Phase 8 §4.1 — ThemeProvider + useTheme hook.
+// Phase 12 M1 — added useColors() convenience hook.
 //
 // Wraps the application (or any subtree) in a React context that exposes the
-// active Theme.  Components call `useTheme()` to obtain the color tokens
-// without prop-drilling.
+// active Theme.  Components call `useTheme()` to obtain the full theme or
+// `useColors()` for direct palette access without prop-drilling.
 
 import React, { createContext, useContext } from 'react'
-import { defaultDark, type Theme } from './themes'
+import { defaultDark, type Theme, type ThemeColors } from './themes'
 
 // ---------------------------------------------------------------------------
 // Context
@@ -32,7 +33,7 @@ export function ThemeProvider({ theme, children }: ThemeProviderProps): React.JS
 }
 
 // ---------------------------------------------------------------------------
-// Hook
+// Hooks
 // ---------------------------------------------------------------------------
 
 /**
@@ -41,4 +42,12 @@ export function ThemeProvider({ theme, children }: ThemeProviderProps): React.JS
  */
 export function useTheme(): Theme {
   return useContext(ThemeContext)
+}
+
+/**
+ * Convenience hook — returns the active theme's color palette directly.
+ * Equivalent to `useTheme().colors`.  Falls back to `default-dark.colors`.
+ */
+export function useColors(): ThemeColors {
+  return useContext(ThemeContext).colors
 }

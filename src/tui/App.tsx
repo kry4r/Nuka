@@ -1,17 +1,19 @@
 // src/tui/App.tsx
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
+import { Conversation } from './Conversation/Conversation'
 import { PromptInput } from './PromptInput/PromptInput'
-import { StatusBar } from './StatusBar/StatusBar'
-import { Hud, type CostTrackerLike } from './Status/Hud'
+import { StatusPanel } from './Status/StatusPanel'
+import { SubmenuFrame } from './Submenu/SubmenuFrame'
 import { PermissionDialog } from './dialogs/PermissionDialog'
 import { PluginConfigDialog } from './dialogs/PluginConfigDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
-import { ConfigEditor } from './dialogs/ConfigEditor'
+import { ConfigSubmenu } from './Submenu/config/ConfigSubmenu'
+import { saveConfigPatch } from '../core/config/save'
 import { SessionPicker } from './dialogs/SessionPicker'
 import type { SessionMeta } from '../core/session/store'
 import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
@@ -31,7 +33,7 @@ import { MessageSelector } from './Rewind/MessageSelector'
 import { Wizard } from './Onboarding/Wizard'
 import { saveWizardPatch } from '../core/onboarding/save'
 import os from 'node:os'
-import { StatusLine } from './StatusLine/StatusLine'
+import { SlashCard } from './SlashCard/SlashCard'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { ToolRegistry } from '../core/tools/registry'
 import type { TaskManager } from '../core/tasks/manager'
@@ -40,6 +42,8 @@ import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
 import { makeUserMessage } from '../core/message/factories'
 import { DISPATCH_AGENT_TOOL_NAME } from '../core/agents/dispatchTool'
+import type { TodoState } from '../core/tools/todoWrite'
+import { TasksPanel } from './Tasks/TasksPanel'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -60,7 +64,22 @@ export function findLatestDispatchAgentCallId(messages: readonly import('../core
   return undefined
 }
 
-type Dialog =
+/**
+ * Phase 12 §4.2 — submenu descriptors. Tagged union covering every overlay
+ * UI: full submenus take over the lower three zones (Tasks/Prompt/Status);
+ * inline submenus replace only the Prompt slot so the user keeps live
+ * Tasks/Status context while making the decision.
+ */
+export type SubmenuDescriptor =
+  // full submenus — take over Tasks/Prompt/Status slots
+  | { kind: 'config' }
+  | { kind: 'model-picker' }
+  | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
+  | { kind: 'onboarding-wizard' }
+  | { kind: 'stats' }
+  | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
+  | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
+  // inline submenus — take over only Prompt slot
   | {
       kind: 'permission'
       call: PermissionCall
@@ -74,13 +93,64 @@ type Dialog =
       fields: PluginUserConfigField[]
       resolve: (result: Record<string, unknown> | null) => void
     }
-  | { kind: 'model-picker' }
-  | { kind: 'config-editor' }
-  | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
-  | { kind: 'stats' }
-  | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
-  | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
-  | { kind: 'onboarding-wizard' }
+
+const INLINE_SUBMENU_KINDS = new Set<SubmenuDescriptor['kind']>([
+  'permission',
+  'plugin-config',
+])
+
+export function isInlineSubmenu(s: SubmenuDescriptor): boolean {
+  return INLINE_SUBMENU_KINDS.has(s.kind)
+}
+
+/**
+ * Phase 12 §4.2 — single UIState discriminated union. Replaces the
+ * earlier scattered dialog + slash-active flags. Esc always returns
+ * to `{kind:'normal'}` from any non-normal state.
+ */
+export type UIState =
+  | { kind: 'normal' }
+  | { kind: 'tasks-collapsed' }
+  | { kind: 'slash'; mode: 'list' | 'arg-hint' }
+  | { kind: 'submenu'; submenu: SubmenuDescriptor }
+
+export type UIAction =
+  | { type: 'reset' }
+  | { type: 'open-submenu'; submenu: SubmenuDescriptor }
+  | { type: 'update-submenu'; submenu: SubmenuDescriptor }
+  | { type: 'slash-set'; active: boolean }
+  | { type: 'tasks-toggle' }
+
+export function uiReducer(state: UIState, action: UIAction): UIState {
+  switch (action.type) {
+    case 'reset':
+      return { kind: 'normal' }
+    case 'open-submenu':
+      return { kind: 'submenu', submenu: action.submenu }
+    case 'update-submenu':
+      // Only updates the descriptor when already in a submenu state
+      // (e.g. session-picker `loading` -> resolved metas).
+      if (state.kind !== 'submenu') return state
+      return { kind: 'submenu', submenu: action.submenu }
+    case 'slash-set':
+      // Slash open state only matters when we are in normal/slash; never
+      // override a submenu or tasks-collapsed state with slash.
+      if (action.active) {
+        if (state.kind === 'normal' || state.kind === 'slash') {
+          return { kind: 'slash', mode: 'list' }
+        }
+        return state
+      }
+      if (state.kind === 'slash') return { kind: 'normal' }
+      return state
+    case 'tasks-toggle':
+      if (state.kind === 'normal') return { kind: 'tasks-collapsed' }
+      if (state.kind === 'tasks-collapsed') return { kind: 'normal' }
+      return state
+    default:
+      return state
+  }
+}
 
 export type AppProps = {
   sessions: SessionManager
@@ -106,40 +176,78 @@ export type AppProps = {
   agentInFlight?: number
   /** Phase 10 §4.3 — singleton task manager surfaced via SlashContext + HUD. */
   taskManager?: TaskManager
+  /** Phase 12 M3 — todo store from createTodoStore(); mutated in-place by TodoWrite tool. */
+  todoStore?: TodoState
+  /** Phase 12 M4 — read-only list of loaded plugins for ConfigSubmenu PluginsForm. */
+  loadedPlugins?: { name: string; description?: string }[]
+  /** Phase 12 M4 — read-only list of loaded skills for ConfigSubmenu SkillsForm. */
+  loadedSkills?: { name: string; description?: string }[]
 }
 
 export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp()
   const [session, setSession] = useState<Session>(() => props.sessions.active()!)
   const [input, setInput] = useState('')
-  const [dialog, setDialog] = useState<Dialog | null>(null)
+  // Phase 12 §4.2 — single discriminated UIState replaces the prior
+  // dialog + slash-active flags.
+  const [uiState, dispatchUI] = useReducer(uiReducer, { kind: 'normal' } as UIState)
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
-  // Tick bumped on subsystem state changes (currently unused).
-  // Kept so the HUD's `tick` prop continues to receive a stable value.
-  const [tick] = useState(0)
   // Bumped whenever we mutate session.messages directly so React re-renders.
   const [, setMessageTick] = useState(0)
-  const bumpMessages = useCallback(() => setMessageTick(t => t + 1), [])
-  // True while the PromptInput's slash submenu is open. While true we
-  // hide StatusBar / Hud so the dropdown doesn't push them off-screen
-  // (mirrors Nuka-Code's PromptInputFooter: when suggestions are shown,
-  // the rest of the footer is replaced).
-  const [slashOpen, setSlashOpen] = useState(false)
+  // Phase 12 M3 — tick drives re-renders of TasksPanel whose data sources
+  // (todoStore, taskManager) mutate in place. Bumped on agent events and
+  // on TaskManager state changes.
+  const [tasksTick, setTasksTick] = useState(0)
+  const bumpTasksTick = useCallback(() => setTasksTick(t => t + 1), [])
+  const bumpMessages = useCallback(() => {
+    setMessageTick(t => t + 1)
+    // Also refresh tasks panel so in-flight subagent list stays current.
+    setTasksTick(t => t + 1)
+  }, [])
+
+  // Subscribe to TaskManager changes to keep Tasks panel reactive.
+  useEffect(() => {
+    if (!props.taskManager) return
+    return props.taskManager.on('change', bumpTasksTick)
+  }, [props.taskManager, bumpTasksTick])
+
+  // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
+  const [slashCursor, setSlashCursor] = useState(0)
   const pendingAttachments = useRef<string[]>([])
 
   useEffect(() => {
     props.permissionBridge.setHandler((payload, resolve) => {
-      setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, annotationBadges: payload.annotationBadges, resolve })
+      dispatchUI({
+        type: 'open-submenu',
+        submenu: {
+          kind: 'permission',
+          call: payload.call,
+          suggestedPattern: payload.suggestedPattern,
+          annotationBadges: payload.annotationBadges,
+          resolve,
+        },
+      })
     })
     props.permissionBridge.setPluginConfigHandler((payload, resolve) => {
-      setDialog({ kind: 'plugin-config', plugin: payload.plugin, fields: payload.fields, resolve })
+      dispatchUI({
+        type: 'open-submenu',
+        submenu: {
+          kind: 'plugin-config',
+          plugin: payload.plugin,
+          fields: payload.fields,
+          resolve,
+        },
+      })
     })
     return () => {
       props.permissionBridge.setHandler(null)
       props.permissionBridge.setPluginConfigHandler(null)
     }
   }, [props.permissionBridge])
+
+  // Resets UIState back to normal — used by every dialog onCancel/onClose.
+  const closeSubmenu = useCallback(() => dispatchUI({ type: 'reset' }), [])
 
   const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
     props.runAgent(i, session, signal)
@@ -180,11 +288,20 @@ export function App(props: AppProps): React.JSX.Element {
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {
         if (res.dialog.kind === 'session-picker') {
-          setDialog({ kind: 'session-picker', metas: 'loading' })
+          dispatchUI({
+            type: 'open-submenu',
+            submenu: { kind: 'session-picker', metas: 'loading' },
+          })
           const metas = await props.sessions.listPersisted()
-          setDialog({ kind: 'session-picker', metas })
+          dispatchUI({
+            type: 'update-submenu',
+            submenu: { kind: 'session-picker', metas },
+          })
         } else {
-          setDialog(res.dialog as Dialog)
+          dispatchUI({
+            type: 'open-submenu',
+            submenu: res.dialog as SubmenuDescriptor,
+          })
         }
       }
       else if (res.type === 'effect') await handleSlashEffect(res.effect)
@@ -242,9 +359,28 @@ export function App(props: AppProps): React.JSX.Element {
 
   useInput((inputKey, key) => {
     if (key.escape) {
+      // Phase 12 §4.2 — Esc always returns to normal from any non-normal
+      // UIState. Inline submenus (permission/plugin-config) own their own
+      // Esc handler which resolves the pending decision; we don't preempt
+      // those here. Stream-running cancel still wins over UIState reset.
       if (stream.running) { stream.cancel(); return }
+      if (uiState.kind === 'submenu' && isInlineSubmenu(uiState.submenu)) {
+        // Let the inline dialog's own useInput run.
+        return
+      }
+      if (uiState.kind !== 'normal') {
+        dispatchUI({ type: 'reset' })
+        return
+      }
       if (primedQuit) { props.onExit(); exit() }
       else { setPrimedQuit(true) }
+      return
+    }
+    // Phase 12 §4.2 — Ctrl+T toggles the Tasks panel between expanded
+    // and the collapsed summary row. The actual Tasks panel ships in M3;
+    // M2 just wires the state transition so harness tests can assert it.
+    if (key.ctrl && inputKey === 't') {
+      dispatchUI({ type: 'tasks-toggle' })
       return
     }
     // Ctrl+A: toggle expansion of the most-recent dispatch_agent call.
@@ -268,174 +404,261 @@ export function App(props: AppProps): React.JSX.Element {
   const pc = props.providers.getProviderConfig(session.providerId)
   const cost = pc ? computeCost(pc, session.model, session.totalUsage) : 0
   const hintMode: 'idle' | 'running' | 'awaiting-user' | 'primed-quit' =
-    dialog ? 'awaiting-user' : stream.running ? 'running' : primedQuit ? 'primed-quit' : 'idle'
+    uiState.kind === 'submenu' ? 'awaiting-user'
+      : stream.running ? 'running'
+      : primedQuit ? 'primed-quit'
+      : 'idle'
 
   const activeTheme = resolveTheme((props.config.theme as any)?.name ?? 'default-dark')
+
+  // Phase 12 §4.3 — derive zone visibility from UIState.
+  const inSubmenu = uiState.kind === 'submenu'
+  const submenu = inSubmenu ? uiState.submenu : null
+  const submenuInline = submenu ? isInlineSubmenu(submenu) : false
+  const submenuFull = inSubmenu && !submenuInline
+  const slashActive = uiState.kind === 'slash'
+  const tasksCollapsed = uiState.kind === 'tasks-collapsed'
+
+  // Tasks panel is hidden during slash/full-submenu and (for now) while
+  // empty — Phase 12 M3 plumbs real Plan/Subagent/Background data; until
+  // then the expanded panel is intentionally a stub-only frame that
+  // collapses on Ctrl+T. Inline submenu keeps Tasks visible per §4.3.
+  const tasksVisible = !slashActive && !submenuFull
+  // Per spec §4.3 the Prompt stays shown (raised) during slash; the
+  // SlashSuggest dropdown still lives inside PromptInput in M2 (replaced
+  // by SlashCard in M5). Inline submenus replace the Prompt; full
+  // submenus take the whole lower stack.
+  const promptVisible = !submenuFull && !submenuInline
+  // Status zone is hidden by the slash card (M5 will move SlashCard into
+  // the Status slot) and by full submenus.
+  const statusVisible = !submenuFull && !slashActive
+  // Welcome stays OUTSIDE the Conversation frame when there are no
+  // messages — keeps the centered avocado logo at full canvas (§4.4 note).
+  const showWelcomeRaw = session.messages.length === 0
+  // Phase 12 §4.9 — focus-ring rule: only the frame currently owning
+  // keyboard focus renders its border with `primary`; every other frame
+  // uses `fgMuted`. The Conversation frame is never the keyboard target
+  // in Phase 12 (Tasks focus mode is deferred to Phase 13), so it is
+  // always unfocused. Prompt is the focus owner in normal/tasks-collapsed
+  // states; SlashCard takes focus in slash state; submenus own focus
+  // when a submenu is open.
+  const promptFocused = uiState.kind === 'normal' || uiState.kind === 'tasks-collapsed'
 
   return (
     <ThemeProvider theme={activeTheme}>
     <Box flexDirection="column">
+      {/* Conversation zone */}
       <Box flexDirection="column" flexGrow={1}>
         {justCompacted && (
           <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
         )}
-        {session.messages.length === 0
-          ? <Welcome
-              cwd={props.cwd}
-              gitBranch={props.gitBranch}
-              model={session.model}
-              version={props.version}
-              tip={tip}
-            />
-          : <Messages
+        {showWelcomeRaw ? (
+          <Welcome
+            cwd={props.cwd}
+            gitBranch={props.gitBranch}
+            model={session.model}
+            version={props.version}
+            tip={tip}
+          />
+        ) : (
+          <Conversation focused={false}>
+            <Messages
               items={session.messages}
               streaming={streamingMsg}
               expandedAgentCallIds={expandedAgentCallIds}
               resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
               resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
-            />}
+            />
+          </Conversation>
+        )}
       </Box>
 
-      {dialog?.kind === 'permission' && (
-        <PermissionDialog
-          call={dialog.call}
-          suggestedPattern={dialog.suggestedPattern}
-          annotationBadges={dialog.annotationBadges}
-          onDecide={d => { dialog.resolve(d); setDialog(null) }}
+      {/* Tasks zone — M3: full TasksPanel when expanded, summary row when collapsed.
+          The Tasks frame is never the keyboard target in Phase 12 (focus mode
+          deferred to Phase 13 per spec §8) — always rendered unfocused. */}
+      {tasksVisible && !tasksCollapsed && props.todoStore && (
+        <TasksPanel
+          todoStore={props.todoStore}
+          messages={session.messages}
+          tasks={props.taskManager ? props.taskManager.list() : []}
+          tick={tasksTick}
+          collapsed={false}
+          focused={false}
         />
       )}
-      {dialog?.kind === 'plugin-config' && (
-        <PluginConfigDialog
-          plugin={dialog.plugin}
-          fields={dialog.fields}
-          onSubmit={values => { dialog.resolve(values); setDialog(null) }}
-          onCancel={() => { dialog.resolve(null); setDialog(null) }}
-        />
-      )}
-      {dialog?.kind === 'model-picker' && (
-        <ModelPicker
-          providers={props.providers.listProviders()}
-          onSelect={(providerId, model) => {
-            session.providerId = providerId
-            session.model = model
-            setDialog(null)
-          }}
-          onAddProvider={() => setDialog({ kind: 'onboarding-wizard' })}
-          onRefresh={async (providerId) => props.providers.fetchRemoteModels(providerId)}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'config-editor' && (
-        <ConfigEditor
-          configPath={`${process.env.HOME ?? ''}/.nuka/config.yaml`}
-          preview={JSON.stringify(props.config, null, 2)}
-          onOpen={() => { props.onOpenEditor(); setDialog(null) }}
-          onClose={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'stats' && (
-        <StatsView onExit={() => setDialog(null)} />
-      )}
-      {dialog?.kind === 'doctor' && (
-        <DoctorReport report={dialog.report} onClose={() => setDialog(null)} />
-      )}
-      {dialog?.kind === 'onboarding-wizard' && (
-        <Wizard
-          onDone={async (patch) => {
-            try { await saveWizardPatch(os.homedir(), patch) } catch { /* ignore */ }
-            setDialog(null)
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'message-selector' && (
-        <MessageSelector
-          messages={dialog.messages}
-          onSelect={async (messageId) => {
-            setDialog(null)
-            try {
-              await props.sessions.truncateAfter(messageId)
-            } catch {
-              // ignore — message may have been removed already
-            }
-          }}
-          onCancel={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'session-picker' && dialog.metas === 'loading' && (
-        <Box borderStyle="round" borderColor="cyan" paddingX={1}>
-          <Text color="cyan">Loading sessions…</Text>
+      {tasksVisible && tasksCollapsed && (
+        <Box
+          borderStyle="round"
+          borderColor={activeTheme.colors.fgMuted}
+          paddingX={1}
+        >
+          <Text color={activeTheme.colors.fgMuted}>
+            Tasks ▸  Plan {props.todoStore ? props.todoStore.items.length : 0} · {props.taskManager ? props.taskManager.list().length : 0} backgrounds   (Ctrl+T to expand)
+          </Text>
         </Box>
       )}
-      {dialog?.kind === 'session-picker' && dialog.metas !== 'loading' && (
-        <SessionPicker
-          sessions={dialog.metas}
-          onSelect={async (id) => {
-            setDialog(null)
-            const resumed = await props.sessions.resume(id)
-            setSession(resumed)
-            stream.reset()
-          }}
-          onCancel={() => setDialog(null)}
+
+      {/* Prompt zone — replaced by inline submenu when active. */}
+      {submenuInline && submenu?.kind === 'permission' && (
+        <SubmenuFrame mode="inline" title="Permission" focused>
+          <PermissionDialog
+            call={submenu.call}
+            suggestedPattern={submenu.suggestedPattern}
+            annotationBadges={submenu.annotationBadges}
+            onDecide={d => { submenu.resolve(d); closeSubmenu() }}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuInline && submenu?.kind === 'plugin-config' && (
+        <SubmenuFrame mode="inline" title={`Plugin · ${submenu.plugin.manifest.name}`} focused>
+          <PluginConfigDialog
+            plugin={submenu.plugin}
+            fields={submenu.fields}
+            onSubmit={values => { submenu.resolve(values); closeSubmenu() }}
+            onCancel={() => { submenu.resolve(null); closeSubmenu() }}
+          />
+        </SubmenuFrame>
+      )}
+      {promptVisible && (
+        <PromptInput
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSubmit}
+          disabled={inSubmenu}
+          focused={promptFocused}
+          placeholder=""
+          cwd={props.cwd}
+          onAttachFile={p => { pendingAttachments.current.push(p) }}
+          vim={props.config.vim?.enabled === true}
+          slash={props.slash}
+          onSlashActiveChange={(active) => dispatchUI({ type: 'slash-set', active })}
+          onSlashCursorChange={setSlashCursor}
+        />
+      )}
+      {/* Phase 12 §4.8 — SlashCard takes over the Status slot when slash is active. */}
+      {slashActive && props.slash && (
+        <SlashCard
+          value={input}
+          registry={props.slash}
+          selectedIndex={slashCursor}
+          focused={true}
         />
       )}
 
-      <PromptInput
-        value={input}
-        onChange={setInput}
-        onSubmit={handleSubmit}
-        disabled={!!dialog}
-        placeholder=""
-        cwd={props.cwd}
-        onAttachFile={p => { pendingAttachments.current.push(p) }}
-        vim={props.config.vim?.enabled === true}
-        slash={props.slash}
-        onSlashActiveChange={setSlashOpen}
-      />
-      {!slashOpen && (
-        <StatusBar
+      {/* Full submenus — replace Tasks/Prompt/Status entirely. */}
+      {submenuFull && submenu?.kind === 'model-picker' && (
+        <SubmenuFrame mode="full" title="Model picker" focused>
+          <ModelPicker
+            providers={props.providers.listProviders()}
+            onSelect={(providerId, model) => {
+              session.providerId = providerId
+              session.model = model
+              closeSubmenu()
+            }}
+            onAddProvider={() => dispatchUI({ type: 'open-submenu', submenu: { kind: 'onboarding-wizard' } })}
+            onRefresh={async (providerId) => props.providers.fetchRemoteModels(providerId)}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'config' && (
+        <SubmenuFrame mode="full" title="Config" focused>
+          <ConfigSubmenu
+            config={props.config}
+            onSave={async (mutate) => {
+              await saveConfigPatch(os.homedir(), (obj) => {
+                mutate(obj)
+                // Mirror back to the in-memory config so the live Status
+                // panel etc. immediately reflect the saved values without
+                // needing a full app reload.
+                mutate(props.config as unknown as Record<string, unknown>)
+              })
+              bumpMessages()
+            }}
+            onOpenEditor={() => { props.onOpenEditor(); closeSubmenu() }}
+            loadedPlugins={props.loadedPlugins}
+            loadedSkills={props.loadedSkills}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'stats' && (
+        <SubmenuFrame mode="full" title="Stats" focused>
+          <StatsView onExit={closeSubmenu} />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'doctor' && (
+        <SubmenuFrame mode="full" title="Doctor" focused>
+          <DoctorReport report={submenu.report} onClose={closeSubmenu} />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'onboarding-wizard' && (
+        <SubmenuFrame mode="full" title="Onboarding" focused>
+          <Wizard
+            onDone={async (patch) => {
+              try { await saveWizardPatch(os.homedir(), patch) } catch { /* ignore */ }
+              closeSubmenu()
+            }}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'message-selector' && (
+        <SubmenuFrame mode="full" title="Rewind to message" focused>
+          <MessageSelector
+            messages={submenu.messages}
+            onSelect={async (messageId) => {
+              closeSubmenu()
+              try {
+                await props.sessions.truncateAfter(messageId)
+              } catch {
+                // ignore — message may have been removed already
+              }
+            }}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'session-picker' && submenu.metas === 'loading' && (
+        <SubmenuFrame mode="full" title="Sessions" focused>
+          <Box paddingX={1}>
+            <Text color="cyan">Loading sessions…</Text>
+          </Box>
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'session-picker' && submenu.metas !== 'loading' && (
+        <SubmenuFrame mode="full" title="Sessions" focused>
+          <SessionPicker
+            sessions={submenu.metas}
+            onSelect={async (id) => {
+              closeSubmenu()
+              const resumed = await props.sessions.resume(id)
+              setSession(resumed)
+              stream.reset()
+            }}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+
+      {/* Status zone */}
+      {statusVisible && (
+        <StatusPanel
+          mode={hintMode}
           model={session.model}
+          providerId={session.providerId || '—'}
           cwd={props.cwd}
           gitBranch={props.gitBranch}
           contextUsed={contextUsed}
           contextMax={contextMax}
           cost={cost}
-          autoMode="off"
-          queueLength={session.queue.size()}
-          mode={hintMode}
-          sessionPluginCount={props.sessionPluginCount}
-          hiddenSegments={props.config.statusBar?.hidden ?? []}
-        />
-      )}
-      {!slashOpen && (
-        <Hud
-          providerId={session.providerId || '—'}
-          model={session.model}
-          sessionId={session.id}
-          contextUsed={contextUsed}
-          contextMax={contextMax}
-          inputTokens={session.totalUsage.inputTokens}
-          outputTokens={session.totalUsage.outputTokens}
           pluginCount={props.pluginCount ?? 0}
+          sessionPluginCount={props.sessionPluginCount ?? 0}
           agentInFlight={props.agentInFlight ?? 0}
-          gitBranch={props.gitBranch?.branch ?? null}
-          costTracker={props.costTracker}
-          tick={tick}
           taskManager={props.taskManager}
-        />
-      )}
-      {!slashOpen && props.config.statusLine && (
-        <StatusLine
-          config={props.config.statusLine}
-          ctx={{
-            provider: session.providerId || '—',
-            model: session.model,
-            ctxPct: contextMax > 0 ? (contextUsed / contextMax) * 100 : 0,
-            cost,
-            plugins: props.pluginCount ?? 0,
-            tasks: 0,
-            branch: props.gitBranch?.branch ?? null,
-          }}
+          hiddenSegments={props.config.statusBar?.hidden ?? []}
+          layout={props.config.statusBar?.layout ?? 'dense'}
+          statusLineConfig={props.config.statusLine}
+          startedAt={session.createdAt}
         />
       )}
     </Box>

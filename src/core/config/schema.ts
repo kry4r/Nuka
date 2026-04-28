@@ -89,14 +89,24 @@ export const StatusLineConfigSchema = z
 export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
 
 /**
- * `/status-bar` — controls which categorised segments render in the bottom
- * StatusBar. `hidden` is a list of segment names; everything else shows.
- * Known segment names: model, cwd, git, ctx, cost, auto, queue, tasks,
- * plugins, hint. Unknown names are ignored.
+ * Phase 12 §4.5 — controls which segments render in the unified Status
+ * panel. `hidden` is a list of segment ids; everything else shows.
+ *
+ * New segment ids (Phase 12): mode, model, cwd, context, cost-time,
+ * counts. Plus `status-line` for the optional legacy custom row.
+ *
+ * Old ids (model, cwd, git, ctx, cost, auto, queue, tasks, plugins,
+ * hint) are migrated to the new set in `loadConfig` / `loadScopedConfig`
+ * — see `migrateStatusBarHidden` in `src/core/config/load.ts`.
+ *
+ * `layout` selects density: dense (six rows), compact (two rows),
+ * oneline (single line). Narrow terminals auto-degrade in the
+ * renderer; this field reflects the user's preferred density.
  */
 export const StatusBarConfigSchema = z
   .object({
     hidden: z.array(z.string()).default([]),
+    layout: z.enum(['dense', 'compact', 'oneline']).default('dense'),
   })
   .optional()
 export type StatusBarConfig = z.infer<typeof StatusBarConfigSchema>

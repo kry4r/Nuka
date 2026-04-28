@@ -13,7 +13,9 @@ export { type DoctorReport }
 export const DoctorCommand: SlashCommand = {
   name: 'doctor',
   description: 'Run environment diagnostics (node, providers, plugins, LSP, config, disk)',
+  source: 'builtin',
   usage: '/doctor',
+  examples: ['/doctor'],
   async run(_args: string, ctx: SlashContext) {
     const { runDoctor } = await import('../core/doctor/run')
     const report = await runDoctor({

@@ -1,24 +1,35 @@
 // src/core/theme/themes.ts
-// Phase 8 §4.1 — theme registry.
+// Phase 12 M1 — 12-key semantic palette (spec §4.9).
 //
-// A Theme is a flat map of named color tokens. Five seed themes ship with
-// Nuka; additional themes may be added by plugins in a later phase.
+// ThemeColors now uses 12 semantic keys plus bg / bgPanel.
+// The old free-form keys (accent, plan, permission, userMsg, assistantMsg,
+// diffAdd, diffDel, agent) are removed; every call site has migrated to
+// the new names.
 
 export type ThemeColors = {
-  fg: string
-  bg: string
-  muted: string
-  accent: string
-  success: string
-  warn: string
-  error: string
-  plan: string
-  permission: string
-  userMsg: string
-  assistantMsg: string
-  diffAdd: string
-  diffDel: string
-  agent: { primary: string; alt: string }
+  // ── Primary brand (avocado green) ──────────────────────────────────────
+  primary: string      // focused frame, logo, selected highlight
+  primaryDeep: string  // pressed/active, progress filled
+  primarySoft: string  // soft primary, secondary frame highlight, user-msg label
+
+  // ── Accent family ──────────────────────────────────────────────────────
+  accentWarm: string   // running tasks, vim mode badge
+  accentCool: string   // subagents, plan numbering, tool-call headers
+  accentInfo: string   // hints, group dividers, footer keys
+
+  // ── Status semantics ───────────────────────────────────────────────────
+  success: string      // done / ok
+  warn: string         // primed-quit, dirty git, killed task
+  error: string        // failed, denied, validation error
+
+  // ── Foreground scale ───────────────────────────────────────────────────
+  fg: string           // primary text
+  fgMuted: string      // descriptions, placeholders, unfocused frame border
+  fgFaint: string      // timestamps, tokens, distant scrollback
+
+  // ── Background ─────────────────────────────────────────────────────────
+  bg: string           // terminal background (transparent / empty string)
+  bgPanel: string      // submenu/slash card subtle background
 }
 
 export type Theme = {
@@ -30,103 +41,94 @@ export type Theme = {
 // Seed themes
 // ---------------------------------------------------------------------------
 
+// default-dark: avocado-rooted palette per spec §4.9 verbatim.
 const defaultDark: Theme = {
   name: 'default-dark',
   colors: {
-    fg: '#D8DEE9',
-    bg: '#2E3440',
-    muted: '#4C566A',
-    accent: '#88C0D0',
-    success: '#A3BE8C',
-    warn: '#EBCB8B',
-    error: '#BF616A',
-    plan: '#81A1C1',
-    permission: '#D08770',
-    userMsg: '#D8DEE9',
-    assistantMsg: '#A3BE8C',
-    diffAdd: '#A3BE8C',
-    diffDel: '#BF616A',
-    agent: { primary: '#88C0D0', alt: '#5E81AC' },
+    primary:     '#8FBF3F',
+    primaryDeep: '#6B9A2E',
+    primarySoft: '#B6D77A',
+    accentWarm:  '#E0A23C',
+    accentCool:  '#5FA8A8',
+    accentInfo:  '#7C9CC4',
+    success:     '#5FB370',
+    warn:        '#D98E3C',
+    error:       '#D5604E',
+    fg:          '#E6E4D9',
+    fgMuted:     '#7A7A6A',
+    fgFaint:     '#5A5A4E',
+    bg:          '',
+    bgPanel:     '#1B1F12',
   },
 }
 
+// default-light: only fg/fgMuted/fgFaint/bg/bgPanel change; semantics stay
+// identical so brand identity holds (spec §4.9, §5.4).
 const defaultLight: Theme = {
   name: 'default-light',
   colors: {
-    fg: '#2E3440',
-    bg: '#ECEFF4',
-    muted: '#9E9E9E',
-    accent: '#5E81AC',
-    success: '#4C7A34',
-    warn: '#B45309',
-    error: '#9B1C1C',
-    plan: '#1565C0',
-    permission: '#C65D00',
-    userMsg: '#2E3440',
-    assistantMsg: '#2D6A4F',
-    diffAdd: '#4C7A34',
-    diffDel: '#9B1C1C',
-    agent: { primary: '#5E81AC', alt: '#4C566A' },
+    ...defaultDark.colors,
+    fg:      '#2C2C22',
+    fgMuted: '#6B6B5A',
+    fgFaint: '#9A9A84',
+    bg:      '',
+    bgPanel: '#F4F1E4',
   },
 }
 
+// solarized-dark: keeps its identity; all 12 keys populated.
 const solarizedDark: Theme = {
   name: 'solarized-dark',
   colors: {
-    fg: '#839496',
-    bg: '#002B36',
-    muted: '#586E75',
-    accent: '#268BD2',
-    success: '#859900',
-    warn: '#B58900',
-    error: '#DC322F',
-    plan: '#2AA198',
-    permission: '#CB4B16',
-    userMsg: '#839496',
-    assistantMsg: '#859900',
-    diffAdd: '#859900',
-    diffDel: '#DC322F',
-    agent: { primary: '#268BD2', alt: '#2AA198' },
+    primary:     '#859900',
+    primaryDeep: '#6C7A00',
+    primarySoft: '#A8B840',
+    accentWarm:  '#CB4B16',
+    accentCool:  '#268BD2',
+    accentInfo:  '#2AA198',
+    success:     '#859900',
+    warn:        '#B58900',
+    error:       '#DC322F',
+    fg:          '#839496',
+    fgMuted:     '#586E75',
+    fgFaint:     '#3D4F52',
+    bg:          '',
+    bgPanel:     '#002B36',
   },
 }
 
+// solarized-light: same semantic palette as solarized-dark; only
+// fg/fgMuted/fgFaint/bg/bgPanel remapped.
 const solarizedLight: Theme = {
   name: 'solarized-light',
   colors: {
-    fg: '#657B83',
-    bg: '#FDF6E3',
-    muted: '#93A1A1',
-    accent: '#268BD2',
-    success: '#859900',
-    warn: '#B58900',
-    error: '#DC322F',
-    plan: '#2AA198',
-    permission: '#CB4B16',
-    userMsg: '#657B83',
-    assistantMsg: '#859900',
-    diffAdd: '#859900',
-    diffDel: '#DC322F',
-    agent: { primary: '#268BD2', alt: '#2AA198' },
+    ...solarizedDark.colors,
+    fg:      '#657B83',
+    fgMuted: '#93A1A1',
+    fgFaint: '#C1CAC9',
+    bg:      '',
+    bgPanel: '#FDF6E3',
   },
 }
 
+// high-contrast: vivid palette for accessibility; all 12 keys populated.
 const highContrast: Theme = {
   name: 'high-contrast',
   colors: {
-    fg: '#FFFFFF',
-    bg: '#000000',
-    muted: '#AAAAAA',
-    accent: '#00FFFF',
-    success: '#00FF00',
-    warn: '#FFFF00',
-    error: '#FF0000',
-    plan: '#00BFFF',
-    permission: '#FF8C00',
-    userMsg: '#FFFFFF',
-    assistantMsg: '#00FF00',
-    diffAdd: '#00FF00',
-    diffDel: '#FF0000',
-    agent: { primary: '#00FFFF', alt: '#FF00FF' },
+    primary:     '#00FF00',
+    primaryDeep: '#00CC00',
+    primarySoft: '#66FF66',
+    accentWarm:  '#FF8C00',
+    accentCool:  '#00FFFF',
+    accentInfo:  '#00BFFF',
+    success:     '#00FF00',
+    warn:        '#FFFF00',
+    error:       '#FF0000',
+    fg:          '#FFFFFF',
+    fgMuted:     '#AAAAAA',
+    fgFaint:     '#666666',
+    bg:          '',
+    bgPanel:     '#000000',
   },
 }
 

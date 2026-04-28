@@ -13,10 +13,10 @@ export function PickProvider(props: {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Choose a provider</Text>
-      <Text color={P.muted}>↑↓ navigate · Enter select · Esc cancel</Text>
+      <Text color={P.fgMuted}>↑↓ navigate · Enter select · Esc cancel</Text>
       {props.choices.map((t, i) => (
         <Text key={t.id} color={i === props.cursor ? P.primary : P.fg}>
-          {i === props.cursor ? '›' : ' '} {t.name}  <Text color={P.muted}>{t.baseUrl}</Text>
+          {i === props.cursor ? '›' : ' '} {t.name}  <Text color={P.fgMuted}>{t.baseUrl}</Text>
         </Text>
       ))}
     </Box>

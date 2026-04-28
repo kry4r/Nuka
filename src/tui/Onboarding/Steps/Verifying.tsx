@@ -12,7 +12,7 @@ export function Verifying(props: {
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Verifying…</Text>
       <Text color={P.fg}>{props.provider.name} · {props.model}</Text>
-      <Text color={P.muted}>Sending a 1-token probe to confirm your API key works.</Text>
+      <Text color={P.fgMuted}>Sending a 1-token probe to confirm your API key works.</Text>
     </Box>
   )
 }

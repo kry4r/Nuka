@@ -112,7 +112,7 @@ export function MessageRow(props: {
   const { m } = props
   if (m.role === 'system') return null
   const speaker = m.role === 'user' ? 'you' : m.role === 'assistant' ? 'nuka' : 'tool'
-  const color = m.role === 'user' ? P.muted : m.role === 'assistant' ? P.primary : P.accent
+  const color = m.role === 'user' ? P.primarySoft : m.role === 'assistant' ? P.primary : P.accentCool
 
   if (m.role === 'tool') {
     // Suppress the standalone tool-role block for dispatch_agent — the
