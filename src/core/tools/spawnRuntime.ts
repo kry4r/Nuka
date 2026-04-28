@@ -49,6 +49,7 @@ export async function executeSpawn<I>(
         stdio: ['ignore', 'pipe', 'pipe'],
         cwd: ctx.cwd,
         env,
+        detached: true,
       })
     } catch (err) {
       resolve({ isError: true, output: (err as Error).message })
@@ -64,7 +65,17 @@ export async function executeSpawn<I>(
 
     const onAbort = () => {
       aborted = true
-      try { proc.kill('SIGKILL') } catch { /* ignore */ }
+      // Kill the whole process group so a `sh -c "..."` child can't leave
+      // grandchildren orphaned and keep the parent's stdio pipes open.
+      try {
+        if (typeof proc.pid === 'number') {
+          process.kill(-proc.pid, 'SIGKILL')
+        } else {
+          proc.kill('SIGKILL')
+        }
+      } catch {
+        try { proc.kill('SIGKILL') } catch { /* ignore */ }
+      }
     }
     if (ctx.signal) {
       if (ctx.signal.aborted) {
