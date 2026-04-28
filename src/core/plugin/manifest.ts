@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { McpServerConfigSchema } from '../config/schema'
 import { AgentDefSchema } from '../agents/types'
 
 // LSP server definition schema (mirrors LspServerDef from src/core/lsp/types.ts)
@@ -41,7 +40,12 @@ export const PluginManifestSchema = z.object({
   tools: z.array(z.string()).default([]),
   slashCommands: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([]),
-  mcpServers: z.record(z.string(), McpServerConfigSchema).default({}),
+  /**
+   * Map of executables this plugin provides, mirroring npm's `bin` field.
+   * Key is the binary name; value is the relative path to the executable
+   * within the plugin directory. Schema only — install logic lands in M4.
+   */
+  bin: z.record(z.string(), z.string()).optional(),
   /** Relative path to a hooks.json file within the plugin directory */
   hooks: z.string().optional(),
   /**
@@ -75,7 +79,7 @@ export const PluginManifestSchema = z.object({
       z.object({
         name: z.string().min(1),
         matchToolName: z.string().optional(),
-        matchToolSource: z.enum(['mcp', 'plugin', 'skill', 'builtin']).optional(),
+        matchToolSource: z.enum(['plugin', 'skill', 'builtin']).optional(),
         componentPath: z.string().min(1),
       }),
     )

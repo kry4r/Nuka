@@ -38,7 +38,7 @@ export interface Tool<I = unknown> {
   name: string
   description: string
   parameters: Record<string, unknown>
-  source: 'builtin' | 'skill' | 'mcp' | 'plugin'
+  source: 'builtin' | 'skill' | 'plugin'
   /** Optional custom validator; if absent, validateWithJsonSchema is used. */
   validateInput?: (input: unknown) => ValidationResult<I>
   /** Optional per-tool result size cap (string output only). */
@@ -60,12 +60,10 @@ export interface Tool<I = unknown> {
   /**
    * Keywords that trigger eager loading when matched against the first user
    * message. Once matched, the tool stays loaded for the session.
-   * For MCP tools, populated from the server's `_meta.searchHint`.
    */
   searchHint?: string[]
   /**
    * If true, always include this tool in every provider call.
-   * For MCP tools, populated from the server's `_meta.alwaysLoad`.
    */
   alwaysLoad?: boolean
   /**

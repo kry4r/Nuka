@@ -64,35 +64,6 @@ export const SearchSchema = z
   })
   .optional()
 
-export const McpServerConfigSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('stdio'),
-    command: z.string().min(1),
-    args: z.array(z.string()).default([]),
-    env: z.record(z.string(), z.string()).optional(),
-  }),
-  z.object({
-    type: z.literal('http'),
-    url: z.string().url(),
-    headers: z.record(z.string(), z.string()).optional(),
-  }),
-  z.object({
-    type: z.literal('sse'),
-    url: z.string().url(),
-    headers: z.record(z.string(), z.string()).optional(),
-  }),
-])
-
-export const McpConfigSchema = z
-  .object({
-    servers: z.record(z.string(), McpServerConfigSchema).default({}),
-    maxResultChars: z.number().int().positive().default(100_000),
-    connectTimeoutMs: z.number().int().positive().default(30_000),
-    requestTimeoutMs: z.number().int().positive().default(600_000),
-    persistThresholdChars: z.number().int().positive().default(500_000),
-  })
-  .optional()
-
 export const PluginsConfigSchema = z
   .object({
     enabled: z.array(z.string()).optional(),
@@ -120,7 +91,7 @@ export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
 /**
  * `/status-bar` — controls which categorised segments render in the bottom
  * StatusBar. `hidden` is a list of segment names; everything else shows.
- * Known segment names: model, cwd, git, ctx, cost, mcp, auto, queue, tasks,
+ * Known segment names: model, cwd, git, ctx, cost, auto, queue, tasks,
  * plugins, hint. Unknown names are ignored.
  */
 export const StatusBarConfigSchema = z
@@ -148,7 +119,6 @@ export const ConfigSchema = z.object({
   welcome: WelcomeSchema,
   compact: CompactSchema,
   search: SearchSchema,
-  mcp: McpConfigSchema,
   plugins: PluginsConfigSchema,
   vim: VimConfigSchema,
   rewind: RewindConfigSchema,
@@ -157,7 +127,7 @@ export const ConfigSchema = z.object({
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.
-   * e.g. ["providers.openai.apiKey", "mcp"]
+   * e.g. ["providers.openai.apiKey"]
    */
   locked: z.array(z.string()).optional(),
 })
