@@ -26,8 +26,16 @@ export function parseSkill(
   const result = skillFrontmatterSchema.safeParse(raw)
   if (!result.success) return null
 
-  const { name, description, when } = result.data
-  return { name, description, when, body, source: meta.source, path: meta.path }
+  const { name, description, when, requires } = result.data
+  return {
+    name,
+    description,
+    when,
+    ...(requires !== undefined ? { requires } : {}),
+    body,
+    source: meta.source,
+    path: meta.path,
+  }
 }
 
 async function loadFromDir(
