@@ -1,0 +1,8 @@
+{
+  "name": "cli-tool-example",
+  "version": "0.1.0",
+  "description": "Demonstrates Phase 11 tool platform: in-process tool, spawn-wrapped CLI, bin linking, skill requires",
+  "tools": ["./tools/echo.js", "./tools/git-log.js"],
+  "skills": ["./skills/deploy-helper.md"],
+  "bin": { "nuka-echo": "./bin/nuka-echo.js" }
+}
