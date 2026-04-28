@@ -11,7 +11,7 @@
 [![status](https://img.shields.io/badge/status-active-success)]()
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
-Stream-rendered TUI · MCP servers · plugin marketplace · multi-expert agents · LSP-aware tools — all in a single ~240 KB bundle.
+Stream-rendered TUI · plugin marketplace · multi-expert agents · LSP-aware tools — all in a single ~240 KB bundle.
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
@@ -23,7 +23,7 @@ Stream-rendered TUI · MCP servers · plugin marketplace · multi-expert agents 
 
 | | |
 |---|---|
-| **🎯 Plugin-first** | Tools, slash commands, MCP servers, hooks, agents, output renderers, LSP servers — all flow through one manifest. |
+| **🎯 Plugin-first** | Tools, slash commands, hooks, agents, output renderers, LSP servers — all flow through one manifest. |
 | **🤖 Agent swarm** | Plugins declare specialist agents. Main agent dispatches with isolated sessions, filtered tools, up to 4 in parallel. |
 | **🔌 Provider-agnostic** | Anthropic + OpenAI today. New providers in ~150 LOC. |
 | **📦 Marketplace** | Install from URL index, git, npm, or `.mcpb`/`.dxt` bundles. Versioned cache. Dependency closure. |
@@ -78,11 +78,11 @@ nuka
                  │
        ┌─────────┼─────────────────────────────┐
        │         │                             │
-   ┌───▼───┐ ┌───▼────┐ ┌──────────┐ ┌─────────▼────┐
-   │  MCP  │ │Plugins │ │  Agents  │ │     LSP      │
-   │client │ │ wire   │ │ dispatch │ │ jsonrpc·docs │
-   │mgr    │ │market  │ │ registry │ │ manager·tools│
-   └───────┘ └────────┘ └──────────┘ └──────────────┘
+           ┌───▼────┐ ┌──────────┐ ┌─────────▼────┐
+           │Plugins │ │  Agents  │ │     LSP      │
+           │ wire   │ │ dispatch │ │ jsonrpc·docs │
+           │market  │ │ registry │ │ manager·tools│
+           └────────┘ └──────────┘ └──────────────┘
 ```
 
 ### Module map
@@ -94,12 +94,12 @@ src/core/
   config/        4-scope cascade (enterprise/user/project/local)
   hooks/         lifecycle hooks (execa runner)
   lsp/           jsonrpc · client · doc tracker · manager · tools
-  mcp/           client · transports · reconnect · elicitation
   notifications/ channels (webhook/command)
   permission/    checker · bridge · pattern cache
-  plugin/        manifest · install · deps · marketplace · userConfig
+  plugin/        manifest · install (bin linking) · deps · marketplace · userConfig
   provider/      Anthropic · OpenAI adapters
-  tools/         registry · validate · concurrency · content blocks
+  skill/         loader · activation (requires→tags) · types
+  tools/         defineTool · spawnRuntime · registry (queryByTags) · content blocks
 src/slash/       /plugin · /help · plugin-contributed
 src/tui/         Ink renderer · dialogs · message rows
 ```
@@ -117,7 +117,7 @@ tools:        [tools/foo.js]
 slashCommands:[slash/bar.js]
 skills:       [skills/baz.md]
 hooks:        hooks.json
-mcpServers:   { fs: { type: stdio, command: ... } }
+bin:          { my-cli: ./bin/my-cli.js }   # expose a terminal CLI
 lspServers:   [{ name: ts, command: typescript-language-server, ... }]
 
 # Multi-expert agents
@@ -129,12 +129,84 @@ agents:
     keywords: [review, audit]
 
 # UI customization
-outputStyles: [{ name: gh, matchToolName: "mcp__github__*", componentPath: ... }]
+outputStyles: [{ name: gh, matchToolName: "plugin__my-plugin__*", componentPath: ... }]
 channels:     [{ name: slack, allowlist: [tool_result], dispatch: { type: webhook, url: ... } }]
 
 # Configuration
 userConfig:   { fields: [{ name: token, type: string, required: true }] }
 dependencies: [{ name: shared-lib, required: true }]
+```
+
+---
+
+## 🔧 Building a plugin tool
+
+See `examples/plugin-cli-tool/` for a complete runnable example. The two key primitives:
+
+### In-process tool
+
+```js
+// tools/echo.js — export a plain object matching the Tool interface
+export default {
+  name: 'echo',
+  description: 'Echo input text uppercase',
+  parameters: {
+    type: 'object',
+    properties: { text: { type: 'string' } },
+    required: ['text'],
+  },
+  source: 'plugin',
+  tags: ['util'],
+  needsPermission: () => 'none',
+  async run({ text }) {
+    return { output: text.toUpperCase(), isError: false }
+  },
+}
+```
+
+### Spawn-wrapped CLI tool
+
+```js
+// tools/git-log.js — wrap any CLI binary as a typed tool
+export default {
+  name: 'git-log',
+  description: 'Last 5 git commits',
+  parameters: { type: 'object', properties: {}, required: [] },
+  source: 'plugin',
+  tags: ['git', 'vcs.read'],          // matched by skill `requires`
+  runtime: {
+    kind: 'spawn',
+    command: 'git',
+    args: () => ['log', '--oneline', '-n', '5'],
+    parseOutput: (stdout) => ({ commits: stdout.trim().split('\n').filter(Boolean) }),
+  },
+  needsPermission: () => 'none',
+  async run(_input, ctx) { /* provided by spawn runtime */ },
+}
+```
+
+### Terminal CLI via `bin`
+
+Add a `bin` field to `plugin.json` to symlink a Node script into `~/.nuka/bin/` on install:
+
+```json
+{ "bin": { "nuka-echo": "./bin/nuka-echo.js" } }
+```
+
+On install, Nuka creates `~/.nuka/bin/nuka-echo → <plugin>/bin/nuka-echo.js` (POSIX) or a `.cmd` shim (Windows). Add `~/.nuka/bin` to your `PATH` once and every plugin CLI is immediately available.
+
+### Skill `requires` for tool narrowing
+
+Skills declare `requires: [tag, ...]` in their frontmatter. On skill activation Nuka exposes the core tool set **plus** any tools whose `tags` intersect `requires`. This lets a deploy skill automatically unlock `git-log` without the model needing to be told:
+
+```markdown
+---
+name: deploy-helper
+when:
+  keyword: ["deploy", "release"]
+requires: ["git", "vcs.read"]
+---
+Use git-log to inspect recent commits before suggesting a release branch.
 ```
 
 ---
@@ -211,8 +283,9 @@ Full 13-step test plan: `docs/superpowers/specs/2026-04-24-phase5-marketplace-ag
 | **8** | 11 | theme switcher · `/stats` · `/rewind` · plan-mode gate · IDE bridge |
 | **9** | 8 | self-driving TUI test harness · YAML plans · `nuka --test-plan` · 5 sample plans |
 | **10** | 11 | bundle split · task system (`/tasks`) · `nuka doctor` · statusline customization · `/rewind` dialog |
+| **11** | 4 | **MCP deleted** · `defineTool` + spawn runtime · skill `requires`→tags narrowing · `bin` linking · example plugin |
 
-1246 tests · 256 KB production bundle (+ 215 KB lazy testing bundle) · 0 vendored deps for new features.
+1099+ tests · ~254 KB production bundle · 0 vendored deps for new features.
 
 ---
 

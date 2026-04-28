@@ -11,7 +11,7 @@
 [![status](https://img.shields.io/badge/status-active-success)]()
 [![license](https://img.shields.io/badge/license-TBD-lightgrey)]()
 
-流式 TUI · MCP 服务器 · 插件市场 · 多专家 Agent · LSP 工具 —— 单包 ~240 KB。
+流式 TUI · 插件市场 · 多专家 Agent · LSP 工具 —— 单包 ~240 KB。
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
@@ -23,7 +23,7 @@
 
 | | |
 |---|---|
-| **🎯 插件优先** | 工具、斜杠命令、MCP、Hook、Agent、输出渲染器、LSP 服务器都通过同一份 manifest 注入。 |
+| **🎯 插件优先** | 工具、斜杠命令、Hook、Agent、输出渲染器、LSP 服务器都通过同一份 manifest 注入。 |
 | **🤖 Agent 蜂群** | 插件可声明专家 Agent，主 Agent 隔离会话调度，最多 4 个并行执行。 |
 | **🔌 多 Provider** | 已支持 Anthropic / OpenAI，新接一家约 150 行代码。 |
 | **📦 插件市场** | 支持 URL 索引 / git / npm / `.mcpb`、`.dxt` 包；带版本缓存与依赖闭包。 |
@@ -80,11 +80,11 @@ nuka
                  │
        ┌─────────┼─────────────────────────────┐
        │         │                             │
-   ┌───▼───┐ ┌───▼────┐ ┌──────────┐ ┌─────────▼────┐
-   │  MCP  │ │ 插件   │ │  Agent   │ │     LSP      │
-   │client │ │ 装配   │ │  调度    │ │ jsonrpc·docs │
-   │mgr    │ │ market │ │  注册表  │ │ manager·tools│
-   └───────┘ └────────┘ └──────────┘ └──────────────┘
+           ┌───▼────┐ ┌──────────┐ ┌─────────▼────┐
+           │ 插件   │ │  Agent   │ │     LSP      │
+           │ 装配   │ │  调度    │ │ jsonrpc·docs │
+           │ market │ │  注册表  │ │ manager·tools│
+           └────────┘ └──────────┘ └──────────────┘
 ```
 
 ### 模块速查
@@ -96,7 +96,6 @@ src/core/
   config/        4 层配置叠加（enterprise/user/project/local）
   hooks/         生命周期钩子（execa 运行）
   lsp/           jsonrpc · 客户端 · 文档跟踪 · 管理器 · 工具
-  mcp/           客户端 · 传输 · 重连 · elicitation
   notifications/ 通道（webhook / command）
   permission/    检查器 · 桥接 · 模式缓存
   plugin/        manifest · 安装 · 依赖 · 市场 · userConfig
@@ -119,7 +118,7 @@ tools:        [tools/foo.js]
 slashCommands:[slash/bar.js]
 skills:       [skills/baz.md]
 hooks:        hooks.json
-mcpServers:   { fs: { type: stdio, command: ... } }
+bin:          { my-cli: ./bin/my-cli.js }   # 暴露终端 CLI
 lspServers:   [{ name: ts, command: typescript-language-server, ... }]
 
 # 多专家 Agent
@@ -131,12 +130,84 @@ agents:
     keywords: [review, audit]
 
 # UI 定制
-outputStyles: [{ name: gh, matchToolName: "mcp__github__*", componentPath: ... }]
+outputStyles: [{ name: gh, matchToolName: "plugin__my-plugin__*", componentPath: ... }]
 channels:     [{ name: slack, allowlist: [tool_result], dispatch: { type: webhook, url: ... } }]
 
 # 配置
 userConfig:   { fields: [{ name: token, type: string, required: true }] }
 dependencies: [{ name: shared-lib, required: true }]
+```
+
+---
+
+## 🔧 构建插件工具
+
+完整示例见 `examples/plugin-cli-tool/`，包含两种主要模式：
+
+### 进程内工具
+
+```js
+// tools/echo.js — 导出符合 Tool 接口的普通对象
+export default {
+  name: 'echo',
+  description: '将输入文本转为大写',
+  parameters: {
+    type: 'object',
+    properties: { text: { type: 'string' } },
+    required: ['text'],
+  },
+  source: 'plugin',
+  tags: ['util'],
+  needsPermission: () => 'none',
+  async run({ text }) {
+    return { output: text.toUpperCase(), isError: false }
+  },
+}
+```
+
+### spawn 包装 CLI 工具
+
+```js
+// tools/git-log.js — 将任意 CLI 二进制包装为类型化工具
+export default {
+  name: 'git-log',
+  description: '最近 5 条 git 提交',
+  parameters: { type: 'object', properties: {}, required: [] },
+  source: 'plugin',
+  tags: ['git', 'vcs.read'],    // 与 skill requires 匹配
+  runtime: {
+    kind: 'spawn',
+    command: 'git',
+    args: () => ['log', '--oneline', '-n', '5'],
+    parseOutput: (stdout) => ({ commits: stdout.trim().split('\n').filter(Boolean) }),
+  },
+  needsPermission: () => 'none',
+  async run(_input, ctx) { /* 由 spawn runtime 提供 */ },
+}
+```
+
+### 通过 `bin` 暴露终端 CLI
+
+在 `plugin.json` 中添加 `bin` 字段，安装时 Nuka 会将 Node 脚本软链接到 `~/.nuka/bin/`：
+
+```json
+{ "bin": { "nuka-echo": "./bin/nuka-echo.js" } }
+```
+
+将 `~/.nuka/bin` 加入 `PATH` 后，每个插件 CLI 立即可用。
+
+### Skill `requires` 实现工具收窄
+
+Skill frontmatter 中声明 `requires: [tag, ...]`，激活时 Nuka 会在核心工具集基础上**叠加**所有 `tags` 与之相交的工具：
+
+```markdown
+---
+name: deploy-helper
+when:
+  keyword: ["deploy", "release"]
+requires: ["git", "vcs.read"]
+---
+在建议发布分支之前，使用 git-log 检查最近提交。
 ```
 
 ---
@@ -213,8 +284,9 @@ nuka config show [--scope user]
 | **8** | 11 | 主题切换 · `/stats` · `/rewind` · 计划模式 · IDE 桥接 |
 | **9** | 8 | 自驱 TUI 测试框架 · YAML 计划 · `nuka --test-plan` · 5 个示例 |
 | **10** | 11 | 包体拆分 · 任务系统 (`/tasks`) · `nuka doctor` · 状态栏定制 · `/rewind` 弹窗 |
+| **11** | 4 | **MCP 全删** · `defineTool` + spawn runtime · skill `requires`→tags 收窄 · `bin` 链接 · 示例插件 |
 
-1246 个测试 · 256 KB 生产包体（+ 215 KB 懒加载测试包体）· 0 新增 vendored 依赖。
+1099+ 个测试 · ~254 KB 生产包体 · 0 新增 vendored 依赖。
 
 ---
 

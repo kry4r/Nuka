@@ -1,4 +1,5 @@
-import { cp, readFile, stat } from 'node:fs/promises'
+import { cp, chmod, mkdir, readFile, stat, symlink, unlink, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import { join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { PluginManifestSchema, type PluginManifest } from './manifest'
@@ -73,11 +74,100 @@ export async function installPluginFromPath(opts: {
 
   await cp(source, targetDir, { recursive: true, force: opts.force ?? false })
 
+  // Link bin entries into ~/.nuka/bin/
+  if (manifest.bin && Object.keys(manifest.bin).length > 0) {
+    await linkBins(manifest, targetDir, opts.home)
+  }
+
   return {
     name: manifest.name,
     targetDir,
     toolsCount: manifest.tools.length,
     slashCount: manifest.slashCommands.length,
     skillsCount: manifest.skills.length,
+  }
+}
+
+/**
+ * Symlink (POSIX) or write a .cmd shim (Windows) for each entry in
+ * `manifest.bin` into `<home>/.nuka/bin/`.
+ *
+ * If the target already exists it is replaced with a warning (not thrown).
+ * The target executable is also chmod'd +x on POSIX.
+ *
+ * @param manifest - plugin manifest containing the bin map
+ * @param pluginRoot - absolute path to the installed plugin directory
+ * @param home - user home directory (defaults to os.homedir())
+ */
+export async function linkBins(
+  manifest: PluginManifest,
+  pluginRoot: string,
+  home: string = os.homedir(),
+): Promise<void> {
+  if (!manifest.bin || Object.keys(manifest.bin).length === 0) return
+
+  const binDir = join(home, '.nuka', 'bin')
+  await mkdir(binDir, { recursive: true })
+
+  for (const [name, relPath] of Object.entries(manifest.bin)) {
+    const targetFile = resolve(pluginRoot, relPath)
+
+    if (process.platform === 'win32') {
+      const linkPath = join(binDir, `${name}.cmd`)
+      // Remove existing shim before writing
+      try {
+        await unlink(linkPath)
+      } catch {
+        // ok if it doesn't exist
+      }
+      try {
+        await writeFile(linkPath, `@node "${targetFile}" %*\r\n`, 'utf8')
+      } catch (err) {
+        console.warn(`[plugin] bin link failed for '${name}': ${(err as Error).message}`)
+      }
+    } else {
+      const linkPath = join(binDir, name)
+      // Remove existing symlink/file before creating new one
+      try {
+        await unlink(linkPath)
+        console.warn(`[plugin] replaced existing bin entry at ${linkPath}`)
+      } catch {
+        // ok if it doesn't exist
+      }
+      try {
+        await chmod(targetFile, 0o755)
+        await symlink(targetFile, linkPath)
+      } catch (err) {
+        console.warn(`[plugin] bin link failed for '${name}': ${(err as Error).message}`)
+      }
+    }
+  }
+}
+
+/**
+ * Remove symlinks or .cmd shims that were installed by {@link linkBins}.
+ * Called on plugin uninstall. Missing entries are silently ignored.
+ *
+ * @param manifest - plugin manifest containing the bin map
+ * @param home - user home directory (defaults to os.homedir())
+ */
+export async function unlinkBins(
+  manifest: PluginManifest,
+  home: string = os.homedir(),
+): Promise<void> {
+  if (!manifest.bin || Object.keys(manifest.bin).length === 0) return
+
+  const binDir = join(home, '.nuka', 'bin')
+
+  for (const name of Object.keys(manifest.bin)) {
+    const linkPath = process.platform === 'win32'
+      ? join(binDir, `${name}.cmd`)
+      : join(binDir, name)
+
+    try {
+      await unlink(linkPath)
+    } catch {
+      // already gone — that's fine
+    }
   }
 }

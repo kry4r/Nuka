@@ -1,0 +1,37 @@
+# 08-example-plugin.yaml
+#
+# Phase 11 M4 — example plugin verification plan.
+#
+# LIMITATION: The TUI harness does not support arbitrary plugin loading via
+# a `setup.pluginDirs` key (PlanSetup only offers `config`, `mockResponses`,
+# and `slash`). Full end-to-end plugin wiring is therefore verified in the
+# companion unit test at test/core/plugin/binLinking.test.ts which:
+#
+#   - installs the fixture plugin with a `bin` entry into a tmpdir home
+#   - asserts the symlink/shim exists and resolves to the correct target
+#   - calls unlinkBins and asserts the symlink is gone
+#
+# This harness plan verifies the parts of M4 that ARE observable through
+# the harness surface: the app boots cleanly (no MCP remnants crash on
+# startup) and the plugin system's slash commands work. The full
+# skill→tool narrowing and bin-symlink assertions live in the unit tests.
+#
+# If the harness gains a `setup.plugins` key in a future phase this plan
+# should be upgraded to:
+#   1. Load examples/plugin-cli-tool/ via setup.plugins
+#   2. Send a message containing "deploy" to activate deploy-helper
+#   3. Assert git-log is in the active tool set
+#   4. Assert ~/.nuka/bin/nuka-echo exists and is executable
+name: "example-plugin boot check"
+description: >
+  Boots the TUI and verifies that the app starts cleanly after MCP removal.
+  Plugin loading and bin-symlink assertions are in test/core/plugin/binLinking.test.ts
+  (harness does not support setup.plugins yet — see plan header comment).
+
+steps:
+  - render: app
+  - assert:
+      contains: "NUKA"
+
+cleanup:
+  unmount: true
