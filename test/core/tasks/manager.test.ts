@@ -1,10 +1,10 @@
 // test/core/tasks/manager.test.ts
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { TaskManager } from '../../../src/core/tasks/manager'
-import type { LocalAgentSpec, MonitorMcpSpec } from '../../../src/core/tasks/types'
+import type { LocalAgentSpec } from '../../../src/core/tasks/types'
 
 async function newHome(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), 'nuka-tasks-'))
@@ -121,39 +121,6 @@ describe('TaskManager', () => {
     const after = m.get(t.id)!
     expect(after.state).toBe('killed')
     expect(after.finishedAt).toBeTypeOf('number')
-  })
-
-  it('failed monitor_mcp final event is recorded as failed state', async () => {
-    const m = new TaskManager({ home })
-    const spec: MonitorMcpSpec = {
-      kind: 'monitor_mcp',
-      description: 'will-fail',
-      eventStream: async function* () {
-        yield { message: 'starting' }
-        yield { message: 'oh no', done: true, error: 'broken pipe' }
-      },
-    }
-    const t = m.enqueue(spec)
-    await waitFor(m, x => x.id === t.id && (x.state === 'failed' || x.state === 'completed'))
-    const after = m.get(t.id)!
-    expect(after.state).toBe('failed')
-    expect(after.error).toContain('broken pipe')
-  })
-
-  it('persists output to <home>/.nuka/tasks/<id>.log for monitor events', async () => {
-    const m = new TaskManager({ home })
-    const t = m.enqueue({
-      kind: 'monitor_mcp',
-      description: 'persist',
-      eventStream: async function* () {
-        yield { message: 'first' }
-        yield { message: 'second', done: true }
-      },
-    })
-    await m.drain()
-    const text = await readFile(t.outputFile, 'utf8')
-    expect(text).toContain('first')
-    expect(text).toContain('second')
   })
 
   it('on(\"change\") returns an unsubscribe function', () => {

@@ -8,7 +8,6 @@ function makeManifest(name: string, deps: string[] = []): PluginManifest {
     tools: [],
     slashCommands: [],
     skills: [],
-    mcpServers: {},
     dependencies: deps.map(d => ({ name: d })),
   }
 }

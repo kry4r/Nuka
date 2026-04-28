@@ -62,9 +62,6 @@ function makePlugin(overrides: Partial<LoadedPlugin['manifest']> = {}): LoadedPl
       tools: ['mytool.mjs'],
       slashCommands: ['myslash.mjs'],
       skills: ['myskill.md'],
-      mcpServers: {
-        'local-fs': { type: 'stdio', command: 'node', args: ['server.js'] },
-      },
       ...overrides,
     },
     rootDir: root,
@@ -78,11 +75,10 @@ describe('wirePlugin', () => {
     const tools = new ToolRegistry()
     const slash = new SlashRegistry()
     const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
 
-    const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
+    const result = await wirePlugin(makePlugin(), { tools, slash, skills })
 
-    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, mcpAdded: 1, hooksAdded: 0, agentsAdded: 0, lspAdded: 0, errors: [] })
+    expect(result).toEqual({ toolsAdded: 1, slashAdded: 1, skillsAdded: 1, hooksAdded: 0, agentsAdded: 0, lspAdded: 0, errors: [] })
 
     const t = tools.find('plugin__demo__Hello')
     expect(t).toBeDefined()
@@ -93,8 +89,6 @@ describe('wirePlugin', () => {
 
     expect(skills).toHaveLength(1)
     expect(skills[0]?.name).toBe('hello-skill')
-
-    expect(mcpServers['local-fs']).toBeDefined()
   })
 
   it('duplicate tool: counts 0, no exception, builtin survives', async () => {
@@ -111,9 +105,8 @@ describe('wirePlugin', () => {
     })
     const slash = new SlashRegistry()
     const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
 
-    const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
+    const result = await wirePlugin(makePlugin(), { tools, slash, skills })
 
     expect(result.toolsAdded).toBe(0)
     expect(result.errors).toEqual([])
@@ -128,11 +121,10 @@ describe('wirePlugin', () => {
     const tools = new ToolRegistry()
     const slash = new SlashRegistry()
     const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
 
     const result = await wirePlugin(
-      makePlugin({ tools: ['mytool.mjs'], slashCommands: [], skills: [], mcpServers: {} }),
-      { tools, slash, skills, mcpServers },
+      makePlugin({ tools: ['mytool.mjs'], slashCommands: [], skills: [] }),
+      { tools, slash, skills },
     )
 
     expect(result.toolsAdded).toBe(0)
@@ -140,29 +132,11 @@ describe('wirePlugin', () => {
     expect(result.errors[0]).toMatch(/boom/)
   })
 
-  it('duplicate mcp server pushes error and skips', async () => {
-    await makeFixtures()
-    const tools = new ToolRegistry()
-    const slash = new SlashRegistry()
-    const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {
-      'local-fs': { type: 'stdio', command: 'existing', args: [] },
-    }
-
-    const result = await wirePlugin(makePlugin(), { tools, slash, skills, mcpServers })
-
-    expect(result.mcpAdded).toBe(0)
-    expect(result.errors.some(e => e.includes("mcp server 'local-fs'"))).toBe(true)
-    // original entry survives
-    expect((mcpServers['local-fs'] as { command: string }).command).toBe('existing')
-  })
-
   it('registers agents under <plugin>:<name>', async () => {
     await writeFile(join(root, 'tester.md'), 'Act as a tester.', 'utf8')
     const tools = new ToolRegistry()
     const slash = new SlashRegistry()
     const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
     const agents = new AgentRegistry()
     const plugin: LoadedPlugin = {
       manifest: {
@@ -170,7 +144,6 @@ describe('wirePlugin', () => {
         tools: [],
         slashCommands: [],
         skills: [],
-        mcpServers: {},
         agents: [
           { name: 'reviewer', description: 'reviews code', systemPrompt: 'you review', maxTurns: 20 },
           { name: 'tester', description: 'runs tests', systemPromptPath: 'tester.md', maxTurns: 20 },
@@ -179,7 +152,7 @@ describe('wirePlugin', () => {
       rootDir: root,
       source: 'installed' as const,
     }
-    const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, agents })
+    const result = await wirePlugin(plugin, { tools, slash, skills, agents })
     expect(result.agentsAdded).toBe(2)
     expect(result.errors).toEqual([])
     expect(agents.find('demo:reviewer')?.systemPrompt).toBe('you review')
@@ -191,7 +164,6 @@ describe('wirePlugin', () => {
       const tools = new ToolRegistry()
       const slash = new SlashRegistry()
       const skills: import('../../../src/core/skill/types').Skill[] = []
-      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
       const lsp = new LspManager()
 
       const plugin: LoadedPlugin = {
@@ -200,7 +172,6 @@ describe('wirePlugin', () => {
           tools: [],
           slashCommands: [],
           skills: [],
-          mcpServers: {},
           lspServers: [
             {
               name: 'ts',
@@ -214,7 +185,7 @@ describe('wirePlugin', () => {
         source: 'installed' as const,
       }
 
-      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, lsp })
+      const result = await wirePlugin(plugin, { tools, slash, skills, lsp })
       expect(result.lspAdded).toBe(1)
       expect(result.errors).toEqual([])
       expect(lsp.list()).toHaveLength(1)
@@ -225,7 +196,6 @@ describe('wirePlugin', () => {
       const tools = new ToolRegistry()
       const slash = new SlashRegistry()
       const skills: import('../../../src/core/skill/types').Skill[] = []
-      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
       const lsp = new LspManager()
 
       // Pre-register a TS server
@@ -241,7 +211,6 @@ describe('wirePlugin', () => {
           tools: [],
           slashCommands: [],
           skills: [],
-          mcpServers: {},
           lspServers: [
             {
               name: 'ts',
@@ -255,7 +224,7 @@ describe('wirePlugin', () => {
         source: 'installed' as const,
       }
 
-      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, lsp })
+      const result = await wirePlugin(plugin, { tools, slash, skills, lsp })
       expect(result.lspAdded).toBe(0)
       expect(result.errors).toHaveLength(1)
       expect(result.errors[0]).toMatch(/already registered/)
@@ -265,7 +234,6 @@ describe('wirePlugin', () => {
       const tools = new ToolRegistry()
       const slash = new SlashRegistry()
       const skills: import('../../../src/core/skill/types').Skill[] = []
-      const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
 
       const plugin: LoadedPlugin = {
         manifest: {
@@ -273,7 +241,6 @@ describe('wirePlugin', () => {
           tools: [],
           slashCommands: [],
           skills: [],
-          mcpServers: {},
           lspServers: [{ name: 'ts', command: 'tsserver', documentSelector: [{ language: 'typescript' }] }],
         },
         rootDir: root,
@@ -281,7 +248,7 @@ describe('wirePlugin', () => {
       }
 
       // No lsp dep — should silently skip
-      const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers })
+      const result = await wirePlugin(plugin, { tools, slash, skills })
       expect(result.lspAdded).toBe(0)
       expect(result.errors).toEqual([])
     })
@@ -291,7 +258,6 @@ describe('wirePlugin', () => {
     const tools = new ToolRegistry()
     const slash = new SlashRegistry()
     const skills: import('../../../src/core/skill/types').Skill[] = []
-    const mcpServers: Record<string, import('../../../src/core/mcp/types').McpServerConfig> = {}
     const agents = new AgentRegistry()
     const plugin: LoadedPlugin = {
       manifest: {
@@ -299,7 +265,6 @@ describe('wirePlugin', () => {
         tools: [],
         slashCommands: [],
         skills: [],
-        mcpServers: {},
         agents: [
           { name: 'ghost', description: 'missing', systemPromptPath: 'nope.md', maxTurns: 20 },
           { name: 'ok', description: 'ok', systemPrompt: 'fine', maxTurns: 20 },
@@ -308,7 +273,7 @@ describe('wirePlugin', () => {
       rootDir: root,
       source: 'installed' as const,
     }
-    const result = await wirePlugin(plugin, { tools, slash, skills, mcpServers, agents })
+    const result = await wirePlugin(plugin, { tools, slash, skills, agents })
     expect(result.agentsAdded).toBe(1)
     expect(result.errors.length).toBe(1)
     expect(result.errors[0]).toMatch(/ghost/)

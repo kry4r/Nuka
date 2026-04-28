@@ -59,11 +59,9 @@ describe('PromptInput slash dropdown', () => {
     }
   })
 
-  it('lists /mcp and /skill when those slashes are registered', async () => {
-    const { McpCommand } = await import('../../../src/slash/mcp')
+  it('lists /skill and /help when those slashes are registered', async () => {
     const { SkillCommand } = await import('../../../src/slash/skill')
     const slash = new SlashRegistry()
-    slash.register(McpCommand)
     slash.register(SkillCommand)
     slash.register(HelpCommand)
     const h = mountApp({ target: 'app', slash })
@@ -72,8 +70,8 @@ describe('PromptInput slash dropdown', () => {
       h.stdin.write('/')
       await wait()
       const frame = h.frames().pop() ?? ''
-      expect(frame).toContain('/mcp')
       expect(frame).toContain('/skill')
+      expect(frame).toContain('/help')
     } finally {
       h.unmount()
     }

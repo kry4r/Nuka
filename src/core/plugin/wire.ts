@@ -8,7 +8,6 @@ import type { SlashCommand } from '../../slash/types'
 import type { SlashRegistry } from '../../slash/registry'
 import type { Skill } from '../skill/types'
 import { parseSkill } from '../skill/loader'
-import type { McpServerConfig } from '../mcp/types'
 import { loadHooks } from '../hooks/loader'
 import type { HookEntry } from '../hooks/types'
 import type { AgentRegistry } from '../agents/registry'
@@ -56,7 +55,6 @@ export async function wirePlugin(
     tools: ToolRegistry
     slash: SlashRegistry
     skills: Skill[]
-    mcpServers: Record<string, McpServerConfig>
     hooks?: HookEntry[]
     agents?: AgentRegistry
     /**
@@ -71,7 +69,6 @@ export async function wirePlugin(
   toolsAdded: number
   slashAdded: number
   skillsAdded: number
-  mcpAdded: number
   hooksAdded: number
   agentsAdded: number
   lspAdded: number
@@ -80,7 +77,6 @@ export async function wirePlugin(
   let toolsAdded = 0
   let slashAdded = 0
   let skillsAdded = 0
-  let mcpAdded = 0
   let hooksAdded = 0
   let agentsAdded = 0
   let lspAdded = 0
@@ -164,16 +160,6 @@ export async function wirePlugin(
     skillsAdded++
   }
 
-  // MCP servers
-  for (const [key, config] of Object.entries(plugin.manifest.mcpServers)) {
-    if (deps.mcpServers[key] !== undefined) {
-      errors.push(`mcp server '${key}' already configured; plugin entry skipped`)
-      continue
-    }
-    deps.mcpServers[key] = config
-    mcpAdded++
-  }
-
   // Hooks
   if (plugin.manifest.hooks !== undefined && deps.hooks !== undefined) {
     const hooksPath = resolve(plugin.rootDir, plugin.manifest.hooks)
@@ -223,5 +209,5 @@ export async function wirePlugin(
     }
   }
 
-  return { toolsAdded, slashAdded, skillsAdded, mcpAdded, hooksAdded, agentsAdded, lspAdded, errors }
+  return { toolsAdded, slashAdded, skillsAdded, hooksAdded, agentsAdded, lspAdded, errors }
 }

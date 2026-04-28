@@ -14,9 +14,6 @@ vi.mock('../../../src/core/doctor/checks/providers', () => ({
 vi.mock('../../../src/core/doctor/checks/plugins', () => ({
   pluginsCheck: async () => [{ name: 'plugins', status: 'ok', detail: 'none' }],
 }))
-vi.mock('../../../src/core/doctor/checks/mcp', () => ({
-  mcpCheck: async () => [{ name: 'mcp', status: 'ok', detail: 'no mcp' }],
-}))
 vi.mock('../../../src/core/doctor/checks/lsp', () => ({
   lspCheck: async () => [{ name: 'lsp', status: 'ok', detail: 'no lsp' }],
 }))

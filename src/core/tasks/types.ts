@@ -2,7 +2,7 @@
 //
 // Phase 10 §4.3 — polymorphic background tasks.
 //
-// Three task kinds:
+// Two task kinds:
 //   - local_bash    — spawn a child process, capture stdout/stderr to disk.
 //   - local_agent   — run a Phase-5 dispatchAgent invocation in the
 //                      background. The runner accepts an injected
@@ -10,15 +10,12 @@
 //                      the task subsystem stays testable without coupling
 //                      to the full agent loop (production code wires
 //                      dispatchAgent into the injection).
-//   - monitor_mcp   — subscribe to a long-running MCP tool's progress
-//                      events. Same injection pattern: caller supplies
-//                      `eventStream: () => AsyncIterable<ProgressEvent>`.
 //
 // Tasks expose a stable lifecycle (`pending` → `running` → `completed` |
 // `failed` | `killed`) and persist their textual output under
 // `<home>/.nuka/tasks/<id>.log`.
 
-export type TaskKind = 'local_bash' | 'local_agent' | 'monitor_mcp'
+export type TaskKind = 'local_bash' | 'local_agent'
 
 export type TaskState =
   | 'pending'
@@ -31,7 +28,6 @@ export type TaskState =
 export type TaskSpec =
   | LocalBashSpec
   | LocalAgentSpec
-  | MonitorMcpSpec
 
 export type LocalBashSpec = {
   kind: 'local_bash'
@@ -57,22 +53,6 @@ export type LocalAgentSpec = {
   /** Returns an async iterable of textual chunks. The runner persists
    *  each chunk to the task's outputFile in order. */
   agentRunner: (signal: AbortSignal) => AsyncIterable<AgentChunk>
-}
-
-/** Progress event surfaced by a long-running MCP tool. */
-export type ProgressEvent = {
-  /** Free-form progress message (rendered to outputFile as a line). */
-  message: string
-  /** When `done` is true the runner transitions the task to `completed`. */
-  done?: boolean
-  /** When set with `done: true`, the task transitions to `failed`. */
-  error?: string
-}
-
-export type MonitorMcpSpec = {
-  kind: 'monitor_mcp'
-  description: string
-  eventStream: (signal: AbortSignal) => AsyncIterable<ProgressEvent>
 }
 
 export type Task = {

@@ -11,10 +11,10 @@ import type { ContentBlock } from '../tools/types'
 
 export type OutputStyleDef = {
   name: string
-  /** Glob pattern for the tool name, e.g. "mcp__github__*". Uses `*` only. */
+  /** Glob pattern for the tool name, e.g. "myplugin__*". Uses `*` only. */
   matchToolName?: string
   /** Match on tool source. */
-  matchToolSource?: 'mcp' | 'plugin' | 'skill' | 'builtin'
+  matchToolSource?: 'plugin' | 'skill' | 'builtin'
   /** Relative path (from plugin root) to the React component module. */
   componentPath: string
 }
@@ -59,7 +59,7 @@ export function globMatch(pattern: string, value: string): boolean {
  */
 export function matchStyle(
   toolName: string,
-  source: 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined,
+  source: 'builtin' | 'skill' | 'plugin' | undefined,
   defs: OutputStyleDef[],
 ): OutputStyleDef | undefined {
   for (const def of defs) {

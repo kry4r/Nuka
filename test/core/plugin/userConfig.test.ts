@@ -27,7 +27,6 @@ function makePlugin(userConfigFields?: LoadedPlugin['manifest']['userConfig']): 
       tools: [],
       slashCommands: [],
       skills: [],
-      mcpServers: {},
       userConfig: userConfigFields,
     },
     rootDir: join(home, '.nuka', 'plugins', 'my-plugin'),

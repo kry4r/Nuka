@@ -9,12 +9,10 @@ import { PromptInput } from './PromptInput/PromptInput'
 import { StatusBar } from './StatusBar/StatusBar'
 import { Hud, type CostTrackerLike } from './Status/Hud'
 import { PermissionDialog } from './dialogs/PermissionDialog'
-import { ElicitationDialog } from './dialogs/ElicitationDialog'
 import { PluginConfigDialog } from './dialogs/PluginConfigDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
 import { ConfigEditor } from './dialogs/ConfigEditor'
 import { SessionPicker } from './dialogs/SessionPicker'
-import type { ElicitationPayload, ElicitationResult } from '../core/mcp/elicitation'
 import type { SessionMeta } from '../core/session/store'
 import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
 import { pickTip } from './Welcome/tips'
@@ -35,7 +33,6 @@ import { saveWizardPatch } from '../core/onboarding/save'
 import os from 'node:os'
 import { StatusLine } from './StatusLine/StatusLine'
 import type { PermissionBridge } from '../core/permission/bridge'
-import type { McpManager } from '../core/mcp/manager'
 import type { ToolRegistry } from '../core/tools/registry'
 import type { TaskManager } from '../core/tasks/manager'
 import { computeCost } from '../core/session/telemetry'
@@ -72,11 +69,6 @@ type Dialog =
       resolve: (d: PermissionDecision) => void
     }
   | {
-      kind: 'elicitation'
-      payload: ElicitationPayload
-      resolve: (r: ElicitationResult) => void
-    }
-  | {
       kind: 'plugin-config'
       plugin: LoadedPlugin
       fields: PluginUserConfigField[]
@@ -103,7 +95,6 @@ export type AppProps = {
   cwd: string
   gitBranch: { branch: string; dirty: boolean } | null
   version: string
-  mcpManager?: McpManager
   tools?: ToolRegistry
   /** Number of session plugins loaded via --plugin-dir (shown in status bar) */
   sessionPluginCount?: number
@@ -124,7 +115,9 @@ export function App(props: AppProps): React.JSX.Element {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
-  const [mcpTick, setMcpTick] = useState(0)
+  // Tick bumped on subsystem state changes (currently unused).
+  // Kept so the HUD's `tick` prop continues to receive a stable value.
+  const [tick] = useState(0)
   // Bumped whenever we mutate session.messages directly so React re-renders.
   const [, setMessageTick] = useState(0)
   const bumpMessages = useCallback(() => setMessageTick(t => t + 1), [])
@@ -139,23 +132,14 @@ export function App(props: AppProps): React.JSX.Element {
     props.permissionBridge.setHandler((payload, resolve) => {
       setDialog({ kind: 'permission', call: payload.call, suggestedPattern: payload.suggestedPattern, annotationBadges: payload.annotationBadges, resolve })
     })
-    props.permissionBridge.setElicitationHandler((payload, resolve) => {
-      setDialog({ kind: 'elicitation', payload, resolve })
-    })
     props.permissionBridge.setPluginConfigHandler((payload, resolve) => {
       setDialog({ kind: 'plugin-config', plugin: payload.plugin, fields: payload.fields, resolve })
     })
     return () => {
       props.permissionBridge.setHandler(null)
-      props.permissionBridge.setElicitationHandler(null)
       props.permissionBridge.setPluginConfigHandler(null)
     }
   }, [props.permissionBridge])
-
-  useEffect(() => {
-    if (!props.mcpManager) return
-    return props.mcpManager.onChange(() => setMcpTick(t => t + 1))
-  }, [props.mcpManager])
 
   const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
     props.runAgent(i, session, signal)
@@ -192,7 +176,6 @@ export function App(props: AppProps): React.JSX.Element {
         config: props.config,
         costTracker: props.costTracker,
         taskManager: props.taskManager,
-        mcpManager: props.mcpManager,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {
@@ -287,14 +270,6 @@ export function App(props: AppProps): React.JSX.Element {
   const hintMode: 'idle' | 'running' | 'awaiting-user' | 'primed-quit' =
     dialog ? 'awaiting-user' : stream.running ? 'running' : primedQuit ? 'primed-quit' : 'idle'
 
-  void mcpTick // consumed to trigger re-render on MCP status changes
-  const mcpStatuses = props.mcpManager?.status() ?? []
-  const mcpCount = mcpStatuses.filter(s => s.status.kind === 'connected').length
-  const mcpHealth: 'ok' | 'degraded' | 'none' =
-    mcpStatuses.length === 0 ? 'none'
-    : mcpStatuses.every(s => s.status.kind === 'connected') ? 'ok'
-    : 'degraded'
-
   const activeTheme = resolveTheme((props.config.theme as any)?.name ?? 'default-dark')
 
   return (
@@ -327,12 +302,6 @@ export function App(props: AppProps): React.JSX.Element {
           suggestedPattern={dialog.suggestedPattern}
           annotationBadges={dialog.annotationBadges}
           onDecide={d => { dialog.resolve(d); setDialog(null) }}
-        />
-      )}
-      {dialog?.kind === 'elicitation' && (
-        <ElicitationDialog
-          payload={dialog.payload}
-          onResolve={r => { dialog.resolve(r); setDialog(null) }}
         />
       )}
       {dialog?.kind === 'plugin-config' && (
@@ -431,8 +400,6 @@ export function App(props: AppProps): React.JSX.Element {
           contextUsed={contextUsed}
           contextMax={contextMax}
           cost={cost}
-          mcpCount={mcpCount}
-          mcpHealth={mcpHealth}
           autoMode="off"
           queueLength={session.queue.size()}
           mode={hintMode}
@@ -453,7 +420,7 @@ export function App(props: AppProps): React.JSX.Element {
           agentInFlight={props.agentInFlight ?? 0}
           gitBranch={props.gitBranch?.branch ?? null}
           costTracker={props.costTracker}
-          tick={mcpTick}
+          tick={tick}
           taskManager={props.taskManager}
         />
       )}

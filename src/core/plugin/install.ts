@@ -9,7 +9,6 @@ export type InstallResult = {
   toolsCount: number
   slashCount: number
   skillsCount: number
-  mcpCount: number
 }
 
 export async function readManifestFrom(sourceDir: string): Promise<PluginManifest> {
@@ -80,6 +79,5 @@ export async function installPluginFromPath(opts: {
     toolsCount: manifest.tools.length,
     slashCount: manifest.slashCommands.length,
     skillsCount: manifest.skills.length,
-    mcpCount: Object.keys(manifest.mcpServers).length,
   }
 }

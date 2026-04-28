@@ -6,7 +6,8 @@
  *
  * Returns: Array<{ family, version?, port? }>
  *   family: 'vscode' | 'jetbrains' | 'cursor' | 'windsurf'
- *   port:   fixed MCP port for the IDE family (used by /ide connect)
+ *   port:   advertised IDE-bridge port for the family (informational only —
+ *           the connect path was removed in Phase 11 M3).
  */
 
 import { spawn } from 'node:child_process'
@@ -22,7 +23,7 @@ export type DetectedIde = {
   port?: number
 }
 
-/** Default MCP ports per IDE family. */
+/** Default IDE-bridge ports per IDE family (informational — see file header). */
 export const IDE_PORTS: Record<IdeFamily, number> = {
   vscode: 4096,
   cursor: 4097,

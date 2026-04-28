@@ -33,8 +33,8 @@ describe('SCOPE_ORDER', () => {
 
 describe('extractLocked', () => {
   it('extracts locked array from enterprise config', () => {
-    const raw = { locked: ['providers.openai.apiKey', 'mcp'] }
-    expect(extractLocked(raw)).toEqual(['providers.openai.apiKey', 'mcp'])
+    const raw = { locked: ['providers.openai.apiKey', 'compact'] }
+    expect(extractLocked(raw)).toEqual(['providers.openai.apiKey', 'compact'])
   })
 
   it('returns empty array when no locked field', () => {

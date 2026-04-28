@@ -4,7 +4,7 @@ import { saveStatusBarHidden } from '../core/config/save'
 
 const SEGMENTS = [
   'model', 'cwd', 'git',
-  'ctx', 'cost', 'mcp',
+  'ctx', 'cost',
   'auto', 'queue', 'tasks', 'plugins',
   'hint',
 ] as const

@@ -70,33 +70,6 @@ describe('providersCheck', () => {
 })
 
 // ---------------------------------------------------------------------------
-// mcp check
-// ---------------------------------------------------------------------------
-describe('mcpCheck', () => {
-  it('returns ok when no mcp manager', async () => {
-    const { mcpCheck } = await import('../../../src/core/doctor/checks/mcp')
-    const checks = await mcpCheck({ ...baseDeps, mcp: undefined })
-    expect(checks[0]?.status).toBe('ok')
-  })
-
-  it('returns per-server checks', async () => {
-    const { mcpCheck } = await import('../../../src/core/doctor/checks/mcp')
-    const fakeMcp = {
-      status: () => [
-        { name: 'myserver', status: { kind: 'connected' } },
-        { name: 'badserver', status: { kind: 'error', message: 'connect failed' } },
-      ],
-    } as any
-    const checks = await mcpCheck({ ...baseDeps, mcp: fakeMcp })
-    expect(checks).toHaveLength(2)
-    const connected = checks.find(c => c.name === 'mcp:myserver')
-    const errored = checks.find(c => c.name === 'mcp:badserver')
-    expect(connected?.status).toBe('ok')
-    expect(errored?.status).toBe('fail')
-  })
-})
-
-// ---------------------------------------------------------------------------
 // lsp check
 // ---------------------------------------------------------------------------
 describe('lspCheck', () => {

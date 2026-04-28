@@ -12,11 +12,11 @@ const fake: Tool = {
   run: async (input: any) => ({ output: String(input.text ?? ''), isError: false }),
 }
 
-const fakeMcp: Tool = {
-  name: 'McpSearch',
-  description: 'mcp search tool',
+const fakePlugin: Tool = {
+  name: 'PluginSearch',
+  description: 'plugin search tool',
   parameters: { type: 'object', properties: {} },
-  source: 'mcp',
+  source: 'plugin',
   needsPermission: () => 'network',
   run: async () => ({ output: '', isError: false }),
 }
@@ -39,7 +39,7 @@ describe('ToolRegistry', () => {
 
   it('logs and skips on duplicate name, returns { registered: false, reason: "duplicate" }', () => {
     const r = new ToolRegistry()
-    const second: Tool = { ...fake, source: 'mcp' }
+    const second: Tool = { ...fake, source: 'plugin' }
     r.register(fake)
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const result = r.register(second)
@@ -52,11 +52,10 @@ describe('ToolRegistry', () => {
   it('bySource returns only tools matching the given source', () => {
     const r = new ToolRegistry()
     r.register(fake)
-    r.register(fakeMcp)
+    r.register(fakePlugin)
     expect(r.bySource('builtin')).toEqual([fake])
-    expect(r.bySource('mcp')).toEqual([fakeMcp])
+    expect(r.bySource('plugin')).toEqual([fakePlugin])
     expect(r.bySource('skill')).toEqual([])
-    expect(r.bySource('plugin')).toEqual([])
   })
 
   describe('aliases', () => {

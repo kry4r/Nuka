@@ -6,8 +6,8 @@ import type { Tool } from '../tools/types'
  *
  * Rules:
  * - No allowedTools + no deniedTools → return all tools unchanged.
- * - `allowedTools` is an exact-name whitelist (matches MCP namespaced
- *   names like `mcp__fs__read` directly).
+ * - `allowedTools` is an exact-name whitelist (matches plugin namespaced
+ *   names like `plugin__myplugin__readFile` directly).
  * - `deniedTools` removes names from the result of the whitelist step.
  *
  * When both are provided the result is `allowedTools - deniedTools`.

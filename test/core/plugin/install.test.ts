@@ -53,8 +53,6 @@ describe('installPluginFromPath', () => {
         'tools: [tool1.js, tool2.js]',
         'slashCommands: [cmd.js]',
         'skills: [skill.md]',
-        'mcpServers:',
-        '  srv: { type: stdio, command: node }',
       ].join('\n'),
     )
 
@@ -69,7 +67,6 @@ describe('installPluginFromPath', () => {
     expect(result.toolsCount).toBe(2)
     expect(result.slashCount).toBe(1)
     expect(result.skillsCount).toBe(1)
-    expect(result.mcpCount).toBe(1)
 
     // Verify the target directory was actually created with the manifest
     const targetStat = await stat(result.targetDir)

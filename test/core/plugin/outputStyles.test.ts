@@ -16,13 +16,13 @@ describe('globMatch', () => {
   })
 
   it('matches wildcard prefix glob', () => {
-    expect(globMatch('mcp__github__*', 'mcp__github__listRepos')).toBe(true)
-    expect(globMatch('mcp__github__*', 'mcp__github__createPR')).toBe(true)
-    expect(globMatch('mcp__github__*', 'Read')).toBe(false)
+    expect(globMatch('plugin__github__*', 'plugin__github__listRepos')).toBe(true)
+    expect(globMatch('plugin__github__*', 'plugin__github__createPR')).toBe(true)
+    expect(globMatch('plugin__github__*', 'Read')).toBe(false)
   })
 
   it('wildcard does not cross tool-name boundaries unexpectedly', () => {
-    expect(globMatch('mcp__github__*', 'mcp__gitlab__listRepos')).toBe(false)
+    expect(globMatch('plugin__github__*', 'plugin__gitlab__listRepos')).toBe(false)
   })
 
   it('full wildcard matches anything', () => {
@@ -39,7 +39,7 @@ describe('matchStyle', () => {
   const defs: OutputStyleDef[] = [
     {
       name: 'github-style',
-      matchToolName: 'mcp__github__*',
+      matchToolName: 'plugin__github__*',
       componentPath: '/fake/github-style.js',
     },
     {
@@ -56,7 +56,7 @@ describe('matchStyle', () => {
   ]
 
   it('matches glob tool name — acceptance criterion 1', () => {
-    const result = matchStyle('mcp__github__listRepos', 'mcp', defs)
+    const result = matchStyle('plugin__github__listRepos', 'plugin', defs)
     expect(result).toBeDefined()
     expect(result!.name).toBe('github-style')
   })
@@ -85,15 +85,16 @@ describe('matchStyle', () => {
 
   it('returns undefined when no def matches', () => {
     const result = matchStyle('Unknown', 'builtin', [
-      { name: 's', matchToolName: 'mcp__*', componentPath: '/x.js' },
+      { name: 's', matchToolName: 'plugin__*', componentPath: '/x.js' },
     ])
     expect(result).toBeUndefined()
   })
 
   it('both matchToolName and matchToolSource must match', () => {
-    const result = matchStyle('Read', 'mcp', defs)
-    // read-style requires source=builtin, so won't match source=mcp
-    // github-style won't match 'Read', plugin-style won't match source=mcp
+    // 'Read' name + 'skill' source: github-style won't match (wrong name),
+    // plugin-style won't match (wrong source), read-style won't match
+    // (wrong source).
+    const result = matchStyle('Read', 'skill', defs)
     expect(result).toBeUndefined()
   })
 })

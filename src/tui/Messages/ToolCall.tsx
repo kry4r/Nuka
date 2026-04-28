@@ -2,7 +2,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
-import { formatMcpDisplayName } from '../../core/mcp/names'
 
 export function ToolCall(props: {
   name: string
@@ -10,7 +9,7 @@ export function ToolCall(props: {
   status: 'running' | 'ok' | 'error'
   durationMs?: number
   progressLines?: string[]
-  source?: 'builtin' | 'skill' | 'mcp' | 'plugin'
+  source?: 'builtin' | 'skill' | 'plugin'
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
 }): React.JSX.Element {
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
@@ -21,13 +20,7 @@ export function ToolCall(props: {
     ? lines.slice(-10)
     : lines.slice(-5)
 
-  // For MCP tools, render as "server · tool" instead of "mcp__server__tool"
-  const displayName = props.source === 'mcp'
-    ? (() => {
-        const parsed = formatMcpDisplayName(props.name)
-        return parsed ? `${parsed.server} · ${parsed.tool}` : props.name
-      })()
-    : props.name
+  const displayName = props.name
 
   return (
     <Box flexDirection="column">

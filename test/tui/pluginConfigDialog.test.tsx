@@ -13,7 +13,6 @@ function makePlugin(overrides?: Partial<LoadedPlugin['manifest']>): LoadedPlugin
       tools: [],
       slashCommands: [],
       skills: [],
-      mcpServers: {},
       ...overrides,
     },
     rootDir: '/tmp/test-plugin',
