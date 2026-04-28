@@ -38,7 +38,7 @@ export function Messages(props: {
   items: Message[]
   streaming: Message | null
   expandedAgentCallIds?: Set<string>
-  resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined
+  resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
 }): React.JSX.Element {
   const toolResultsById = buildToolResultsById(props.items)

@@ -7,7 +7,7 @@
  * Returns: Array<{ family, version?, port? }>
  *   family: 'vscode' | 'jetbrains' | 'cursor' | 'windsurf'
  *   port:   advertised IDE-bridge port for the family (informational only —
- *           the connect path was removed in Phase 11 M3 along with MCP).
+ *           the connect path was removed in Phase 11 M3).
  */
 
 import { spawn } from 'node:child_process'

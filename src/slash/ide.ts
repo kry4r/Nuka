@@ -3,7 +3,7 @@
  *
  * /ide  — probe for running IDEs and list them.
  *
- * Phase 11 M3: MCP-based IDE connect/disconnect was removed; the slash
+ * Phase 11 M3: the connect/disconnect subcommands were removed; the slash
  * command now only reports detection results. The IDE bridge will be
  * rebuilt on top of the new tool-platform interface in a later workstream.
  */

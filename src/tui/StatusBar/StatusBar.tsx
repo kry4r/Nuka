@@ -3,7 +3,7 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
 import {
-  ModelSeg, CwdSeg, GitSeg, CtxSeg, CostSeg, McpSeg, AutoSeg, QueueSeg, SessionPluginSeg,
+  ModelSeg, CwdSeg, GitSeg, CtxSeg, CostSeg, AutoSeg, QueueSeg, SessionPluginSeg,
 } from './Segments'
 import { HintLine, type HintMode } from './HintLine'
 
@@ -14,8 +14,6 @@ export type StatusBarProps = {
   contextUsed: number
   contextMax: number
   cost: number
-  mcpCount: number
-  mcpHealth: 'ok' | 'degraded' | 'none'
   autoMode: 'off' | `on(${number})`
   queueLength: number
   mode: HintMode
@@ -44,14 +42,14 @@ export function StatusBar(p: StatusBarProps): React.JSX.Element {
   // Pre-compute which segments will appear in each row; if a row has none,
   // skip rendering the row entirely so the bar collapses cleanly.
   const idShow = { model: show('model'), cwd: show('cwd'), git: show('git') && !!p.gitBranch }
-  const rtShow = { ctx: show('ctx'), cost: show('cost'), mcp: show('mcp') }
+  const rtShow = { ctx: show('ctx'), cost: show('cost') }
   const stShow = {
     auto: show('auto') && p.autoMode !== 'off',
     queue: show('queue') && p.queueLength > 0,
     plugins: show('plugins') && (p.sessionPluginCount ?? 0) > 0,
   }
   const rowIdActive = idShow.model || idShow.cwd || idShow.git
-  const rowRtActive = rtShow.ctx || rtShow.cost || rtShow.mcp
+  const rowRtActive = rtShow.ctx || rtShow.cost
   const rowStActive = stShow.auto || stShow.queue || stShow.plugins
 
   return (
@@ -82,8 +80,6 @@ export function StatusBar(p: StatusBarProps): React.JSX.Element {
           {rtShow.ctx && <CtxSeg used={p.contextUsed} max={p.contextMax} />}
           {rtShow.ctx && rtShow.cost && <Pipe />}
           {rtShow.cost && <CostSeg cost={p.cost} />}
-          {(rtShow.ctx || rtShow.cost) && rtShow.mcp && <Pipe />}
-          {rtShow.mcp && <McpSeg count={p.mcpCount} health={p.mcpHealth} />}
         </Box>
       )}
 

@@ -104,7 +104,7 @@ export function MessageRow(props: {
   toolResultsById?: Map<string, { output: string; isError: boolean }>
   /** Ids of dispatch_agent tool_use blocks that should render expanded. */
   expandedAgentCallIds?: Set<string>
-  resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'mcp' | 'plugin' | undefined
+  resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (
     toolName: string,
   ) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
