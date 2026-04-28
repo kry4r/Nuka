@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, mkdir, writeFile, rm, stat, readlink, lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import os from 'node:os'
-import { linkBins, unlinkBins } from '../../../src/core/plugin/install'
+import { linkBins, unlinkBins, installPluginFromPath } from '../../../src/core/plugin/install'
 import type { PluginManifest } from '../../../src/core/plugin/manifest'
 
 let pluginRoot: string
@@ -30,9 +30,9 @@ function makeManifest(bin: Record<string, string>): PluginManifest {
   }
 }
 
-async function writeBinScript(relPath: string): Promise<string> {
-  const abs = join(pluginRoot, relPath)
-  await mkdir(join(pluginRoot, 'bin'), { recursive: true })
+async function writeBinScript(relPath: string, root = pluginRoot): Promise<string> {
+  const abs = join(root, relPath)
+  await mkdir(join(root, 'bin'), { recursive: true })
   await writeFile(abs, '#!/usr/bin/env node\nconsole.log("hello")\n', 'utf8')
   return abs
 }
@@ -137,6 +137,52 @@ describe('linkBins / unlinkBins', () => {
       await unlinkBins(manifest, home)
 
       await expect(stat(shimPath)).rejects.toThrow()
+    })
+  }
+})
+
+// Integration: verify installPluginFromPath wires bin linking end-to-end
+describe('installPluginFromPath — bin linking integration', () => {
+  let sourceDir: string
+
+  beforeEach(async () => {
+    sourceDir = await mkdtemp(join(os.tmpdir(), 'nuka-binlink-src-'))
+  })
+
+  afterEach(async () => {
+    await rm(sourceDir, { recursive: true, force: true })
+  })
+
+  if (process.platform !== 'win32') {
+    it('automatically creates a symlink via installPluginFromPath when manifest.bin is set', async () => {
+      // Write a minimal plugin.json with a bin entry
+      await writeFile(
+        join(sourceDir, 'plugin.json'),
+        JSON.stringify({
+          name: 'fixture-plugin',
+          version: '0.1.0',
+          bin: { 'fixture-bin': './bin/run.js' },
+        }),
+        'utf8',
+      )
+      // Write the bin target script
+      await writeBinScript('bin/run.js', sourceDir)
+
+      await installPluginFromPath({
+        source: sourceDir,
+        home,
+        confirm: async () => true,
+      })
+
+      // The plugin was copied to ~/.nuka/plugins/fixture-plugin
+      // and the bin symlink should exist in ~/.nuka/bin/
+      const linkPath = join(home, '.nuka', 'bin', 'fixture-bin')
+      const linkStat = await lstat(linkPath)
+      expect(linkStat.isSymbolicLink()).toBe(true)
+
+      // Target should resolve inside the installed plugin dir (not the sourceDir copy)
+      const target = await readlink(linkPath)
+      expect(target).toContain(join(home, '.nuka', 'plugins', 'fixture-plugin'))
     })
   }
 })
