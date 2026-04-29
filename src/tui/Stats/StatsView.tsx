@@ -17,6 +17,17 @@ type Tab = 'overview' | 'models'
 const TABS: Tab[] = ['overview', 'models']
 const RANGES: StatsRange[] = ['all', '30d', '7d']
 
+// Phase 13 M1 — synchronous empty state eliminates the Loading… placeholder.
+// StatsView initialises with zero-valued stats rather than `null` so the
+// OverviewTab can render `(no data yet)` immediately without an intermediate
+// async flash. aggregate() still runs and replaces this with real data when it
+// resolves; but in test environments (and on fresh installs) the user never
+// sees a transient "Loading…" string.
+const EMPTY_STATS: StatsResult = {
+  sessions: 0, tokens: 0, costUsd: 0,
+  byModel: new Map(), activeDays: 0, streakDays: 0, peakHour: null,
+}
+
 export type StatsViewProps = {
   onExit: () => void
   /** Override $HOME for testing */
@@ -29,8 +40,7 @@ function fmtTokens(n: number): string {
   return String(n)
 }
 
-function OverviewTab({ stats }: { stats: StatsResult | null }): React.JSX.Element {
-  if (!stats) return <Text color="gray">Loading…</Text>
+function OverviewTab({ stats }: { stats: StatsResult }): React.JSX.Element {
   if (stats.tokens === 0 && stats.sessions === 0) {
     return <Text color="gray">(no data yet)</Text>
   }
@@ -60,8 +70,7 @@ function OverviewTab({ stats }: { stats: StatsResult | null }): React.JSX.Elemen
   )
 }
 
-function ModelsTab({ stats }: { stats: StatsResult | null }): React.JSX.Element {
-  if (!stats) return <Text color="gray">Loading…</Text>
+function ModelsTab({ stats }: { stats: StatsResult }): React.JSX.Element {
   const lines = chart(stats.byModel, 72)
   return (
     <Box flexDirection="column">
@@ -78,11 +87,15 @@ function ModelsTab({ stats }: { stats: StatsResult | null }): React.JSX.Element 
 export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('overview')
   const [range, setRange] = useState<StatsRange>('all')
-  const [stats, setStats] = useState<StatsResult | null>(null)
+  // Phase 13 M1: initialise to EMPTY_STATS (not null) so the component never
+  // renders the "Loading…" placeholder — OverviewTab shows "(no data yet)"
+  // synchronously and is then replaced by real data once aggregate() resolves.
+  const [stats, setStats] = useState<StatsResult>(EMPTY_STATS)
 
   useEffect(() => {
     let cancelled = false
-    setStats(null)
+    // Reset to empty (not null) on range change — avoids Loading… flash.
+    setStats(EMPTY_STATS)
     aggregate({ range, home }).then(s => {
       if (!cancelled) setStats(s)
     }).catch(() => {
