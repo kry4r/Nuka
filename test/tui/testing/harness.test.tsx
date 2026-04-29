@@ -114,12 +114,16 @@ describe('mountApp({ target: "app", slash })', () => {
       h.stdin.write('\r')
       await h.waitFor({ contains: 'Overview' }, 500)
       const frame = h.frames().pop() ?? ''
-      // StatsView now loads real on-disk stats asynchronously, so the body is
-      // environment-dependent. Assert the stable dialog chrome instead.
+      // Phase 13 M1: StatsView initialises with EMPTY_STATS so "Loading…" is
+      // never shown — the chrome and empty-state placeholder are always present
+      // immediately, regardless of async timing or on-disk data.
       expect(frame).toContain('Stats')
       expect(frame).toContain('Overview')
       expect(frame).toContain('Models')
       expect(frame).toContain('Tab: switch tab')
+      // Regression: "Loading…" must never appear — the sync empty-state
+      // initialisation in StatsView must hold under any timing variation.
+      expect(frame).not.toContain('Loading…')
     } finally {
       h.unmount()
     }
