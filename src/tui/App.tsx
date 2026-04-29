@@ -650,6 +650,8 @@ export function App(props: AppProps): React.JSX.Element {
           gitBranch={props.gitBranch}
           contextUsed={contextUsed}
           contextMax={contextMax}
+          inputTokens={session.totalUsage.inputTokens}
+          outputTokens={session.totalUsage.outputTokens}
           cost={cost}
           pluginCount={props.pluginCount ?? 0}
           sessionPluginCount={props.sessionPluginCount ?? 0}
@@ -657,6 +659,7 @@ export function App(props: AppProps): React.JSX.Element {
           taskManager={props.taskManager}
           hiddenSegments={props.config.statusBar?.hidden ?? []}
           layout={props.config.statusBar?.layout ?? 'dense'}
+          iconMode={props.config.statusBar?.iconMode ?? 'icon'}
           statusLineConfig={props.config.statusLine}
           startedAt={session.createdAt}
         />

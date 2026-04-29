@@ -1,16 +1,23 @@
 // src/tui/Status/StatusPanel.tsx
 //
-// Phase 12 §4.5 — the unified Status zone. Replaces the prior
-// StatusBar + Hud + StatusLine triad. Renders six fixed segments,
-// each with a stable id (mode/model/cwd/context/cost-time/counts);
-// `config.statusBar.hidden` filters by id and `statusBar.layout`
-// selects between three densities:
-//   - dense   (default): six rows, one per segment
-//   - compact: two rows, fold pairs
-//   - oneline: single line, ' · ' separated
+// Phase 13 §4.2 — unified Status zone with two-column dense layout,
+// icon/text mode, expanded context row, and no time tracking.
+//
+// Dense layout: two columns separated by │
+//   left  = [mode, model, cwd]
+//   right = [context, cost, counts]
+//
+// Compact layout: two rows
+//   row1 = mode/model/cwd/context  · -separated
+//   row2 = cost/counts             · -separated
+//
+// Oneline layout: single line, all segments · -separated.
+//
+// iconMode: 'icon' (default) uses glyphs ⬢/▰▱/⚙ etc.
+//           'text' uses plain labels [idle]/context:/cost: etc.
 //
 // Narrow-terminal degradation (<80 cols): dense -> compact,
-// compact -> oneline, oneline unchanged. Automatic, not configurable.
+// compact -> oneline. Automatic.
 //
 // A 7th optional row renders the legacy `config.statusLine`
 // format-string (id `status-line`) for users who depended on the
@@ -27,6 +34,7 @@ import { execFirstLine, template, type StatusLineCtx } from './statusLine'
 
 export type StatusMode = 'idle' | 'running' | 'awaiting-user' | 'primed-quit'
 export type StatusLayout = 'dense' | 'compact' | 'oneline'
+export type IconMode = 'icon' | 'text'
 
 export type StatusPanelProps = {
   mode: StatusMode
@@ -36,6 +44,10 @@ export type StatusPanelProps = {
   gitBranch: { branch: string; dirty: boolean } | null
   contextUsed: number
   contextMax: number
+  /** Input tokens (for expanded context row). */
+  inputTokens?: number
+  /** Output tokens (for expanded context row). */
+  outputTokens?: number
   /** USD cost. */
   cost: number
   pluginCount: number
@@ -47,10 +59,16 @@ export type StatusPanelProps = {
   hiddenSegments: string[]
   /** Layout density. */
   layout: StatusLayout
+  /** Icon vs text mode. */
+  iconMode?: IconMode
   /** Optional legacy statusLine config, rendered as a 7th row. */
   statusLineConfig?: StatusLineConfig
-  /** Session start timestamp (ms). Used to compute elapsed wall time. */
-  startedAt: number
+  /**
+   * Session start timestamp (ms). Kept for backward compatibility
+   * but no longer used to render elapsed time (time tracking removed
+   * in Phase 13 M3).
+   */
+  startedAt?: number
 }
 
 const NARROW_THRESHOLD = 80
@@ -61,25 +79,17 @@ function fmtTokens(n: number): string {
   return (Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)) + 'k'
 }
 
-function modeBadge(mode: StatusMode): string {
-  switch (mode) {
-    case 'idle': return '⬢ idle'
-    case 'running': return '⬢ running'
-    case 'awaiting-user': return '⬢ awaiting'
-    case 'primed-quit': return '⬢ primed-quit'
+/**
+ * §4.2.3 — mode badge.
+ * icon mode: '⬢ idle' / '⬢ running' etc.
+ * text mode: '[idle]' / '[running]' etc.
+ */
+function modeBadge(mode: StatusMode, iconMode: IconMode): string {
+  const label = mode === 'awaiting-user' ? 'awaiting' : mode
+  if (iconMode === 'icon') {
+    return `⬢ ${label}`
   }
-}
-
-function fmtElapsed(startedAt: number): string {
-  const ms = Math.max(0, Date.now() - startedAt)
-  const sec = Math.floor(ms / 1000)
-  if (sec < 60) return `${sec}s`
-  const min = Math.floor(sec / 60)
-  const remSec = sec % 60
-  if (min < 60) return `${min}m${remSec.toString().padStart(2, '0')}s`
-  const hr = Math.floor(min / 60)
-  const remMin = min % 60
-  return `${hr}h${remMin.toString().padStart(2, '0')}m`
+  return `[${label}]`
 }
 
 function shortenCwd(cwd: string): string {
@@ -116,15 +126,9 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
 
   const { columns } = useTerminalSize()
   const layout = autoDegrade(props.layout, columns)
+  const iconMode: IconMode = props.iconMode ?? 'icon'
 
   const hidden = new Set(props.hiddenSegments ?? [])
-
-  // Re-render once a second so elapsed time stays live.
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1000)
-    return () => clearInterval(id)
-  }, [])
 
   // Background task count refresh when TaskManager fires `change`.
   const [, setBgTick] = useState(0)
@@ -170,10 +174,37 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     ? `${shortenCwd(props.cwd)}  ${props.gitBranch.branch}${dirtyMark}`
     : shortenCwd(props.cwd)
 
+  // Build context line: <bar>  <used>k/<max>k · <pct>% · in:<n>k out:<n>k
+  const renderContextText = (): string => {
+    const bar = progressBar(props.contextUsed, props.contextMax)
+    const usedFmt = fmtTokens(props.contextUsed)
+    const maxFmt = fmtTokens(props.contextMax)
+    const pctFmt = `${Math.round(ctxPct * 100)}%`
+    const inTok = props.inputTokens ?? 0
+    const outTok = props.outputTokens ?? 0
+
+    if (iconMode === 'icon') {
+      return `${bar}  ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
+    }
+    // text mode: replace bar glyph chars with a simpler ASCII representation
+    return `context: ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
+  }
+
+  // §4.2.3 counts segment
+  const renderCountsText = (): string => {
+    const plugins = props.pluginCount
+      + (props.sessionPluginCount > 0 ? props.sessionPluginCount : 0)
+    const bg = backgroundCount(props.taskManager)
+    if (iconMode === 'icon') {
+      return `⚙ ${plugins} plugins · ${props.agentInFlight} agents · ${bg} background`
+    }
+    return `plugins:${plugins} · agents:${props.agentInFlight} · bg:${bg}`
+  }
+
   const segments: Array<{ id: string; render: () => React.JSX.Element }> = [
     {
       id: 'mode',
-      render: () => <Text color={accent} bold>{modeBadge(props.mode)}</Text>,
+      render: () => <Text color={accent} bold>{modeBadge(props.mode, iconMode)}</Text>,
     },
     {
       id: 'model',
@@ -188,30 +219,33 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     {
       id: 'context',
       render: () => (
-        <Text color={ctxColor}>
-          {progressBar(props.contextUsed, props.contextMax)}  {fmtTokens(props.contextUsed)}/{fmtTokens(props.contextMax)}
-        </Text>
+        <Text color={ctxColor}>{renderContextText()}</Text>
       ),
     },
     {
-      id: 'cost-time',
-      render: () => (
-        <Text color={accent}>${props.cost.toFixed(4)}  ⏱ {fmtElapsed(props.startedAt)}</Text>
-      ),
+      id: 'cost',
+      render: () => {
+        if (iconMode === 'icon') {
+          return <Text color={accent}>${props.cost.toFixed(4)}</Text>
+        }
+        return <Text color={accent}>cost:${props.cost.toFixed(4)}</Text>
+      },
     },
     {
       id: 'counts',
-      render: () => {
-        const plugins = props.pluginCount
-          + (props.sessionPluginCount > 0 ? props.sessionPluginCount : 0)
-        const bg = backgroundCount(props.taskManager)
-        return (
-          <Text color={muted}>⚙ {plugins} plugins · {props.agentInFlight} agents · {bg} background</Text>
-        )
-      },
+      render: () => (
+        <Text color={muted}>{renderCountsText()}</Text>
+      ),
     },
   ]
-  const visible = segments.filter(s => !hidden.has(s.id))
+
+  // Also accept 'cost-time' in hidden set for backward compat (maps to 'cost').
+  const effectiveHidden = new Set<string>()
+  for (const h of hidden) {
+    effectiveHidden.add(h === 'cost-time' ? 'cost' : h)
+  }
+
+  const visible = segments.filter(s => !effectiveHidden.has(s.id))
   const showStatusLineRow = !!props.statusLineConfig && !hidden.has('status-line')
 
   // Compute status-line text once (template only — command output appended separately).
@@ -233,7 +267,38 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   if (visible.length === 0 && !showStatusLineRow) return null
 
   // ---- Render by layout ----
+
   if (layout === 'dense') {
+    // Two-column layout: left=[mode,model,cwd], right=[context,cost,counts]
+    const leftIds = new Set(['mode', 'model', 'cwd'])
+    const rightIds = new Set(['context', 'cost', 'counts'])
+    const leftCol = visible.filter(s => leftIds.has(s.id))
+    const rightCol = visible.filter(s => rightIds.has(s.id))
+
+    // If both columns have content, render them side by side.
+    if (leftCol.length > 0 && rightCol.length > 0) {
+      return (
+        <Box flexDirection="column" paddingX={1}>
+          <Box flexDirection="row">
+            <Box flexDirection="column" flexGrow={1}>
+              {leftCol.map(s => (
+                <Box key={s.id}>{s.render()}</Box>
+              ))}
+            </Box>
+            <Box>
+              <Text color={muted}> │ </Text>
+            </Box>
+            <Box flexDirection="column" flexGrow={1}>
+              {rightCol.map(s => (
+                <Box key={s.id}>{s.render()}</Box>
+              ))}
+            </Box>
+          </Box>
+          {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
+        </Box>
+      )
+    }
+    // Degenerate: only one side has visible segments — fall back to single column.
     return (
       <Box flexDirection="column" paddingX={1}>
         {visible.map(s => (
@@ -245,7 +310,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   }
 
   if (layout === 'compact') {
-    // Fold pairs: row 1 = mode/model/cwd/context, row 2 = cost-time/counts
+    // Fold: row1 = mode/model/cwd/context, row2 = cost/counts
     const row1Ids = new Set(['mode', 'model', 'cwd', 'context'])
     const row1 = visible.filter(s => row1Ids.has(s.id))
     const row2 = visible.filter(s => !row1Ids.has(s.id))

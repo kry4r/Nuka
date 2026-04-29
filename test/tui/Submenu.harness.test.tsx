@@ -24,9 +24,9 @@ describe('Phase 12 submenu', () => {
     const h = mountApp({ target: 'app', slash, config: cfg })
     try {
       await wait()
-      // Baseline: Status panel visible (anchor on the elapsed-time row).
+      // Baseline: Status panel visible (anchor on the cost row — ⏱ removed in Phase 13).
       const baseline = h.frames().pop() ?? ''
-      expect(baseline).toMatch(/⏱/)
+      expect(baseline).toMatch(/\$0\.0000/)
       expect(baseline).toMatch(/│ >/) // PromptInput visible
 
       // Open /config — full submenu.

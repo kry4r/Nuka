@@ -13,7 +13,7 @@ const EMPTY: Config = {
 }
 
 /**
- * Phase 12 §5.1 — map old StatusBar segment ids to the new six-segment
+ * Phase 13 §5.1 — map old StatusBar segment ids to the current six-segment
  * id space. Called once at config load. Always-then-dedupe: every old
  * id resolves to a new id (no drops); the post-mapping list is passed
  * through `Array.from(new Set(...))` so collisions (e.g. both `git` and
@@ -24,20 +24,22 @@ const EMPTY: Config = {
  *   cwd → cwd
  *   git → cwd
  *   ctx → context
- *   cost → cost-time
+ *   cost → cost          (Phase 12 old-id passthrough)
+ *   cost-time → cost     (Phase 12 id retired in Phase 13)
  *   auto → counts
  *   queue → counts
  *   tasks → counts
  *   plugins → counts
  *   hint → counts
- *   (any new-id pass-through is a no-op)
+ *   (any current-id pass-through is a no-op)
  */
 const STATUSBAR_SEGMENT_MIGRATION: Record<string, string> = {
   model: 'model',
   cwd: 'cwd',
   git: 'cwd',
   ctx: 'context',
-  cost: 'cost-time',
+  cost: 'cost',
+  'cost-time': 'cost',
   auto: 'counts',
   queue: 'counts',
   tasks: 'counts',
