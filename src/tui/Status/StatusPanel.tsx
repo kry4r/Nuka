@@ -175,6 +175,8 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     : shortenCwd(props.cwd)
 
   // Build context line: <bar>  <used>k/<max>k · <pct>% · in:<n>k out:<n>k
+  // The 8-char block-fill bar is retained in both icon and text modes per spec §3.
+  // In text mode a "context: " prefix is prepended; in icon mode the bar leads.
   const renderContextText = (): string => {
     const bar = progressBar(props.contextUsed, props.contextMax)
     const usedFmt = fmtTokens(props.contextUsed)
@@ -186,8 +188,8 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     if (iconMode === 'icon') {
       return `${bar}  ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
     }
-    // text mode: replace bar glyph chars with a simpler ASCII representation
-    return `context: ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
+    // text mode: same bar + data but with a label prefix
+    return `context: ${bar}  ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
   }
 
   // §4.2.3 counts segment

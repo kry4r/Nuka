@@ -127,9 +127,9 @@ describe('StatusPanel', () => {
     expect(f).not.toMatch(/⬢/)
     // text mode cost
     expect(f).toMatch(/cost:\$0\.0400/)
-    // text mode context (no bar glyphs)
+    // text mode context: bar still present (spec §3), label prefix added
     expect(f).toMatch(/context:/)
-    expect(f).not.toMatch(/▰|▱/)
+    expect(f).toMatch(/▰|▱/) // bar retained in text mode per spec §3
     // text mode counts
     expect(f).toMatch(/plugins:4/)
     expect(f).not.toMatch(/⚙/)
