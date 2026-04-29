@@ -21,7 +21,7 @@ import React, { useCallback, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
 import type { Config } from '../../../core/config/schema'
-import { ProviderForm } from './ProviderForm'
+import { ProvidersForm } from './ProvidersForm'
 import { ModelForm } from './ModelForm'
 import { ThemeForm } from './ThemeForm'
 import { StatusBarForm } from './StatusBarForm'
@@ -32,7 +32,7 @@ import { WelcomeForm } from './WelcomeForm'
 import { CompactForm } from './CompactForm'
 
 export type ConfigCategory =
-  | 'Provider'
+  | 'Providers'
   | 'Model'
   | 'Theme'
   | 'StatusBar'
@@ -43,7 +43,7 @@ export type ConfigCategory =
   | 'Compact'
 
 export const CATEGORIES: readonly ConfigCategory[] = [
-  'Provider',
+  'Providers',
   'Model',
   'Theme',
   'StatusBar',
@@ -191,7 +191,7 @@ export function ConfigSubmenu(props: ConfigSubmenuProps): React.JSX.Element {
 
       {/* Right pane. */}
       <Box flexGrow={1} flexDirection="column" paddingLeft={1}>
-        {category === 'Provider' && <ProviderForm {...formCommon} />}
+        {category === 'Providers' && <ProvidersForm {...formCommon} />}
         {category === 'Model' && <ModelForm {...formCommon} />}
         {category === 'Theme' && <ThemeForm {...formCommon} />}
         {category === 'StatusBar' && <StatusBarForm {...formCommon} />}

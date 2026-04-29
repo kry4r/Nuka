@@ -3,12 +3,15 @@
 // Phase 12 §4.7 — Field primitive used by every category form. It owns
 // label + value and switches between view / edit / error modes.
 //
-// Field types in scope for Phase 12 (multi-select / list editing is
-// out of scope per spec §8):
+// Field types in scope:
 //   - text     — free-form string input
 //   - password — masked while displayed (••••), plaintext while editing
 //   - select   — single choice from a fixed set; ←/→ cycles, Enter commits
 //   - toggle   — bool; Space/Enter flips
+//   - list     — Phase 13 §4.5: multi-select checklist over `choices`;
+//                value is `string[]`; ↑/↓ (or j/k) move internal cursor;
+//                Space toggles cursored entry; Enter commits and exits
+//                edit mode.
 //
 // Modes:
 //   - view  : Enter/⏎ enters edit mode (when focused). Tab/↓ moves focus
@@ -22,17 +25,27 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
 
-export type FieldType = 'text' | 'password' | 'select' | 'toggle'
+export type FieldType = 'text' | 'password' | 'select' | 'toggle' | 'list'
 
 export type FieldProps = {
   /** Display label rendered to the left of the value. */
   label: string
   /** Field type — drives both renderer and key handler. */
   type: FieldType
-  /** Current committed value (string for text/password/select, bool for toggle). */
-  value: string | boolean
-  /** Choice list for `select`. Ignored for other types. */
+  /**
+   * Current committed value:
+   *   - `string` for text/password/select
+   *   - `boolean` for toggle
+   *   - `string[]` for list
+   */
+  value: string | boolean | string[]
+  /** Choice list for `select` and `list`. Ignored for other types. */
   choices?: string[]
+  /**
+   * Optional descriptive subtitle per-choice for `list` (rendered to the
+   * right of the checkbox). Index-aligned with `choices`.
+   */
+  descriptions?: (string | undefined)[]
   /** Whether keyboard focus is on this field (parent owns cursor). */
   focused?: boolean
   /** Whether the field is disabled (read-only display). */
@@ -41,10 +54,10 @@ export type FieldProps = {
   errored?: boolean
   /**
    * Called when the user commits a new value (Enter in edit mode, Space in
-   * toggle mode, ←/→ in select mode). Parent stores the pending value;
-   * `s` save is form-level.
+   * toggle mode, ←/→ in select mode, Space in list mode). Parent stores
+   * the pending value; `s` save is form-level.
    */
-  onChange?: (next: string | boolean) => void
+  onChange?: (next: string | boolean | string[]) => void
 }
 
 const MASK_CHAR = '•'
@@ -58,9 +71,11 @@ export function Field(props: FieldProps): React.JSX.Element {
   const colors = useColors()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<string>(typeof props.value === 'string' ? props.value : '')
+  // Internal cursor for `list` field type, indexes into props.choices.
+  const [listCursor, setListCursor] = useState(0)
   // Keep the draft in sync with parent-driven value changes (e.g. when the
   // ConfigSubmenu re-mounts with fresh config).
-  const lastValueRef = useRef<string | boolean>(props.value)
+  const lastValueRef = useRef<string | boolean | string[]>(props.value)
   useEffect(() => {
     if (lastValueRef.current !== props.value) {
       lastValueRef.current = props.value
@@ -91,6 +106,49 @@ export function Field(props: FieldProps): React.JSX.Element {
       } else if (key.rightArrow || inputKey === ' ' || key.return) {
         const next = choices[(idx + 1) % choices.length]!
         props.onChange?.(next)
+      }
+      return
+    }
+    // list: vertical multi-select checklist
+    if (props.type === 'list') {
+      const choices = props.choices ?? []
+      if (choices.length === 0) return
+      // Enter view -> editing mode (locks list cursor here so j/k don't
+      // bubble to the parent form's field navigation).
+      if (!editing) {
+        if (key.return) {
+          setListCursor(0)
+          setEditing(true)
+        }
+        return
+      }
+      // editing
+      if (key.return) {
+        setEditing(false)
+        return
+      }
+      if (key.escape) {
+        setEditing(false)
+        return
+      }
+      if (key.upArrow || inputKey === 'k') {
+        setListCursor(c => Math.max(0, c - 1))
+        return
+      }
+      if (key.downArrow || inputKey === 'j') {
+        setListCursor(c => Math.min(choices.length - 1, c + 1))
+        return
+      }
+      if (inputKey === ' ') {
+        const cur = Array.isArray(props.value) ? props.value : []
+        const target = choices[listCursor]
+        if (!target) return
+        const set = new Set(cur)
+        if (set.has(target)) set.delete(target)
+        else set.add(target)
+        // Preserve choices-order in output for stable file writes.
+        props.onChange?.(choices.filter(c => set.has(c)))
+        return
       }
       return
     }
@@ -133,6 +191,47 @@ export function Field(props: FieldProps): React.JSX.Element {
     : props.focused
       ? colors.primary
       : colors.fgMuted
+
+  // ----- list type renders a vertical checklist (multi-row) -----
+  if (props.type === 'list') {
+    const choices = props.choices ?? []
+    const value = Array.isArray(props.value) ? props.value : []
+    return (
+      <Box flexDirection="column" borderStyle="single" borderColor={borderColor} paddingX={1}>
+        <Box>
+          <Text color={labelColor} bold={props.focused}>
+            {props.focused ? '▸ ' : '  '}{props.label}
+          </Text>
+          {editing && (
+            <Box marginLeft={2}>
+              <Text color={colors.fgMuted}>edit · space toggle · ⏎ done</Text>
+            </Box>
+          )}
+        </Box>
+        {choices.length === 0 && (
+          <Text color={colors.fgMuted}>(empty)</Text>
+        )}
+        {choices.map((choice, i) => {
+          const checked = value.includes(choice)
+          const cursored = editing && i === listCursor
+          const desc = props.descriptions?.[i]
+          const sigil = cursored ? '▸ ' : '  '
+          const box = checked ? '[x]' : '[ ]'
+          const lineColor = cursored ? colors.primary : valueColor
+          return (
+            <Box key={choice + i}>
+              <Text color={lineColor}>{sigil}{box} {choice}</Text>
+              {desc && (
+                <Box marginLeft={1}>
+                  <Text color={colors.fgMuted}>{desc}</Text>
+                </Box>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
+    )
+  }
 
   let displayValue: string
   if (props.type === 'toggle') {
