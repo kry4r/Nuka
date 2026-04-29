@@ -182,6 +182,10 @@ export type AppProps = {
   loadedPlugins?: { name: string; description?: string }[]
   /** Phase 12 M4 — read-only list of loaded skills for ConfigSubmenu SkillsForm. */
   loadedSkills?: { name: string; description?: string }[]
+  /** Phase 13 M2 — updates from ~/.nuka/updates.json */
+  updates?: import('../core/updates/load').UpdateEntry[]
+  /** Phase 13 M2 — recent sessions from ~/.nuka/sessions/ */
+  recent?: import('../core/session/recent').RecentEntry[]
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -459,6 +463,8 @@ export function App(props: AppProps): React.JSX.Element {
             model={session.model}
             version={props.version}
             tip={tip}
+            updates={props.updates}
+            recent={props.recent}
           />
         ) : (
           <Conversation focused={false}>
