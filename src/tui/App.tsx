@@ -43,7 +43,9 @@ import { runBangShell } from './bangShell'
 import { makeUserMessage } from '../core/message/factories'
 import { DISPATCH_AGENT_TOOL_NAME } from '../core/agents/dispatchTool'
 import type { TodoState } from '../core/tools/todoWrite'
-import { TasksPanel } from './Tasks/TasksPanel'
+import { TasksPanel, flattenedTasksLength } from './Tasks/TasksPanel'
+import { TasksSubmenu } from './Submenu/TasksSubmenu'
+import { findInFlightSubagents } from './Tasks/SubagentList'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -93,6 +95,8 @@ export type SubmenuDescriptor =
       fields: PluginUserConfigField[]
       resolve: (result: Record<string, unknown> | null) => void
     }
+  // Phase 13 M4 — tasks focus mode submenu (full)
+  | { kind: 'tasks'; focusItem: number }
 
 const INLINE_SUBMENU_KINDS = new Set<SubmenuDescriptor['kind']>([
   'permission',
@@ -113,6 +117,8 @@ export type UIState =
   | { kind: 'tasks-collapsed' }
   | { kind: 'slash'; mode: 'list' | 'arg-hint' }
   | { kind: 'submenu'; submenu: SubmenuDescriptor }
+  // Phase 13 M4 — Tasks panel focus mode with cursor
+  | { kind: 'tasks-focused'; cursor: number }
 
 export type UIAction =
   | { type: 'reset' }
@@ -120,6 +126,10 @@ export type UIAction =
   | { type: 'update-submenu'; submenu: SubmenuDescriptor }
   | { type: 'slash-set'; active: boolean }
   | { type: 'tasks-toggle' }
+  // Phase 13 M4 actions
+  | { type: 'tasks-focus-enter' }
+  | { type: 'tasks-focus-cursor'; delta: -1 | 1; total: number }
+  | { type: 'tasks-focus-open' }
 
 export function uiReducer(state: UIState, action: UIAction): UIState {
   // Phase 13 M2.5 — every branch must return the same state reference when
@@ -150,6 +160,22 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
       if (state.kind === 'normal') return { kind: 'tasks-collapsed' }
       if (state.kind === 'tasks-collapsed') return { kind: 'normal' }
       return state
+    case 'tasks-focus-enter':
+      // Only transition from normal → tasks-focused. Idempotent: no-op otherwise.
+      if (state.kind !== 'normal') return state
+      return { kind: 'tasks-focused', cursor: 0 }
+    case 'tasks-focus-cursor': {
+      // Only meaningful in tasks-focused state.
+      if (state.kind !== 'tasks-focused') return state
+      const next = Math.max(0, Math.min(action.total - 1, state.cursor + action.delta))
+      // Idempotent: return same ref if cursor doesn't change.
+      if (next === state.cursor) return state
+      return { kind: 'tasks-focused', cursor: next }
+    }
+    case 'tasks-focus-open':
+      // Only meaningful in tasks-focused state.
+      if (state.kind !== 'tasks-focused') return state
+      return { kind: 'submenu', submenu: { kind: 'tasks', focusItem: state.cursor } }
     default:
       return state
   }
@@ -388,6 +414,48 @@ export function App(props: AppProps): React.JSX.Element {
       else { setPrimedQuit(true) }
       return
     }
+    // Phase 13 M4 — Tab enters Tasks focus mode when Tasks panel is non-empty;
+    // also exits focus mode when already focused.
+    if (key.tab) {
+      if (uiState.kind === 'tasks-focused') {
+        dispatchUI({ type: 'reset' })
+        return
+      }
+      if (uiState.kind === 'normal') {
+        // Only enter if Tasks panel has items to navigate.
+        const total = flattenedTasksLength({
+          todoStore: props.todoStore,
+          messages: session.messages,
+          tasks: props.taskManager ? props.taskManager.list() : [],
+        })
+        if (total > 0) {
+          dispatchUI({ type: 'tasks-focus-enter' })
+          return
+        }
+      }
+      return
+    }
+    // Phase 13 M4 — Tasks focus mode key handling.
+    if (uiState.kind === 'tasks-focused') {
+      const total = flattenedTasksLength({
+        todoStore: props.todoStore,
+        messages: session.messages,
+        tasks: props.taskManager ? props.taskManager.list() : [],
+      })
+      if (inputKey === 'j' || key.downArrow) {
+        dispatchUI({ type: 'tasks-focus-cursor', delta: 1, total })
+        return
+      }
+      if (inputKey === 'k' || key.upArrow) {
+        dispatchUI({ type: 'tasks-focus-cursor', delta: -1, total })
+        return
+      }
+      if (key.return) {
+        dispatchUI({ type: 'tasks-focus-open' })
+        return
+      }
+      return
+    }
     // Phase 12 §4.2 — Ctrl+T toggles the Tasks panel between expanded
     // and the collapsed summary row. The actual Tasks panel ships in M3;
     // M2 just wires the state transition so harness tests can assert it.
@@ -453,8 +521,11 @@ export function App(props: AppProps): React.JSX.Element {
   // in Phase 12 (Tasks focus mode is deferred to Phase 13), so it is
   // always unfocused. Prompt is the focus owner in normal/tasks-collapsed
   // states; SlashCard takes focus in slash state; submenus own focus
-  // when a submenu is open.
+  // when a submenu is open. Phase 13 M4 — Tasks panel owns focus in
+  // tasks-focused state.
   const promptFocused = uiState.kind === 'normal' || uiState.kind === 'tasks-collapsed'
+  const tasksFocused = uiState.kind === 'tasks-focused'
+  const tasksCursor = uiState.kind === 'tasks-focused' ? uiState.cursor : undefined
 
   return (
     <ThemeProvider theme={activeTheme}>
@@ -488,8 +559,7 @@ export function App(props: AppProps): React.JSX.Element {
       </Box>
 
       {/* Tasks zone — M3: full TasksPanel when expanded, summary row when collapsed.
-          The Tasks frame is never the keyboard target in Phase 12 (focus mode
-          deferred to Phase 13 per spec §8) — always rendered unfocused. */}
+          Phase 13 M4: tasks-focused state passes focused/cursor to TasksPanel. */}
       {tasksVisible && !tasksCollapsed && props.todoStore && (
         <TasksPanel
           todoStore={props.todoStore}
@@ -497,7 +567,8 @@ export function App(props: AppProps): React.JSX.Element {
           tasks={props.taskManager ? props.taskManager.list() : []}
           tick={tasksTick}
           collapsed={false}
-          focused={false}
+          focused={tasksFocused}
+          cursor={tasksCursor}
         />
       )}
       {tasksVisible && tasksCollapsed && (
@@ -650,6 +721,17 @@ export function App(props: AppProps): React.JSX.Element {
               stream.reset()
             }}
             onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {/* Phase 13 M4 — Tasks focus submenu */}
+      {submenuFull && submenu?.kind === 'tasks' && props.todoStore && (
+        <SubmenuFrame mode="full" title="Tasks" focused>
+          <TasksSubmenu
+            focusItem={submenu.focusItem}
+            todoStore={props.todoStore}
+            messages={session.messages}
+            tasks={props.taskManager ? props.taskManager.list() : []}
           />
         </SubmenuFrame>
       )}

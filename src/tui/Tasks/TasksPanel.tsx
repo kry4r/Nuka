@@ -25,6 +25,7 @@ import { SubagentList } from './SubagentList'
 import { BackgroundList } from './BackgroundList'
 import { findInFlightSubagents } from './SubagentList'
 import { defaultPalette as P } from '../theme'
+import { useTheme } from '../../core/theme/context'
 
 // 12 visible item rows total. Distribute by section count.
 const TOTAL_CAP = 12
@@ -79,9 +80,30 @@ export type TasksPanelProps = {
   tick: number
   /** Whether the panel is currently collapsed (show summary row instead). */
   collapsed: boolean
-  /** Whether the Tasks frame currently owns keyboard focus (focus mode is
-   *  deferred to Phase 13 — App.tsx always passes `false` in Phase 12). */
+  /** Whether the Tasks frame currently owns keyboard focus. */
   focused?: boolean
+  /** Phase 13 M4 — cursor row index when Tasks panel is in focus mode.
+   *  Items are indexed: Plan items first, then Subagents, then Backgrounds. */
+  cursor?: number
+}
+
+/**
+ * Phase 13 M4 — compute total number of items shown in the Tasks panel
+ * (Plan items + in-flight subagents + background tasks). Used by App.tsx
+ * to clamp the focus cursor.
+ *
+ * Accepts a subset of TasksPanelProps (todoStore may be undefined for
+ * cases where the panel isn't mounted).
+ */
+export function flattenedTasksLength(props: {
+  todoStore?: TodoState
+  messages: readonly Message[]
+  tasks: Task[]
+}): number {
+  const planCount = props.todoStore ? props.todoStore.items.length : 0
+  const subCount = findInFlightSubagents(props.messages).length
+  const bgCount = props.tasks.length
+  return planCount + subCount + bgCount
 }
 
 export function TasksPanel({
@@ -89,7 +111,9 @@ export function TasksPanel({
   messages,
   tasks,
   focused,
+  cursor,
 }: TasksPanelProps): React.JSX.Element | null {
+  const theme = useTheme()
   const planItems = todoStore.items
   const subagents = findInFlightSubagents(messages)
   const bgTasks = tasks
@@ -110,8 +134,52 @@ export function TasksPanel({
     bgTasks.length,
   )
 
-  const borderColor = focused ? P.primary : P.fgMuted
-  const titleColor = focused ? P.primary : P.fgMuted
+  const borderColor = focused ? theme.colors.primary : P.fgMuted
+  const titleColor = focused ? theme.colors.primary : P.fgMuted
+
+  // Phase 13 M4 — build flat list of cursor-aware row items.
+  // Items indexed: Plan (0..planItems.length-1), Subagents, Backgrounds.
+  const planOffset = 0
+  const subOffset = planItems.length
+  const bgOffset = planItems.length + subagents.length
+
+  const renderPlanRow = (item: TodoState['items'][number], idx: number): React.JSX.Element => {
+    const absIdx = planOffset + idx
+    const isCursor = focused && cursor !== undefined && absIdx === cursor
+    const STATUS_ICON: Record<string, string> = { completed: '✓', in_progress: '▶', pending: '☐' }
+    const STATUS_COLOR: Record<string, string> = { completed: 'green', in_progress: 'cyan', pending: 'gray' }
+    return (
+      <Box key={idx} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
+        <Text color={STATUS_COLOR[item.status] ?? 'gray'}>{STATUS_ICON[item.status] ?? '☐'}</Text>
+        <Text color={item.status === 'completed' ? 'gray' : 'white'} inverse={isCursor}>{item.title}</Text>
+      </Box>
+    )
+  }
+
+  const renderSubRow = (sub: ReturnType<typeof findInFlightSubagents>[number], idx: number): React.JSX.Element => {
+    const absIdx = subOffset + idx
+    const isCursor = focused && cursor !== undefined && absIdx === cursor
+    return (
+      <Box key={sub.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
+        <Text color="cyan">▶</Text>
+        <Text color="white" inverse={isCursor}>{sub.label}</Text>
+      </Box>
+    )
+  }
+
+  const renderBgRow = (task: Task, idx: number): React.JSX.Element => {
+    const absIdx = bgOffset + idx
+    const isCursor = focused && cursor !== undefined && absIdx === cursor
+    const STATE_ICON: Record<string, string> = { running: '▶', completed: '✓', failed: '✗', killed: '◉', pending: '☐' }
+    const STATE_COLOR: Record<string, string> = { running: 'cyan', completed: 'green', failed: 'red', killed: 'yellow', pending: 'gray' }
+    const dimmed = task.state === 'completed' || task.state === 'failed' || task.state === 'killed'
+    return (
+      <Box key={task.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
+        <Text color={STATE_COLOR[task.state] ?? 'gray'}>{STATE_ICON[task.state] ?? '☐'}</Text>
+        <Text color={dimmed ? 'gray' : 'white'} inverse={isCursor}>{task.description}</Text>
+      </Box>
+    )
+  }
 
   return (
     <Box
@@ -120,18 +188,38 @@ export function TasksPanel({
       borderColor={borderColor}
       paddingX={1}
     >
-      <Text color={titleColor} bold>Tasks  <Text color={P.fgMuted} dimColor>(Ctrl+T to collapse)</Text></Text>
-      {hasplan && <PlanList store={todoStore} maxItems={planCap} />}
+      <Text color={titleColor} bold>Tasks  <Text color={P.fgMuted} dimColor>{focused ? '(↑↓/jk: move  ⏎: detail  Tab: exit)' : '(Ctrl+T to collapse)'}</Text></Text>
+      {hasplan && (
+        <Box flexDirection="column">
+          <Text color="yellow" bold>Plan</Text>
+          {planItems.slice(0, planCap).map((item, i) => renderPlanRow(item, i))}
+          {planItems.length - Math.min(planCap, planItems.length) > 0 && (
+            <Text color="gray">  … +{planItems.length - planCap} more</Text>
+          )}
+        </Box>
+      )}
       {hasSubs && (
         <>
           {hasplan && <Text color={P.fgMuted}>─</Text>}
-          <SubagentList messages={messages} maxItems={subCap} />
+          <Box flexDirection="column">
+            <Text color="yellow" bold>Subagents</Text>
+            {subagents.slice(0, subCap).map((sub, i) => renderSubRow(sub, i))}
+            {subagents.length - Math.min(subCap, subagents.length) > 0 && (
+              <Text color="gray">  … +{subagents.length - subCap} more</Text>
+            )}
+          </Box>
         </>
       )}
       {hasBgs && (
         <>
           {(hasplan || hasSubs) && <Text color={P.fgMuted}>─</Text>}
-          <BackgroundList tasks={bgTasks} maxItems={bgCap} />
+          <Box flexDirection="column">
+            <Text color="yellow" bold>Backgrounds</Text>
+            {bgTasks.slice(0, bgCap).map((task, i) => renderBgRow(task, i))}
+            {bgTasks.length - Math.min(bgCap, bgTasks.length) > 0 && (
+              <Text color="gray">  … +{bgTasks.length - bgCap} more</Text>
+            )}
+          </Box>
         </>
       )}
     </Box>
