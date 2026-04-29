@@ -92,21 +92,27 @@ export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
  * Phase 12 §4.5 — controls which segments render in the unified Status
  * panel. `hidden` is a list of segment ids; everything else shows.
  *
- * New segment ids (Phase 12): mode, model, cwd, context, cost-time,
- * counts. Plus `status-line` for the optional legacy custom row.
+ * Segment ids (Phase 13): mode, model, cwd, context, cost, counts.
+ * Plus `status-line` for the optional legacy custom row.
+ * (Phase 12 had `cost-time`; migrated to `cost` in Phase 13 §5.1.)
  *
  * Old ids (model, cwd, git, ctx, cost, auto, queue, tasks, plugins,
  * hint) are migrated to the new set in `loadConfig` / `loadScopedConfig`
  * — see `migrateStatusBarHidden` in `src/core/config/load.ts`.
  *
- * `layout` selects density: dense (six rows), compact (two rows),
+ * `layout` selects density: dense (two columns), compact (two rows),
  * oneline (single line). Narrow terminals auto-degrade in the
  * renderer; this field reflects the user's preferred density.
+ *
+ * `iconMode` selects whether segments render with icon glyphs or
+ * plain text labels. 'icon' (default) uses ⬢/⚙/▰▱ etc.; 'text'
+ * uses bracketed labels: [idle], plugins:N, etc.
  */
 export const StatusBarConfigSchema = z
   .object({
     hidden: z.array(z.string()).default([]),
     layout: z.enum(['dense', 'compact', 'oneline']).default('dense'),
+    iconMode: z.enum(['icon', 'text']).default('icon'),
   })
   .optional()
 export type StatusBarConfig = z.infer<typeof StatusBarConfigSchema>

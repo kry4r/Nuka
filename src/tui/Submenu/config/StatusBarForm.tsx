@@ -1,12 +1,14 @@
 // src/tui/Submenu/config/StatusBarForm.tsx
 //
-// Phase 12 §4.7 — canonical example form. Edits:
+// Phase 13 §4.2 — updated for new segment set and iconMode field.
+// Edits:
 //   - statusBar.layout (select: dense / compact / oneline)
+//   - statusBar.iconMode (select: icon / text)
 //   - statusBar.hidden (per-segment toggle list)
 //
 // Toggling a segment "on" means that segment id is included in the
-// `hidden` array. Six segments per spec §4.5: mode/model/cwd/context/
-// cost-time/counts.
+// `hidden` array. Current segments (Phase 13): mode/model/cwd/context/
+// cost/counts.
 
 import React, { useEffect, useState, useCallback } from 'react'
 import { Box, Text } from 'ink'
@@ -16,16 +18,22 @@ import type { FormCommonProps } from './ConfigSubmenu'
 const LAYOUTS = ['dense', 'compact', 'oneline'] as const
 type Layout = typeof LAYOUTS[number]
 
-const SEGMENTS = ['mode', 'model', 'cwd', 'context', 'cost-time', 'counts'] as const
+const ICON_MODES = ['icon', 'text'] as const
+type IconMode = typeof ICON_MODES[number]
+
+const SEGMENTS = ['mode', 'model', 'cwd', 'context', 'cost', 'counts'] as const
 
 export function StatusBarForm(props: FormCommonProps): React.JSX.Element {
   const initialLayout: Layout = (props.config.statusBar?.layout ?? 'dense') as Layout
+  const initialIconMode: IconMode = ((props.config.statusBar as any)?.iconMode ?? 'icon') as IconMode
   const initialHidden = new Set(props.config.statusBar?.hidden ?? [])
   const [layout, setLayout] = useState<Layout>(initialLayout)
+  const [iconMode, setIconMode] = useState<IconMode>(initialIconMode)
   const [hidden, setHidden] = useState<Set<string>>(initialHidden)
 
   useEffect(() => {
     setLayout((props.config.statusBar?.layout ?? 'dense') as Layout)
+    setIconMode(((props.config.statusBar as any)?.iconMode ?? 'icon') as IconMode)
     setHidden(new Set(props.config.statusBar?.hidden ?? []))
   }, [props.config])
 
@@ -45,6 +53,7 @@ export function StatusBarForm(props: FormCommonProps): React.JSX.Element {
           obj.statusBar = {
             ...(obj.statusBar ?? {}),
             layout,
+            iconMode,
             hidden: Array.from(hidden),
           }
         })
@@ -53,7 +62,7 @@ export function StatusBarForm(props: FormCommonProps): React.JSX.Element {
       }
     })
     return () => props.setFormSave(null)
-  }, [layout, hidden, props])
+  }, [layout, iconMode, hidden, props])
 
   const fId = (i: number) => props.focused && props.fieldIdx === i
 
@@ -69,13 +78,22 @@ export function StatusBarForm(props: FormCommonProps): React.JSX.Element {
         errored={props.erroredField === 'StatusBar:layout'}
         onChange={v => typeof v === 'string' && (LAYOUTS as readonly string[]).includes(v) && setLayout(v as Layout)}
       />
+      <Field
+        label="iconMode"
+        type="select"
+        choices={[...ICON_MODES]}
+        value={iconMode}
+        focused={fId(1)}
+        errored={props.erroredField === 'StatusBar:iconMode'}
+        onChange={v => typeof v === 'string' && (ICON_MODES as readonly string[]).includes(v) && setIconMode(v as IconMode)}
+      />
       {SEGMENTS.map((seg, i) => (
         <Field
           key={seg}
           label={`hide:${seg}`}
           type="toggle"
           value={hidden.has(seg)}
-          focused={fId(i + 1)}
+          focused={fId(i + 2)}
           errored={props.erroredField === `StatusBar:hidden.${seg}`}
           onChange={v => toggleSegment(seg, v === true)}
         />

@@ -24,9 +24,10 @@ describe('Phase 12 layout', () => {
       // chrome — assert presence of the input frame rather than a free-
       // standing `>` line, since ink-testing-library renders the box).
       expect(frame).toMatch(/│ >/)
-      // Status panel six-row dense layout — assert two anchor segments.
+      // Status panel two-column dense layout — assert two anchor segments.
+      // Phase 13: ⏱ removed (time tracking gone); check for cost segment instead.
       expect(frame).toMatch(/⬢ idle/)
-      expect(frame).toMatch(/⏱/)
+      expect(frame).toMatch(/\$0\.0000/)
     } finally {
       h.unmount()
     }
