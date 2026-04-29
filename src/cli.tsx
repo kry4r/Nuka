@@ -79,6 +79,10 @@ import { loadMemory, appendMemory } from './core/memdir/index'
 import { findRelevant, tokenize } from './core/memdir/relevance'
 import { synthMemoryEntry } from './core/memdir/synth'
 import type { MemoryEntry } from './core/memdir/parser'
+import { loadUpdates } from './core/updates/load'
+import type { UpdateEntry } from './core/updates/load'
+import { loadRecent } from './core/session/recent'
+import type { RecentEntry } from './core/session/recent'
 
 const argv = process.argv.slice(2)
 
@@ -507,6 +511,14 @@ async function runInteractive(): Promise<void> {
   // turn so newly synth'd entries appear without a CLI restart.
   let memoryCache: MemoryEntry[] = await loadMemory(cwd).catch(() => [])
 
+  // Phase 13 M2 — load updates + recent sessions for the Welcome screen.
+  // Both are best-effort: failures silently return [].
+  const [welcomeUpdates, welcomeRecent]: [UpdateEntry[], RecentEntry[]] =
+    await Promise.all([
+      loadUpdates(os.homedir()),
+      loadRecent(os.homedir()),
+    ])
+
   const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) => {
     if (!session.providerId) {
       throw new Error('No provider configured. Use /config to add one, or edit ~/.nuka/config.yaml.')
@@ -575,6 +587,8 @@ async function runInteractive(): Promise<void> {
       todoStore={todoStore}
       loadedPlugins={plugins.map(p => ({ name: p.manifest.name, description: p.manifest.description }))}
       loadedSkills={skills.map(s => ({ name: s.name, description: s.description }))}
+      updates={welcomeUpdates}
+      recent={welcomeRecent}
     />,
   )
 
