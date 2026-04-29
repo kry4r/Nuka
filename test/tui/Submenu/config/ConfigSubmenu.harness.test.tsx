@@ -39,7 +39,7 @@ describe('ConfigSubmenu harness', () => {
       />,
     )
     const f = lastFrame() ?? ''
-    expect(f).toContain('Provider')
+    expect(f).toContain('Providers')
     expect(f).toContain('Model')
     expect(f).toContain('Theme')
     expect(f).toContain('StatusBar')
@@ -48,9 +48,10 @@ describe('ConfigSubmenu harness', () => {
     expect(f).toContain('Skills')
     expect(f).toContain('Welcome')
     expect(f).toContain('Compact')
-    // First category (Provider) is selected; the right pane should show
-    // its content.
-    expect(f).toContain('baseUrl')
+    // First category (Providers) is selected; the right pane shows the
+    // providers list and the action footer.
+    expect(f).toContain('https://api.x.example.com')
+    expect(f).toContain('a 添加')
     unmount()
   })
 
@@ -64,18 +65,18 @@ describe('ConfigSubmenu harness', () => {
       />,
     )
     try {
-      // Baseline: Provider form active.
+      // Baseline: Providers form active.
       await wait()
       const baseline = (inst as any).frames.slice().pop() ?? ''
-      expect(baseline).toContain('baseUrl')
+      expect(baseline).toContain('https://api.x.example.com')
 
       // j → Model.
       inst.stdin.write('j')
       await wait()
       const after = (inst as any).frames.slice().pop() ?? ''
-      // Model form contains "Model · p" header (Provider.name = 'p').
+      // Model form shows "Model · …" header (Provider.name = 'p').
       expect(after).toContain('Model')
-      expect(after).not.toContain('apiKey') // ProviderForm hidden now
+      expect(after).not.toContain('a 添加') // Providers footer hidden now
     } finally {
       inst.unmount()
     }
