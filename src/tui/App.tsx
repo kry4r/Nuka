@@ -122,8 +122,12 @@ export type UIAction =
   | { type: 'tasks-toggle' }
 
 export function uiReducer(state: UIState, action: UIAction): UIState {
+  // Phase 13 M2.5 — every branch must return the same state reference when
+  // no logical transition occurs, otherwise useReducer can't bail out and
+  // any inline-arrow callback feeding it triggers an infinite render loop.
   switch (action.type) {
     case 'reset':
+      if (state.kind === 'normal') return state
       return { kind: 'normal' }
     case 'open-submenu':
       return { kind: 'submenu', submenu: action.submenu }
@@ -133,12 +137,11 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
       if (state.kind !== 'submenu') return state
       return { kind: 'submenu', submenu: action.submenu }
     case 'slash-set':
-      // Slash open state only matters when we are in normal/slash; never
-      // override a submenu or tasks-collapsed state with slash.
       if (action.active) {
-        if (state.kind === 'normal' || state.kind === 'slash') {
-          return { kind: 'slash', mode: 'list' }
-        }
+        // Already in slash — no transition.
+        if (state.kind === 'slash') return state
+        if (state.kind === 'normal') return { kind: 'slash', mode: 'list' }
+        // submenu / tasks-collapsed — don't preempt.
         return state
       }
       if (state.kind === 'slash') return { kind: 'normal' }
@@ -195,6 +198,11 @@ export function App(props: AppProps): React.JSX.Element {
   // Phase 12 §4.2 — single discriminated UIState replaces the prior
   // dialog + slash-active flags.
   const [uiState, dispatchUI] = useReducer(uiReducer, { kind: 'normal' } as UIState)
+  // Phase 13 M2.5 — stable callback so PromptInput's useEffect doesn't refire
+  // on every parent render (inline arrow had a new identity each pass).
+  const handleSlashActiveChange = useCallback((active: boolean) => {
+    dispatchUI({ type: 'slash-set', active })
+  }, [])
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   const [primedQuit, setPrimedQuit] = useState(false)
   // Bumped whenever we mutate session.messages directly so React re-renders.
@@ -537,7 +545,7 @@ export function App(props: AppProps): React.JSX.Element {
           onAttachFile={p => { pendingAttachments.current.push(p) }}
           vim={props.config.vim?.enabled === true}
           slash={props.slash}
-          onSlashActiveChange={(active) => dispatchUI({ type: 'slash-set', active })}
+          onSlashActiveChange={handleSlashActiveChange}
           onSlashCursorChange={setSlashCursor}
         />
       )}
