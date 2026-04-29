@@ -651,14 +651,33 @@ export function App(props: AppProps): React.JSX.Element {
           <ConfigSubmenu
             config={props.config}
             onSave={async (mutate) => {
-              await saveConfigPatch(os.homedir(), (obj) => {
-                mutate(obj)
-                // Mirror back to the in-memory config so the live Status
-                // panel etc. immediately reflect the saved values without
-                // needing a full app reload.
-                mutate(props.config as unknown as Record<string, unknown>)
-              })
-              bumpMessages()
+              try {
+                await saveConfigPatch(os.homedir(), (obj) => {
+                  mutate(obj)
+                  // Mirror back to the in-memory config so the live Status
+                  // panel etc. immediately reflect the saved values without
+                  // needing a full app reload.
+                  mutate(props.config as unknown as Record<string, unknown>)
+                })
+                bumpMessages()
+              } catch (err) {
+                // Phase 13 — gracefully surface I/O errors (ENOSPC, EACCES,
+                // EROFS) so the TUI doesn't crash. Zod validation failures
+                // are still re-thrown so forms can flash the offending field.
+                const e = err as NodeJS.ErrnoException
+                if (e?.code) {
+                  const text = `[/config] save failed: [${e.code}] ${e.message}`
+                  session.messages.push({
+                    role: 'assistant',
+                    content: [{ type: 'text', text }],
+                    id: `cfg-err-${Date.now()}`,
+                    ts: Date.now(),
+                  })
+                  bumpMessages()
+                  return
+                }
+                throw err
+              }
             }}
             onOpenEditor={() => { props.onOpenEditor(); closeSubmenu() }}
             loadedPlugins={props.loadedPlugins}
