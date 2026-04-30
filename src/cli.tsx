@@ -92,6 +92,8 @@ import { HarnessStateMachine } from './core/harness/state'
 import { editorAgent } from './core/agents/builtin/editor'
 import { makeSequentialThinkingTool, makeSearchAndVerifyTool, makeAskUserQuestionTool } from './core/harness/primitives'
 import { makeHarnessCommand } from './slash/harness'
+import * as fs from 'node:fs'
+import { initAutoDream } from './core/recap/autoDream'
 
 const argv = process.argv.slice(2)
 
@@ -424,6 +426,31 @@ async function runInteractive(): Promise<void> {
   ensureNukaLayout(home)
   try { runRetentionSweep(home) } catch { /* non-fatal */ }
   const taskManager = new TaskManager({ home, bus: eventBus })
+
+  // Phase 14c §6.5 — autoDream periodic memdir consolidation.
+  // Ticks every 30 minutes; all three gates must pass before enqueuing a dream task.
+  if (config.recap?.autoDream?.enabled !== false) {
+    const ad = initAutoDream({
+      home,
+      tasks: taskManager,
+      config: {
+        minHours: config.recap?.autoDream?.minHours ?? 6,
+        minSessions: config.recap?.autoDream?.minSessions ?? 3,
+      },
+      now: () => Date.now(),
+      newSessionsCount: () => 0,
+      lastConsolidatedAt: () => {
+        try {
+          const metaPath = path.join(home, '.nuka', 'memdir', '.dream.meta.json')
+          const m = JSON.parse(fs.readFileSync(metaPath, 'utf8')) as { lastConsolidatedAt?: number }
+          return m.lastConsolidatedAt ?? 0
+        } catch {
+          return 0
+        }
+      },
+    })
+    setInterval(() => { void ad.tick() }, 30 * 60_000).unref()
+  }
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({
