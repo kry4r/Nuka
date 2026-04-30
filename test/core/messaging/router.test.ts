@@ -56,4 +56,16 @@ describe('MessageRouter', () => {
     expect(aHits).toBe(1)
     expect(bHits).toBe(1)
   })
+
+  it('inbox.pending and inbox.drain expose offline messages', async () => {
+    const bus = createEventBus()
+    const backend = new InProcessBackend()
+    const r = new MessageRouter({ backends: [backend], bus })
+    await r.send(env('team:t/offline'))
+    const ib = r.inbox('team:t/offline')
+    expect(ib.pending()).toBe(1)
+    const got = ib.drain()
+    expect(got.length).toBe(1)
+    expect(ib.pending()).toBe(0)
+  })
 })

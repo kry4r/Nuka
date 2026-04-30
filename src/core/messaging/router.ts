@@ -31,11 +31,23 @@ export class MessageRouter {
 
   inbox(localAddress: string): {
     subscribe(cb: (e: MessageEnvelope) => void): () => void
+    pending(): number
+    drain(): MessageEnvelope[]
   } {
     return {
       subscribe: (cb): (() => void) => {
         const offs = this.opts.backends.map(b => b.subscribe(localAddress, cb))
         return () => offs.forEach(off => off())
+      },
+      pending: (): number => {
+        let total = 0
+        for (const b of this.opts.backends) total += b.pending(localAddress)
+        return total
+      },
+      drain: (): MessageEnvelope[] => {
+        const all: MessageEnvelope[] = []
+        for (const b of this.opts.backends) all.push(...b.drain(localAddress))
+        return all
       },
     }
   }
