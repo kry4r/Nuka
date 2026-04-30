@@ -5,23 +5,44 @@ export type PipelineResult = { ok: boolean; failedAt?: string; stages: StageResu
 
 export function topoLevels(nodes: PipelineNode[], entry: string): string[][] {
   const byId = new Map(nodes.map(n => [n.id, n]))
+  if (!byId.has(entry)) throw new Error(`pipeline: entry "${entry}" not found`)
+  // Build in-degree from entry's reachable subgraph.
+  const reachable = new Set<string>()
+  const stack = [entry]
+  while (stack.length) {
+    const id = stack.pop()!
+    if (reachable.has(id)) continue
+    reachable.add(id)
+    const s = byId.get(id)
+    if (s) for (const n of s.next ?? []) stack.push(n)
+  }
+  const inDeg = new Map<string, number>()
+  for (const id of reachable) inDeg.set(id, 0)
+  for (const id of reachable) {
+    const s = byId.get(id)!
+    for (const n of s.next ?? []) {
+      if (reachable.has(n)) inDeg.set(n, (inDeg.get(n) ?? 0) + 1)
+    }
+  }
   const levels: string[][] = []
-  let frontier = [entry]
-  const seen = new Set<string>()
-
+  let frontier = [...reachable].filter(id => inDeg.get(id) === 0)
   while (frontier.length) {
-    levels.push([...frontier])
-    for (const id of frontier) seen.add(id)
-    const nextFrontier: string[] = []
+    levels.push(frontier)
+    const next: string[] = []
     for (const id of frontier) {
-      const n = byId.get(id)
-      if (!n) throw new Error(`unknown node ${id}`)
-      for (const m of n.next) {
-        if (seen.has(m)) throw new Error(`cycle detected in pipeline (${id} → ${m})`)
-        if (!nextFrontier.includes(m)) nextFrontier.push(m)
+      const s = byId.get(id)!
+      for (const n of s.next ?? []) {
+        if (!reachable.has(n)) continue
+        const d = (inDeg.get(n) ?? 0) - 1
+        inDeg.set(n, d)
+        if (d === 0) next.push(n)
       }
     }
-    frontier = nextFrontier
+    frontier = next
+  }
+  const totalEmitted = levels.reduce((sum, l) => sum + l.length, 0)
+  if (totalEmitted < reachable.size) {
+    throw new Error(`pipeline: cycle detected (unreachable nodes after topo sort)`)
   }
   return levels
 }

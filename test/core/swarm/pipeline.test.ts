@@ -16,6 +16,31 @@ describe('topoLevels', () => {
   })
 })
 
+describe('topoLevels — cross-level edge handling', () => {
+  it('handles cross-level forward edges without false-positive cycle', () => {
+    // a → {b,c}; b → c (b and c at same level conceptually, but b also points to c)
+    const stages = [
+      { id: 'a', agent: 'x', prompt: 'A', next: ['b', 'c'], timeoutMs: 0 },
+      { id: 'b', agent: 'x', prompt: 'B', next: ['c'], timeoutMs: 0 },
+      { id: 'c', agent: 'x', prompt: 'C', next: [], timeoutMs: 0 },
+    ]
+    // Expected levels: [['a'], ['b'], ['c']] — c only runs after both a and b complete.
+    const levels = topoLevels(stages, 'a')
+    expect(levels.flat()).toContain('a')
+    expect(levels.flat()).toContain('b')
+    expect(levels.flat()).toContain('c')
+    expect(levels.flat().length).toBe(3)
+  })
+
+  it('still detects real cycles', () => {
+    const stages = [
+      { id: 'a', agent: 'x', prompt: 'A', next: ['b'], timeoutMs: 0 },
+      { id: 'b', agent: 'x', prompt: 'B', next: ['a'], timeoutMs: 0 },
+    ]
+    expect(() => topoLevels(stages, 'a')).toThrow(/cycle/i)
+  })
+})
+
 describe('runPipeline (with fake worker)', () => {
   it('runs 3 stages in order, threading {{prev}}', async () => {
     const log: string[] = []
