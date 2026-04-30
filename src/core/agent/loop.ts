@@ -29,6 +29,7 @@ import type { LspManager } from '../lsp/manager'
 import type { CostTracker } from '../cost/tracker'
 import type { CheckpointLog } from '../rewind/checkpoint'
 import { captureFileSnapshot, filePathsFromToolInput } from '../rewind/checkpoint'
+import type { EventBus } from '../events/bus'
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -60,6 +61,10 @@ export type RunAgentDeps = {
      */
     turnId?: () => string
   }
+  /** Phase 14 §6.2 — when provided, the loop emits AgentBusEvent
+   *  (agent.tool.start / agent.tool.end / agent.usage) for every tool
+   *  call and turn-end usage update. */
+  bus?: EventBus
 }
 
 /**
@@ -257,6 +262,12 @@ export async function* runAgent(
           cacheRead: assistant.usage.cacheReadTokens,
         })
       }
+      deps.bus?.emit('agent', {
+        type: 'agent.usage',
+        sessionId: session.id,
+        inputTokens: assistant.usage.inputTokens ?? 0,
+        outputTokens: assistant.usage.outputTokens ?? 0,
+      })
     }
 
     const calls = extractToolCalls(assistant)
@@ -373,13 +384,33 @@ export async function* runAgent(
             const onProgressTyped = tool.progressType === 'object'
               ? (payload: Record<string, unknown>) => pump.onProgress(JSON.stringify(payload))
               : undefined
+            const toolStartedAt = Date.now()
+            deps.bus?.emit('agent', {
+              type: 'agent.tool.start',
+              sessionId: session.id,
+              toolName: tool.name,
+              input: call.input,
+            })
+            let toolOk = true
             const toolPromise = tool.run(call.input, {
               signal,
               cwd: process.cwd(),
               onProgress: pump.onProgress,
               onProgressTyped,
               session,
-            }).finally(pump.finish)
+            }).catch((err: unknown) => {
+              toolOk = false
+              throw err
+            }).finally(() => {
+              pump.finish()
+              deps.bus?.emit('agent', {
+                type: 'agent.tool.end',
+                sessionId: session.id,
+                toolName: tool.name,
+                ok: toolOk,
+                durationMs: Date.now() - toolStartedAt,
+              })
+            })
             // Drain pump into local buffer concurrently with tool execution
             const drainPromise = (async () => {
               for await (const msg of pump.drain()) progressLines.push(msg)
@@ -501,13 +532,33 @@ export async function* runAgent(
           const onProgressTyped = tool.progressType === 'object'
             ? (payload: Record<string, unknown>) => pump.onProgress(JSON.stringify(payload))
             : undefined
+          const serialToolStartedAt = Date.now()
+          deps.bus?.emit('agent', {
+            type: 'agent.tool.start',
+            sessionId: session.id,
+            toolName: tool.name,
+            input: call.input,
+          })
+          let serialToolOk = true
           const toolPromise = tool.run(call.input, {
             signal,
             cwd: process.cwd(),
             onProgress: pump.onProgress,
             onProgressTyped,
             session,
-          }).finally(pump.finish)
+          }).catch((err: unknown) => {
+            serialToolOk = false
+            throw err
+          }).finally(() => {
+            pump.finish()
+            deps.bus?.emit('agent', {
+              type: 'agent.tool.end',
+              sessionId: session.id,
+              toolName: tool.name,
+              ok: serialToolOk,
+              durationMs: Date.now() - serialToolStartedAt,
+            })
+          })
           for await (const msg of pump.drain()) {
             yield { type: 'tool_progress', id: call.id, text: msg }
           }
