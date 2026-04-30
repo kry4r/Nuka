@@ -10,6 +10,7 @@
 // hot-tip explicitly authorises this in lieu of ulid).
 
 import { randomUUID } from 'node:crypto'
+import { writeMeta, fromTask } from './meta'
 import { runBash } from './run-bash'
 import { runAgent } from './run-agent'
 import { runTeammate } from './run-teammate'
@@ -102,6 +103,8 @@ export class TaskManager {
     const abort = new AbortController()
     const done = this.startRunner(task, abort.signal).catch((err) => {
       this.fail(task, (err as Error)?.message ?? 'unknown error')
+    }).finally(() => {
+      try { writeMeta(this.home, fromTask(task)) } catch { /* non-fatal */ }
     })
     this.running.set(id, { task, abort, done })
 
@@ -144,6 +147,7 @@ export class TaskManager {
     t.state = next
     for (const cb of this.listeners) { try { cb({ ...t }) } catch { /* */ } }
     this.bus?.emit('task', { type: 'task.state', id, from, to: next })
+    try { writeMeta(this.home, fromTask(t)) } catch { /* non-fatal */ }
   }
 
   injectMessage(id: string, message: string): void {
@@ -158,6 +162,7 @@ export class TaskManager {
         ].slice(-5),
       }
     }
+    try { writeMeta(this.home, fromTask(t)) } catch { /* non-fatal */ }
   }
 
   async requestShutdown(id: string): Promise<void> {
@@ -172,6 +177,7 @@ export class TaskManager {
         void this.cancel(id)
       }
     }, 30_000).unref()
+    try { writeMeta(this.home, fromTask(t)) } catch { /* non-fatal */ }
   }
 
   resolveTeammate(address: string): string | undefined {
@@ -191,6 +197,7 @@ export class TaskManager {
     if (!t) return
     t.progress = snapshot
     this.bus?.emit('task', { type: 'task.progress', id, snapshot })
+    try { writeMeta(this.home, fromTask(t)) } catch { /* non-fatal */ }
   }
 
   // ---------- internal ----------

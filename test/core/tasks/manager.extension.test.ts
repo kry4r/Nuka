@@ -5,6 +5,7 @@ import * as path from 'node:path'
 import { TaskManager } from '../../../src/core/tasks/manager'
 import { createEventBus } from '../../../src/core/events/bus'
 import type { TaskEvent } from '../../../src/core/events/types'
+import { readMeta } from '../../../src/core/tasks/meta'
 
 describe('TaskManager extensions', () => {
   let home: string
@@ -50,5 +51,13 @@ describe('TaskManager extensions', () => {
     mgr.enqueue({ kind: 'local_bash', description: 'd', command: 'true' })
     off()
     expect(seen.length).toBeGreaterThan(0)
+  })
+
+  it('writes <id>.meta.json on terminal transition', async () => {
+    const t = mgr.enqueue({ kind: 'local_bash', description: 'd', command: 'true' })
+    await new Promise(res => setTimeout(res, 100))  // give the runner time
+    const meta = readMeta(home, t.id)
+    expect(meta?.id).toBe(t.id)
+    expect(['completed', 'failed']).toContain(meta?.state)
   })
 })
