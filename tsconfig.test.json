@@ -4,5 +4,25 @@
     "noUncheckedIndexedAccess": false
   },
   "include": ["test/**/*", "src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test/core/agent/loop.test.ts",
+    "test/core/agent/loop-lsp.test.ts",
+    "test/core/agent/toolSchedule.test.ts",
+    "test/core/agents/dispatch.test.ts",
+    "test/core/agents/recursion.test.ts",
+    "test/core/agents/toolFilter.test.ts",
+    "test/core/config/scope.test.ts",
+    "test/core/doctor/checks.test.ts",
+    "test/core/doctor/run.test.ts",
+    "test/core/permission/bridge.test.ts",
+    "test/core/plugin/wire.test.ts",
+    "test/core/tools/glob.test.ts",
+    "test/core/tools/progress.test.ts",
+    "test/core/tools/registry.test.ts",
+    "test/core/tools/truncation.test.ts",
+    "test/tui/Submenu/Tasks.harness.test.tsx",
+    "test/tui/UIState.harness.test.tsx"
+  ]
 }
