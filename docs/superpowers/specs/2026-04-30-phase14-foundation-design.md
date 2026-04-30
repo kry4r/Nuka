@@ -509,6 +509,13 @@ Forks reuse parent prompt-cache by **keeping the tool list in the request** (cac
 
 Cached params are written to `~/.nuka/forks/<parent-session>/<fork-id>.json` so retries of `/recap` etc. don't recompute the prefix.
 
+**Foundation scope note:** The phase14 foundation ships only the
+in-memory `CacheSafeParams` builder + `runForkedAgent` driver. The
+on-disk `forks/<parent>/<id>.json` persistence + cache-hit logging
+described above is deferred to phase14c (recap), which is the first
+caller that needs durable fork records for replay. The `forks/` dir is
+still created by `ensureNukaLayout` and swept by retention (24h).
+
 ### 6.7 Coordinator gate (`src/core/agent/coordinatorMode.ts` — NEW file)
 
 ```ts
