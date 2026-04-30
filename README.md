@@ -1,37 +1,49 @@
-# Nuka
+<div align="center">
 
-A plugin-first CLI coding assistant. Stream-rendered TUI, multi-agent
-swarm, harness-driven workflow, monitor dashboard, recap & dream — in a
-single ~376 KB bundle.
+```
+ ███╗   ██╗ ██╗   ██╗ ██╗  ██╗  █████╗
+ ████╗  ██║ ██║   ██║ ██║ ██╔╝ ██╔══██╗
+ ██╔██╗ ██║ ██║   ██║ █████╔╝  ███████║
+ ██║╚██╗██║ ██║   ██║ ██╔═██╗  ██╔══██║
+ ██║ ╚████║ ╚██████╔╝ ██║  ██╗ ██║  ██║
+ ╚═╝  ╚═══╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝
+```
+
+**A plugin-first coding assistant in your terminal.**
+
+Streaming TUI · Multi-agent swarm · Profile-aware harness · Live monitor · Recap & dream
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-## Highlights (Phase 14)
+[![bundle](https://img.shields.io/badge/bundle-376_KB-brightgreen)](#)
+[![tests](https://img.shields.io/badge/tests-1421_passing-success)](#)
+[![node](https://img.shields.io/badge/node-%E2%89%A518-blue)](#)
+[![license](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
 
-- **Multi-agent swarm** — named teammates with persisted teams (`team_create`,
-  `team_delete`), `send_message` (bare / `team:X/Y` / broadcast `team:X/*`),
-  Kahn-topo DAG `pipeline_run`, K-round `roundtable`, coordinator mode that
-  filters lead tools to the swarm-internal whitelist while workers see the
-  full set. Five default role agents: `core:planner`, `core:skeptic`,
-  `core:researcher`, `core:implementer`, `core:reviewer`.
-- **`/monitor` dashboard** — five-column Tasks panel (Plan / Subagents /
-  Pipeline / Backgrounds / Messages) with `Tab` / `j` `k` / `Enter` focus,
-  plus a full-screen view with DAG / Timeline / Tokens tabs that subscribe
-  live to the EventBus.
-- **`/recap` command** — nine field reducers (completed, in-flight, file
-  diffs, tool timeline, messages, pipelines, tokens, decisions, next-step
-  via fork-call) rendered to Markdown and persisted under
-  `~/.nuka/recaps/`. Idle returns surface an `AwaySummaryCard` (1–3
-  sentences). `autoDream` consolidates memdir on a 30-min tick.
-- **`/harness` workflow** — profile-aware stage matrix (brainstorm → spec
-  → plan → search → implement → review → recap). TDD is mandatory **only**
-  for `feature` / `fix` / `refactor` profiles; `explore` / `research` /
-  `docs` / `config` use leaner stage shapes. Three soft-gate primitives
-  (`sequential_thinking`, `search_and_verify`, `ask_user_question`)
-  enforce reflection before stage exit. Editor agent (`core:editor`) is
-  denied Edit/Write/Bash and only dispatches workers.
+</div>
 
-## Install
+---
+
+## Why Nuka
+
+Most coding agents either lock you into their own runtime or reduce
+every task to the same TDD-shaped loop. Nuka takes the other path:
+
+- **Plugins are first-class.** Tools, slash commands, skills, hooks, LSP
+  servers, sub-agents — all live in YAML manifests you can drop into a
+  folder.
+- **Workflows are profile-aware.** A bug fix needs TDD; an exploration
+  doesn't. The harness picks the stage shape and skill bundle that fits
+  the task.
+- **Swarm is built in, not bolted on.** Named teammates, persisted
+  teams, DAG pipelines, and roundtables run alongside your main session.
+- **The TUI tells the truth.** A live, multi-column tasks panel and a
+  full-screen `/monitor` dashboard show exactly what every agent is
+  doing — token by token.
+
+Single-process, single bundle, no daemon to babysit.
+
+## Quick start
 
 ```bash
 git clone https://github.com/kry4r/Nuka.git
@@ -39,11 +51,11 @@ cd Nuka
 npm install
 npm run build
 npm link
+
+nuka
 ```
 
-## Configure
-
-`~/.nuka/config.yaml`:
+Add a provider on first launch via `/config`, or write `~/.nuka/config.yaml`:
 
 ```yaml
 providers:
@@ -54,74 +66,91 @@ providers:
 defaultProvider: anthropic
 ```
 
-If no provider is configured Nuka launches in offline mode and you can
-add one through `/config` or by editing the file.
+No provider configured? Nuka boots offline — perfect for trying the TUI,
+plugins, and the test runner without burning tokens.
 
-## Run
+## Tour
+
+```
+┌─ Conversation ──────────────────────────────────────┐
+│ Welcome · streamed messages · folded tool calls     │
+├─ Tasks (Ctrl+T) ────────────────────────────────────┤
+│ Plan │ Subagents │ Pipeline │ Backgrounds │ Msgs    │
+├─ Prompt ────────────────────────────────────────────┤
+│ > _                                                 │
+├─ Status ────────────────────────────────────────────┤
+│ mode · model · cwd · ctx · cost · turn time         │
+└─────────────────────────────────────────────────────┘
+```
+
+The Tasks panel switches to the five-column layout the moment any
+agent / message / harness event lands on the bus. Below ~100 columns it
+collapses to a compact single-column fallback.
+
+| Key            | Action                                              |
+|----------------|-----------------------------------------------------|
+| `/`            | Slash command palette                               |
+| `@`            | File mention                                        |
+| `Ctrl+T`       | Collapse / expand the Tasks panel                   |
+| `Tab`          | Cycle column focus (also accepts slash candidates)  |
+| `j` `k`        | Move row focus inside the focused column            |
+| `Enter`        | Open the focused row's detail submenu               |
+| `Esc`          | Close submenu, or cancel the running turn           |
+| `?`            | Help                                                |
+
+## Slash commands
+
+| Command       | What it does                                                                 |
+|---------------|------------------------------------------------------------------------------|
+| `/monitor`    | Full-screen dashboard with **DAG**, **Timeline**, **Tokens** tabs            |
+| `/recap`      | Build a structured recap of the session, persisted to `~/.nuka/recaps/`     |
+| `/harness`    | Drive the workflow stage machine — `deep` · `fast` · `off` · `status` · `transition <stage>` |
+| `/teams`      | List and inspect teams persisted under `~/.nuka/teams/`                      |
+| `/config`     | Edit providers, models, theme, and feature flags inline                      |
+| `/sessions`   | Browse and resume prior sessions                                             |
+| `/stats`      | Token, cost, and latency rollups                                             |
+| `/doctor`     | Health check of providers, plugins, LSP, and on-disk layout                  |
+
+Hit `?` for the full list.
+
+## Multi-agent swarm
 
 ```bash
-nuka
+# Inside a session, the lead agent in coordinator mode can spawn a team
+NUKA_COORDINATOR_MODE=1 nuka
 ```
 
-Type a message and press enter, or `/` for slash commands. Press `?` for
-help.
+The lead is then restricted to coordination tools: `team_create`,
+`team_delete`, `send_message` (point-to-point, qualified `team:X/Y`, or
+broadcast `team:X/*`), `dispatch_agent`, `task_*`, `pipeline_run`,
+`roundtable`. Workers dispatched through `dispatch_agent` see the full
+tool set.
 
-## TUI overview
+Five role agents ship out of the box: `core:planner`, `core:skeptic`,
+`core:researcher`, `core:implementer`, `core:reviewer`.
 
-Four stacked zones, top to bottom:
+## Workflow harness
 
-```
-+- Conversation ---------------------+
-| Welcome / Messages / tool folds    |
-+------------------------------------+
-+- Tasks ----------------------------+    (Ctrl+T to collapse)
-| Plan | Subagents | Pipeline |      |
-| Backgrounds | Messages              |
-+------------------------------------+
-+- Prompt ---------------------------+
-| > _                                |
-+------------------------------------+
-+- Status ---------------------------+
-| mode | model | cwd | ctx | $ | ⏱   |
-+------------------------------------+
-```
+Different tasks deserve different workflows. The harness encodes that:
 
-The Tasks panel auto-switches to the five-column layout once any swarm /
-agent / message / harness event lands on the bus; below ~100 cols it
-falls back to the legacy single-column view.
+| Profile     | Implement stage |
+|-------------|-----------------|
+| `feature`   | TDD mandatory   |
+| `fix`       | TDD mandatory   |
+| `refactor`  | TDD mandatory   |
+| `docs`      | Required, no TDD|
+| `config`    | Required, no TDD|
+| `explore`   | Forbidden       |
+| `research`  | Forbidden       |
 
-Key bindings:
+Stages: `brainstorm → spec → plan → search → implement → review → recap`.
+Each transition is gated by primitives (`sequential_thinking`,
+`search_and_verify`, `ask_user_question`) — no escaping a stage without
+the reflection it demands.
 
-| Key       | Action                                              |
-|-----------|-----------------------------------------------------|
-| `/`       | Open slash command list                             |
-| `@`       | File mention                                        |
-| `Ctrl+T`  | Collapse / expand the Tasks panel                   |
-| `Tab`     | Cycle column focus inside Tasks (also accepts slash candidates) |
-| `j` / `k` | Move row focus inside the focused Tasks column      |
-| `Enter`   | Open the focused row's detail submenu (Subagent / Pipeline / Message) |
-| `Esc`     | Close the open submenu, or cancel the running turn  |
-| `?`       | `/help`                                             |
+## Plugins
 
-Slash commands and dialogs (model picker, config editor, sessions,
-stats, doctor, monitor) render as a single-stack submenu that takes
-over the lower zones; `Esc` returns to the normal layout.
-
-## Swarm & workflow commands
-
-| Slash         | Purpose |
-|---------------|---------|
-| `/monitor`    | Full-screen dashboard with DAG / Timeline / Tokens tabs |
-| `/recap`      | Build a structured recap of the current session, persist to `~/.nuka/recaps/<date>-<sess>.md` |
-| `/harness`    | Drive a profile-aware workflow stage machine: `deep` / `fast` / `off` / `reset` / `status` / `transition <stage>` |
-| `/teams`      | List / inspect persisted teams under `~/.nuka/teams/` |
-
-In coordinator mode (`NUKA_COORDINATOR_MODE=1`) the lead session is
-restricted to `team_create` / `team_delete` / `send_message` /
-`dispatch_agent` / `task_*` / `synthetic_output`. Workers dispatched via
-`dispatch_agent` see the full tool set.
-
-## Plugin authoring
+Drop a manifest, restart, done.
 
 ```yaml
 # plugin.yaml
@@ -137,18 +166,16 @@ lspServers:    [{ name: ts, command: typescript-language-server }]
 
 agents:
   - name: reviewer
-    description: Reviews code for style + correctness
+    description: Strict code reviewer
     systemPrompt: You are a strict reviewer...
     allowedTools: [Read, Grep, Glob]
     keywords: [review, audit]
-
-userConfig:    { fields: [{ name: token, type: string, required: true }] }
-dependencies:  [{ name: shared-lib, required: true }]
 ```
 
 A complete runnable example lives in `examples/plugin-cli-tool/`.
 
-### In-process tool
+<details>
+<summary>In-process tool</summary>
 
 ```js
 // tools/echo.js
@@ -168,8 +195,10 @@ export default {
   },
 }
 ```
+</details>
 
-### Spawn-wrapped CLI tool
+<details>
+<summary>Spawn-wrapped CLI tool</summary>
 
 ```js
 // tools/git-log.js
@@ -189,12 +218,10 @@ export default {
   async run() { /* provided by spawn runtime */ },
 }
 ```
+</details>
 
-### Skill `requires`
-
-A skill's frontmatter can list capability tags. On activation, Nuka
-exposes the core tool set plus any tools whose `tags` intersect
-`requires`:
+<details>
+<summary>Skill capability tags</summary>
 
 ```markdown
 ---
@@ -206,49 +233,65 @@ requires: ["git", "vcs.read"]
 Use git-log to inspect recent commits before suggesting a release branch.
 ```
 
-## Test harness
+A skill exposes the core tool set plus any tools whose `tags` intersect
+the skill's `requires` list.
+</details>
 
-Nuka ships a headless TUI runner driven by YAML plans:
+## Headless test runner
 
 ```bash
 nuka --test-plan test-plans/01-offline-boot.yaml
 nuka --test-plan test-plans/01-offline-boot.yaml --reporter=tap
 nuka --test-plan test-plans/01-offline-boot.yaml --update-snapshots
-npx vitest run test/integration/samplePlans.test.ts
 ```
 
-Sample plans (`test-plans/`): offline boot, onboarding wizard, theme
-surface, stats view, plan-mode lockout.
+YAML-driven, snapshot-friendly, CI-ready. Sample plans cover offline
+boot, onboarding, theme switching, stats, plan-mode lockout, and a real
+plugin loop.
+
+## On-disk layout
+
+Nuka lays out `~/.nuka/` lazily and runs a once-per-process retention
+sweep:
+
+| Directory       | Retention | Contents                                       |
+|-----------------|-----------|------------------------------------------------|
+| `tasks/`        | 14 days   | `<id>.log` + `<id>.meta.json` per background task |
+| `teams/<name>/` | —         | `config.json` (zod-validated) per team         |
+| `forks/<sess>/` | 24 hours  | Cache-safe fork snapshots                      |
+| `recaps/`       | 90 days   | Persisted `/recap` Markdown                    |
+| `events/`       | 7 days    | Optional NDJSON event log (off by default)     |
+| `harness/`      | —         | Per-session scratchpad (50 KB cap)             |
+| `memdir/`       | —         | autoDream consolidation target                 |
 
 ## Configuration scopes
 
-Config is layered in four scopes (later overrides earlier):
+Four layers, later overrides earlier:
 
 ```
-enterprise -> user (~/.nuka/config.yaml) -> project (.nuka/) -> local (.nuka/local.yaml)
+enterprise → user (~/.nuka/config.yaml) → project (.nuka/) → local (.nuka/local.yaml)
 ```
 
 `nuka config show [--scope user]` prints the resolved tree.
 
-## On-disk layout
+## Project layout
 
-Nuka boots `~/.nuka/` lazily and runs a once-per-process retention sweep:
-
-| Dir              | Retention | Contents                                       |
-|------------------|-----------|------------------------------------------------|
-| `tasks/`         | 14 days   | `<id>.log` + `<id>.meta.json` per background task |
-| `teams/<name>/`  | n/a       | `config.json` (zod-validated) per team         |
-| `forks/<sess>/`  | 24 hours  | `<fork-id>.json` for prompt-cache-safe forks   |
-| `recaps/`        | 90 days   | Persisted `/recap` Markdown                    |
-| `events/`        | 7 days    | Optional NDJSON event log (off by default)     |
-| `harness/`       | n/a       | Per-session scratchpad (50 KB cap)             |
-| `memdir/`        | n/a       | autoDream consolidation target                 |
+```
+src/
+  core/            tasks · agents · events · messaging · teams · pipeline · harness · recap
+  tui/             Ink components — Conversation, Tasks, Monitor, Submenus
+  slash/           built-in slash commands
+  cli.tsx          REPL boot
+docs/superpowers/  specs and implementation plans
+test-plans/        YAML scenarios for the headless runner
+examples/          runnable plugin samples
+```
 
 ## Contributing
 
-Issues and pull requests are welcome. Each significant change is
-preceded by a design spec and an implementation plan under
-`docs/superpowers/`.
+Issues and pull requests are welcome. Significant changes start with a
+design spec and an implementation plan under `docs/superpowers/` —
+matching the workflow the harness itself enforces.
 
 ## License
 
