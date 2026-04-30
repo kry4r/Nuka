@@ -22,6 +22,8 @@ const STATE_ICON: Record<TaskState, string> = {
   failed: '✗',
   killed: '◉',
   pending: '☐',
+  idle: '◌',
+  shutdown_requested: '◎',
 }
 
 const STATE_COLOR: Record<TaskState, string> = {
@@ -30,6 +32,8 @@ const STATE_COLOR: Record<TaskState, string> = {
   failed: 'red',
   killed: 'yellow',
   pending: 'gray',
+  idle: 'cyan',
+  shutdown_requested: 'yellow',
 }
 
 export type BackgroundListProps = {

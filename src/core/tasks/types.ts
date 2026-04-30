@@ -15,6 +15,25 @@
 // `failed` | `killed`) and persist their textual output under
 // `<home>/.nuka/tasks/<id>.log`.
 
+import type { ResolvedAgentDef } from '../agents/types'
+
+// Temporary local alias until M3 ships progressTracker.ts.
+// Remove this and switch back to `import type { ProgressTrackerSnapshot } from './progressTracker'`
+// in the M3 milestone (Task 7).
+export type ProgressTrackerSnapshot = {
+  toolUseCount: number
+  latestInputTokens: number
+  cumulativeOutputTokens: number
+  recentActivities: Array<{
+    toolName: string
+    input: Record<string, unknown>
+    activityDescription?: string
+    isSearch?: boolean
+    isRead?: boolean
+  }>
+  summary?: string
+}
+
 export type TaskKind =
   | 'local_bash'
   | 'local_agent'
@@ -31,11 +50,6 @@ export type TaskState =
   | 'failed'
   | 'killed'
   | 'shutdown_requested'
-
-/** Discriminated union — each kind carries its own spec. */
-export type TaskSpec =
-  | LocalBashSpec
-  | LocalAgentSpec
 
 export type LocalBashSpec = {
   kind: 'local_bash'
@@ -63,6 +77,49 @@ export type LocalAgentSpec = {
   agentRunner: (signal: AbortSignal) => AsyncIterable<AgentChunk>
 }
 
+export type InProcessTeammateSpec = {
+  kind: 'in_process_teammate'
+  description: string
+  teamName: string
+  agentName: string
+  agentDef: ResolvedAgentDef
+  initialMessage: string
+  longRunning: boolean
+}
+
+export type LocalShellSpec = {
+  kind: 'local_shell'
+  description: string
+  command: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  pty: boolean
+}
+
+export type RemoteAgentSpec = {
+  kind: 'remote_agent'
+  description: string
+  transport: { kind: string; addr: string }
+  initialMessage: string
+}
+
+export type DreamSpec = {
+  kind: 'dream'
+  description: string
+  consolidationPrompt: string
+  parentSessionId: string
+}
+
+/** Discriminated union — each kind carries its own spec. */
+export type TaskSpec =
+  | LocalBashSpec
+  | LocalAgentSpec
+  | InProcessTeammateSpec
+  | LocalShellSpec
+  | RemoteAgentSpec
+  | DreamSpec
+
 export type Task = {
   id: string
   kind: TaskKind
@@ -71,11 +128,13 @@ export type Task = {
   startedAt?: number
   finishedAt?: number
   exitCode?: number
-  /** Absolute path to the on-disk output log. */
   outputFile: string
   spec: TaskSpec
-  /** Last error message (set when state === 'failed'). */
   error?: string
+  agentName?: string
+  teamName?: string
+  progress?: ProgressTrackerSnapshot
+  evictAfter?: number
 }
 
 export type TaskChangeListener = (t: Task) => void

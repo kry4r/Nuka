@@ -15,11 +15,13 @@ const TAIL_LINES = 50
 
 function fmtState(s: Task['state']): string {
   switch (s) {
-    case 'pending':   return 'pend'
-    case 'running':   return 'run'
-    case 'completed': return 'done'
-    case 'failed':    return 'fail'
-    case 'killed':    return 'kill'
+    case 'pending':            return 'pend'
+    case 'running':            return 'run'
+    case 'completed':          return 'done'
+    case 'failed':             return 'fail'
+    case 'killed':             return 'kill'
+    case 'idle':               return 'idle'
+    case 'shutdown_requested': return 'shut'
   }
 }
 
