@@ -1,5 +1,6 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { tasksDir } from '../paths'
 import type { Task, TaskKind, TaskState } from './types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
@@ -23,7 +24,7 @@ export function metaPath(home: string, id: string): string {
 export function writeMeta(home: string, meta: TaskMeta): void {
   const file = metaPath(home, meta.id)
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  const tmp = `${file}.tmp-${process.pid}`
+  const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`
   fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), 'utf8')
   fs.renameSync(tmp, file)
 }

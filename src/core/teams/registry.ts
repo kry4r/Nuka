@@ -70,7 +70,7 @@ export class TeamRegistry {
   private async persist(t: Team): Promise<void> {
     const cfg = teamConfigPath(this.home, t.name)
     await fsp.mkdir(path.dirname(cfg), { recursive: true })
-    const tmp = `${cfg}.tmp-${process.pid}`
+    const tmp = `${cfg}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`
     await fsp.writeFile(tmp, JSON.stringify(t, null, 2), 'utf8')
     await fsp.rename(tmp, cfg) // atomic on POSIX
   }
