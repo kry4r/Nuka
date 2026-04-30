@@ -47,6 +47,12 @@ import { TasksPanel, flattenedTasksLength } from './Tasks/TasksPanel'
 import { TasksSubmenu } from './Submenu/TasksSubmenu'
 import { findInFlightSubagents } from './Tasks/SubagentList'
 import { MonitorSubmenuWrapper } from './Monitor/MonitorSubmenu'
+// Phase 14b — new 5-column Tasks panel
+import { TasksPanelNew } from './Tasks/TasksPanelNew'
+import { useTasksColumns } from './Tasks/useTasksColumns'
+import { focusReducer, initialFocus } from './Tasks/focusReducer'
+import { eventBus } from '../core/events/bus'
+import { useTerminalSize } from './hooks/useTerminalSize'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -252,6 +258,11 @@ export function App(props: AppProps): React.JSX.Element {
     if (!props.taskManager) return
     return props.taskManager.on('change', bumpTasksTick)
   }, [props.taskManager, bumpTasksTick])
+
+  // Phase 14b — 5-column tasks panel state driven by eventBus
+  const columnsState = useTasksColumns(eventBus)
+  const [tasksFocus14b, setTasksFocus14b] = useState(() => initialFocus())
+  const { columns: terminalCols } = useTerminalSize()
 
   // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
   const [slashCursor, setSlashCursor] = useState(0)
@@ -459,6 +470,26 @@ export function App(props: AppProps): React.JSX.Element {
       }
       return
     }
+    // Phase 14b — 5-column panel keyboard: Tab/j/k/Enter/Esc through focusReducer.
+    // Only active when in normal UI state (not submenu, not slash).
+    if (uiState.kind === 'normal') {
+      if (key.tab && !key.shift) {
+        setTasksFocus14b(f => focusReducer(f, { type: 'tab' }))
+      } else if (key.tab && key.shift) {
+        setTasksFocus14b(f => focusReducer(f, { type: 'shift-tab' }))
+      } else if ((inputKey === 'j' || key.downArrow) && tasksFocus14b.kind === 'tasks-column') {
+        setTasksFocus14b(f => focusReducer(f, { type: 'down' }))
+      } else if ((inputKey === 'k' || key.upArrow) && tasksFocus14b.kind === 'tasks-column') {
+        setTasksFocus14b(f => focusReducer(f, { type: 'up' }))
+      } else if (key.return && tasksFocus14b.kind === 'tasks-column') {
+        const col = columnsState[tasksFocus14b.column]
+        const row = col.rows[tasksFocus14b.selectedIndex]
+        if (row) setTasksFocus14b(f => focusReducer(f, { type: 'enter', rowId: row.id }))
+      }
+    }
+    if (key.escape && tasksFocus14b.kind !== 'prompt') {
+      setTasksFocus14b(f => focusReducer(f, { type: 'esc' }))
+    }
     // Phase 12 §4.2 — Ctrl+T toggles the Tasks panel between expanded
     // and the collapsed summary row. The actual Tasks panel ships in M3;
     // M2 just wires the state transition so harness tests can assert it.
@@ -584,6 +615,14 @@ export function App(props: AppProps): React.JSX.Element {
             Tasks ▸  Plan {props.todoStore ? props.todoStore.items.length : 0} · {props.taskManager ? props.taskManager.list().length : 0} backgrounds   (Ctrl+T to expand)
           </Text>
         </Box>
+      )}
+      {/* Phase 14b — 5-column Tasks panel (eventBus-driven, shown when data exists) */}
+      {tasksVisible && !tasksCollapsed && Object.values(columnsState).some(c => c.rows.length > 0) && (
+        <TasksPanelNew
+          state={columnsState}
+          focus={tasksFocus14b}
+          cols={terminalCols}
+        />
       )}
 
       {/* Prompt zone — replaced by inline submenu when active. */}
