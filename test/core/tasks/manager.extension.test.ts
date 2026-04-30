@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { vi } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -59,5 +60,23 @@ describe('TaskManager extensions', () => {
     const meta = readMeta(home, t.id)
     expect(meta?.id).toBe(t.id)
     expect(['completed', 'failed']).toContain(meta?.state)
+  })
+
+  it('requestShutdown timer is cleared when task transitions before fire', async () => {
+    vi.useFakeTimers()
+    try {
+      const t = mgr.enqueue({ kind: 'local_bash', description: 'd', command: 'true' })
+      await mgr.requestShutdown(t.id)
+      // Manually transition to completed before timer fires.
+      type ManagerInternals = { tasks: Map<string, { state: string }> }
+      const internals = mgr as unknown as ManagerInternals
+      const task = internals.tasks.get(t.id)!
+      task.state = 'completed'
+      // Advance past 30s — cancel should NOT fire (state is 'completed', not 'shutdown_requested').
+      vi.advanceTimersByTime(31_000)
+      expect(task.state).toBe('completed')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

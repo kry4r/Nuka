@@ -342,6 +342,14 @@ class TaskManager {
 
 Internal: `enqueue` runners are now selected by `spec.kind` switch. New runners (`run-teammate.ts`, `run-shell.ts`, `run-remote-agent.ts`, `run-dream.ts`) stub-implemented with the **minimum** needed to compile + pass type checks; full bodies are written in phase14a/c. The runners must emit `task` events for every state transition.
 
+**Foundation note:** `TaskManager.requestShutdown` flips the task to
+`shutdown_requested` and starts the 30s force-kill timer; the protocol
+envelope `{type:'shutdown_request'}` is emitted by the
+`in_process_teammate` runner in phase14a. Reason: TaskManager has no
+MessageRouter dependency in the foundation. The 30s timer is cleared
+when the task transitions out of `shutdown_requested` (graceful exit
+or external cancel).
+
 ### 6.2 EventBus (`src/core/events/bus.ts` — NEW file)
 
 Single-process pub/sub. No persistence inside the bus — that is `events/<session>.ndjson`'s job, written by an opt-in flusher subscriber.

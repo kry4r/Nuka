@@ -51,6 +51,7 @@ export class TaskManager {
   private readonly tasks = new Map<string, Task>()
   private readonly running = new Map<string, RunningEntry>()
   private readonly listeners = new Set<TaskChangeListener>()
+  private readonly shutdownTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(opts: TaskManagerOpts) {
     this.home = opts.home
@@ -171,12 +172,16 @@ export class TaskManager {
     const from = t.state
     t.state = 'shutdown_requested'
     this.bus?.emit('task', { type: 'task.state', id, from, to: 'shutdown_requested' })
-    // Force-kill after 30s if no graceful response.
-    setTimeout(() => {
+    // Note: protocol envelope (shutdown_request) is emitted by the
+    // in_process_teammate runner in phase14a; foundation only flips state.
+    const timer = setTimeout(() => {
       if (this.tasks.get(id)?.state === 'shutdown_requested') {
         void this.cancel(id)
       }
-    }, 30_000).unref()
+      this.shutdownTimers.delete(id)
+    }, 30_000)
+    timer.unref()
+    this.shutdownTimers.set(id, timer)
     try { writeMeta(this.home, fromTask(t)) } catch { /* non-fatal */ }
   }
 
@@ -287,6 +292,11 @@ export class TaskManager {
     state: TaskState,
     patch: Partial<Task> = {},
   ): void {
+    // Cancel pending shutdown timer if the task moves on.
+    if (task.state === 'shutdown_requested' && state !== 'shutdown_requested') {
+      const t = this.shutdownTimers.get(task.id)
+      if (t) { clearTimeout(t); this.shutdownTimers.delete(task.id) }
+    }
     task.state = state
     Object.assign(task, patch)
     this.tasks.set(task.id, task)
