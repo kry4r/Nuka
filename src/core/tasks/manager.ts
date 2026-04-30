@@ -27,10 +27,15 @@ import type {
   TaskSpec,
   TaskState,
 } from './types'
+import type { EventBus } from '../events/bus'
+import type { TaskEvent } from '../events/types'
+import type { ProgressTrackerSnapshot } from './progressTracker'
 
 export type TaskManagerOpts = {
   /** Filesystem root for task logs (`<home>/.nuka/tasks/<id>.log`). */
   home: string
+  /** Phase 14 §6.2 — when provided, manager emits typed task events. */
+  bus?: EventBus
 }
 
 type RunningEntry = {
@@ -41,12 +46,14 @@ type RunningEntry = {
 
 export class TaskManager {
   private readonly home: string
+  private readonly bus?: EventBus
   private readonly tasks = new Map<string, Task>()
   private readonly running = new Map<string, RunningEntry>()
   private readonly listeners = new Set<TaskChangeListener>()
 
   constructor(opts: TaskManagerOpts) {
     this.home = opts.home
+    this.bus = opts.bus
   }
 
   /** Subscribe to state-change events. Returns an unsubscribe function. */
@@ -89,6 +96,7 @@ export class TaskManager {
       spec,
     }
     this.tasks.set(id, task)
+    this.bus?.emit('task', { type: 'task.created', task: { ...task } })
     this.transition(task, 'running', { startedAt: Date.now() })
 
     const abort = new AbortController()
@@ -122,6 +130,67 @@ export class TaskManager {
   async drain(): Promise<void> {
     const entries = [...this.running.values()]
     await Promise.all(entries.map(e => e.done))
+  }
+
+  /** Topic-typed subscribe via the EventBus passed at construction. */
+  subscribe(topic: 'task', cb: (e: TaskEvent) => void): () => void {
+    return this.bus ? this.bus.subscribe(topic, cb) : () => {}
+  }
+
+  setTeammateState(id: string, next: 'idle' | 'running'): void {
+    const t = this.tasks.get(id)
+    if (!t) return
+    const from = t.state
+    t.state = next
+    for (const cb of this.listeners) { try { cb({ ...t }) } catch { /* */ } }
+    this.bus?.emit('task', { type: 'task.state', id, from, to: next })
+  }
+
+  injectMessage(id: string, message: string): void {
+    const t = this.tasks.get(id)
+    if (!t || t.kind !== 'in_process_teammate') return
+    if (t.progress) {
+      t.progress = {
+        ...t.progress,
+        recentActivities: [
+          ...t.progress.recentActivities,
+          { toolName: '__injected', input: { message } },
+        ].slice(-5),
+      }
+    }
+  }
+
+  async requestShutdown(id: string): Promise<void> {
+    const t = this.tasks.get(id)
+    if (!t) return
+    const from = t.state
+    t.state = 'shutdown_requested'
+    this.bus?.emit('task', { type: 'task.state', id, from, to: 'shutdown_requested' })
+    // Force-kill after 30s if no graceful response.
+    setTimeout(() => {
+      if (this.tasks.get(id)?.state === 'shutdown_requested') {
+        void this.cancel(id)
+      }
+    }, 30_000).unref()
+  }
+
+  resolveTeammate(address: string): string | undefined {
+    // address: "team:<team>/<agent>"
+    const m = address.match(/^team:([^/]+)\/(.+)$/)
+    if (!m) return undefined
+    const teamName = m[1]!
+    const agentName = m[2]!
+    for (const t of this.tasks.values()) {
+      if (t.teamName === teamName && t.agentName === agentName) return t.id
+    }
+    return undefined
+  }
+
+  setProgress(id: string, snapshot: ProgressTrackerSnapshot): void {
+    const t = this.tasks.get(id)
+    if (!t) return
+    t.progress = snapshot
+    this.bus?.emit('task', { type: 'task.progress', id, snapshot })
   }
 
   // ---------- internal ----------
