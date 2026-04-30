@@ -1,9 +1,35 @@
 # Nuka
 
 A plugin-first CLI coding assistant. Stream-rendered TUI, multi-agent
-dispatch, LSP-aware tools, in a single ~285 KB bundle.
+swarm, harness-driven workflow, monitor dashboard, recap & dream — in a
+single ~376 KB bundle.
 
 [English](README.md) · [简体中文](README.zh-CN.md)
+
+## Highlights (Phase 14)
+
+- **Multi-agent swarm** — named teammates with persisted teams (`team_create`,
+  `team_delete`), `send_message` (bare / `team:X/Y` / broadcast `team:X/*`),
+  Kahn-topo DAG `pipeline_run`, K-round `roundtable`, coordinator mode that
+  filters lead tools to the swarm-internal whitelist while workers see the
+  full set. Five default role agents: `core:planner`, `core:skeptic`,
+  `core:researcher`, `core:implementer`, `core:reviewer`.
+- **`/monitor` dashboard** — five-column Tasks panel (Plan / Subagents /
+  Pipeline / Backgrounds / Messages) with `Tab` / `j` `k` / `Enter` focus,
+  plus a full-screen view with DAG / Timeline / Tokens tabs that subscribe
+  live to the EventBus.
+- **`/recap` command** — nine field reducers (completed, in-flight, file
+  diffs, tool timeline, messages, pipelines, tokens, decisions, next-step
+  via fork-call) rendered to Markdown and persisted under
+  `~/.nuka/recaps/`. Idle returns surface an `AwaySummaryCard` (1–3
+  sentences). `autoDream` consolidates memdir on a 30-min tick.
+- **`/harness` workflow** — profile-aware stage matrix (brainstorm → spec
+  → plan → search → implement → review → recap). TDD is mandatory **only**
+  for `feature` / `fix` / `refactor` profiles; `explore` / `research` /
+  `docs` / `config` use leaner stage shapes. Three soft-gate primitives
+  (`sequential_thinking`, `search_and_verify`, `ask_user_question`)
+  enforce reflection before stage exit. Editor agent (`core:editor`) is
+  denied Edit/Write/Bash and only dispatches workers.
 
 ## Install
 
@@ -49,9 +75,8 @@ Four stacked zones, top to bottom:
 | Welcome / Messages / tool folds    |
 +------------------------------------+
 +- Tasks ----------------------------+    (Ctrl+T to collapse)
-| Plan checklist                     |
-| Subagents                          |
-| Backgrounds                        |
+| Plan | Subagents | Pipeline |      |
+| Backgrounds | Messages              |
 +------------------------------------+
 +- Prompt ---------------------------+
 | > _                                |
@@ -61,23 +86,40 @@ Four stacked zones, top to bottom:
 +------------------------------------+
 ```
 
-`Conversation` grows to fill height; `Tasks`, `Prompt`, `Status` are
-fixed. `Tasks` is hidden when there is nothing to show.
+The Tasks panel auto-switches to the five-column layout once any swarm /
+agent / message / harness event lands on the bus; below ~100 cols it
+falls back to the legacy single-column view.
 
 Key bindings:
 
-| Key      | Action                                             |
-|----------|----------------------------------------------------|
-| `/`      | Open slash command list                            |
-| `@`      | File mention                                       |
-| `Ctrl+T` | Collapse / expand the Tasks panel                  |
-| `Esc`    | Close the open submenu, or cancel the running turn |
-| `Tab`    | Accept a slash candidate                           |
-| `?`      | `/help`                                            |
+| Key       | Action                                              |
+|-----------|-----------------------------------------------------|
+| `/`       | Open slash command list                             |
+| `@`       | File mention                                        |
+| `Ctrl+T`  | Collapse / expand the Tasks panel                   |
+| `Tab`     | Cycle column focus inside Tasks (also accepts slash candidates) |
+| `j` / `k` | Move row focus inside the focused Tasks column      |
+| `Enter`   | Open the focused row's detail submenu (Subagent / Pipeline / Message) |
+| `Esc`     | Close the open submenu, or cancel the running turn  |
+| `?`       | `/help`                                             |
 
 Slash commands and dialogs (model picker, config editor, sessions,
-stats, doctor) render as a single-stack submenu that takes over the
-lower zones; `Esc` returns to the normal layout.
+stats, doctor, monitor) render as a single-stack submenu that takes
+over the lower zones; `Esc` returns to the normal layout.
+
+## Swarm & workflow commands
+
+| Slash         | Purpose |
+|---------------|---------|
+| `/monitor`    | Full-screen dashboard with DAG / Timeline / Tokens tabs |
+| `/recap`      | Build a structured recap of the current session, persist to `~/.nuka/recaps/<date>-<sess>.md` |
+| `/harness`    | Drive a profile-aware workflow stage machine: `deep` / `fast` / `off` / `reset` / `status` / `transition <stage>` |
+| `/teams`      | List / inspect persisted teams under `~/.nuka/teams/` |
+
+In coordinator mode (`NUKA_COORDINATOR_MODE=1`) the lead session is
+restricted to `team_create` / `team_delete` / `send_message` /
+`dispatch_agent` / `task_*` / `synthetic_output`. Workers dispatched via
+`dispatch_agent` see the full tool set.
 
 ## Plugin authoring
 
@@ -187,6 +229,20 @@ enterprise -> user (~/.nuka/config.yaml) -> project (.nuka/) -> local (.nuka/loc
 ```
 
 `nuka config show [--scope user]` prints the resolved tree.
+
+## On-disk layout
+
+Nuka boots `~/.nuka/` lazily and runs a once-per-process retention sweep:
+
+| Dir              | Retention | Contents                                       |
+|------------------|-----------|------------------------------------------------|
+| `tasks/`         | 14 days   | `<id>.log` + `<id>.meta.json` per background task |
+| `teams/<name>/`  | n/a       | `config.json` (zod-validated) per team         |
+| `forks/<sess>/`  | 24 hours  | `<fork-id>.json` for prompt-cache-safe forks   |
+| `recaps/`        | 90 days   | Persisted `/recap` Markdown                    |
+| `events/`        | 7 days    | Optional NDJSON event log (off by default)     |
+| `harness/`       | n/a       | Per-session scratchpad (50 KB cap)             |
+| `memdir/`        | n/a       | autoDream consolidation target                 |
 
 ## Contributing
 
