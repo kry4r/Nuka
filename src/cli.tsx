@@ -70,6 +70,7 @@ import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
+import { dispatchAgent } from './core/agents/dispatch'
 import { validatePlugin, formatReport } from './core/plugin/validate'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
@@ -530,10 +531,58 @@ async function runInteractive(): Promise<void> {
   tools.register(makeTeamDeleteTool({ teams: swarmTeams }) as any)
   tools.register(makeSendMessageTool({ router: swarmRouter, teams: swarmTeams }) as any)
   tools.register(makePipelineRunTool({
-    runPipeline: (i) => runPipeline({ input: i, runStage: async () => '' }),
+    runPipeline: (i) => runPipeline({
+      input: i,
+      runStage: async (nodeId, prompt) => {
+        const node = i.nodes.find(n => n.id === nodeId)
+        if (!node) throw new Error(`pipeline: node "${nodeId}" not found`)
+        const agentDef = agents.find(node.agent)
+        if (!agentDef) throw new Error(`pipeline: unknown agent "${node.agent}"`)
+        const ctrl = new AbortController()
+        const r = await dispatchAgent({
+          agent: agentDef, task: prompt, registry: tools,
+          providerResolver: providers, permission, signal: ctrl.signal,
+        })
+        return typeof r.output === 'string'
+          ? r.output
+          : r.output.map(b => b.type === 'text' ? (b as { type: 'text'; text: string }).text : '').join('')
+      },
+    }),
   }) as any)
   tools.register(makeRoundtableTool({
-    runRoundtable: (i) => runRoundtable({ input: i, sendRound: async () => '', synthesize: async () => '' }),
+    runRoundtable: (i) => runRoundtable({
+      input: i,
+      sendRound: async (memberName, round) => {
+        const member = i.members.find(m => m.name === memberName)
+        if (!member) throw new Error(`roundtable: member "${memberName}" not found`)
+        const agentDef = agents.find(member.agent)
+        if (!agentDef) throw new Error(`roundtable: unknown agent "${member.agent}"`)
+        const ctrl = new AbortController()
+        const r = await dispatchAgent({
+          agent: agentDef,
+          task: `[Roundtable round ${round + 1}] Topic: ${i.topic}\nYour role: ${member.role}`,
+          registry: tools, providerResolver: providers, permission, signal: ctrl.signal,
+        })
+        return typeof r.output === 'string'
+          ? r.output
+          : r.output.map(b => b.type === 'text' ? (b as { type: 'text'; text: string }).text : '').join('')
+      },
+      synthesize: async (transcript) => {
+        const synthMember = i.members.find(m => m.name === i.synthesizer)
+        const agentRef = synthMember?.agent ?? i.synthesizer
+        const agentDef = agents.find(agentRef)
+        if (!agentDef) throw new Error(`roundtable: unknown synthesizer agent "${agentRef}"`)
+        const ctrl = new AbortController()
+        const r = await dispatchAgent({
+          agent: agentDef,
+          task: `Synthesize the following roundtable discussion into a final artifact:\n\n${transcript}`,
+          registry: tools, providerResolver: providers, permission, signal: ctrl.signal,
+        })
+        return typeof r.output === 'string'
+          ? r.output
+          : r.output.map(b => b.type === 'text' ? (b as { type: 'text'; text: string }).text : '').join('')
+      },
+    }),
   }) as any)
 
   for (const role of ROLE_AGENTS) agents.register(role)
