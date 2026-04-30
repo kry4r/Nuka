@@ -1,0 +1,38 @@
+// src/tui/Monitor/MonitorView.tsx
+//
+// Phase 14b — Full-screen monitor dashboard with DAG / Timeline / Tokens tabs.
+import * as React from 'react'
+import { Box, Text } from 'ink'
+import { DagView } from './DagView'
+import { TimelineView } from './TimelineView'
+import { TokensView } from './TokensView'
+import { useTheme } from '../../core/theme/context'
+import { defaultPalette } from '../theme'
+
+type Tab = 'dag' | 'timeline' | 'tokens'
+
+export function MonitorView(p: {
+  events: Array<{ t: number; topic: 'task' | 'agent' | 'message' | 'harness' }>
+  dagNodes: Array<{ id: string; agentName: string; status: string; parents: string[] }>
+  agentUsage?: Array<{ agentName: string; inputTokens: number; outputTokens: number }>
+  cols?: number
+}): React.ReactNode {
+  const theme = useTheme()
+  const fgMutedColor = theme.colors.fgMuted ?? defaultPalette.fgMuted
+  const [tab, setTab] = React.useState<Tab>('dag')
+  const cols = p.cols ?? 120
+  if (cols < 80) return <Text color="yellow">Terminal too narrow ({cols} cols) — Monitor needs ≥ 80.</Text>
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text bold inverse={tab === 'dag'}> DAG </Text>
+        <Text bold inverse={tab === 'timeline'}> Timeline </Text>
+        <Text bold inverse={tab === 'tokens'}> Tokens </Text>
+        <Text color={fgMutedColor}>  [Tab] cycle · [Esc] close</Text>
+      </Box>
+      {tab === 'dag'      && <DagView nodes={p.dagNodes} />}
+      {tab === 'timeline' && <TimelineView events={p.events} />}
+      {tab === 'tokens'   && <TokensView usage={p.agentUsage ?? []} />}
+    </Box>
+  )
+}
