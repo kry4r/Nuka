@@ -60,4 +60,43 @@ describe('run-teammate', () => {
     await router.send({ id: 'x', from: 'lead', to: 'team:demo/bob', summary: 'shutdown', message: { type: 'shutdown_request', request_id: 'r1' }, sentAt: 0 })
     await promise
   })
+
+  it('emits shutdown_request envelope when manager flips task state to shutdown_requested', async () => {
+    const bus = createEventBus()
+    const backend = new InProcessBackend()
+    const router = new MessageRouter({ backends: [backend], bus })
+    const fakeAgentLoop = async () => ({ text: 'k', usage: { inputTokens: 0, outputTokens: 0 } })
+    const task = {
+      id: 't3', kind: 'in_process_teammate' as const, description: '', state: 'pending' as const,
+      outputFile: '', spec: {
+        kind: 'in_process_teammate' as const, description: '', teamName: 'demo', agentName: 'carol',
+        agentDef: { name: 'carol', description: 'c', maxTurns: 5, pluginName: 'core', allowedTools: [], deniedTools: [], systemPrompt: 'x' } as never,
+        initialMessage: 'go', longRunning: true,
+      },
+    } as never
+
+    // Track envelopes sent to carol's address
+    const sent: string[] = []
+    router.inbox('team:demo/carol').subscribe((env: any) => {
+      if (env.message?.type) sent.push(env.message.type)
+    })
+
+    const ctrl = new AbortController()
+    const promise = runTeammate(task, ctrl.signal, {
+      bus, router,
+      providerResolver: { resolve: () => null } as never,
+      runOneTurn: fakeAgentLoop as never,
+      home,
+      summarizerInterval: 1_000_000,
+    })
+
+    // Let it process initialMessage and go idle
+    await new Promise(res => setTimeout(res, 50))
+
+    // Manager emits task.state → shutdown_requested (simulating requestShutdown)
+    bus.emit('task', { type: 'task.state', id: 't3', from: 'running', to: 'shutdown_requested' })
+
+    await promise
+    expect(sent).toContain('shutdown_request')
+  })
 })

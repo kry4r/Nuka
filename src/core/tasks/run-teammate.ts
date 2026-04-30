@@ -53,6 +53,23 @@ export async function runTeammate(task: Task, signal: AbortSignal, deps?: RunTea
     if (waitResolver) { waitResolver(); waitResolver = null }
   })
 
+  // When the manager flips task state to 'shutdown_requested' via the bus, emit a
+  // shutdown_request envelope to our own address so the inbox handler above can
+  // respond with a shutdown_response and exit cleanly. (manager.ts:175)
+  const busOff = deps.bus.subscribe('task', (e: unknown) => {
+    const ev = e as { type: string; id: string; to: string }
+    if (ev.type === 'task.state' && ev.id === task.id && ev.to === 'shutdown_requested') {
+      void deps.router.send({
+        id: ulid(),
+        from: 'manager',
+        to: localAddr,
+        summary: 'shutdown requested by manager',
+        message: { type: 'shutdown_request', request_id: ulid() },
+        sentAt: Date.now(),
+      })
+    }
+  })
+
   // Build a minimal session record
   const session = {
     id: task.id,
@@ -86,4 +103,5 @@ export async function runTeammate(task: Task, signal: AbortSignal, deps?: RunTea
   }
 
   inboxOff()
+  busOff()
 }
