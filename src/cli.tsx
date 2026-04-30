@@ -42,6 +42,8 @@ import { IdeCommand } from './slash/ide'
 import { StatusBarCommand } from './slash/statusBar'
 import { createPluginCommand } from './slash/plugin'
 import { SkillCommand } from './slash/skill'
+import { RecapCommand } from './slash/recap'
+import { monitorCommand } from './slash/monitor'
 import { ReadTool } from './core/tools/read'
 import { WriteTool } from './core/tools/write'
 import { EditTool } from './core/tools/edit'
@@ -86,6 +88,10 @@ import type { RecentEntry } from './core/session/recent'
 import { ensureNukaLayout } from './core/paths'
 import { runRetentionSweep } from './core/tasks/retention'
 import { eventBus } from './core/events/bus'
+import { HarnessStateMachine } from './core/harness/state'
+import { editorAgent } from './core/agents/builtin/editor'
+import { makeSequentialThinkingTool, makeSearchAndVerifyTool, makeAskUserQuestionTool } from './core/harness/primitives'
+import { makeHarnessCommand } from './slash/harness'
 
 const argv = process.argv.slice(2)
 
@@ -391,7 +397,7 @@ async function runInteractive(): Promise<void> {
     CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand,
     HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
-    StatusBarCommand, SkillCommand,
+    StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
   // (install/update from the marketplace) live as top-level CLI subcommands;
@@ -472,6 +478,10 @@ async function runInteractive(): Promise<void> {
     permBridge.ask({ ...payload, suggestedPattern: suggestPattern(payload.call) })
 
   const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
+
+  // Phase 14d — register core:editor agent before dispatch_agent so it
+  // appears in the dispatch_agent description (which snapshots agents.list()).
+  agents.register(editorAgent)
 
   // Register the dispatch_agent tool after all plugins have wired their agents
   // (so the tool's description enumerates every <plugin>:<agent> pair).
@@ -565,6 +575,25 @@ async function runInteractive(): Promise<void> {
   }
   setMemdirSynthCallable(synthAndAppend)
   const synthOnExit = async (): Promise<void> => { await synthAndAppend() }
+
+  // Phase 14d — harness state machine + primitives + /harness slash.
+  // Mode defaults to 'deep'; set to 'off' in config.harness.mode to disable.
+  // Note: session.leadAgent and systemPromptOverride are not yet available in
+  // this host; editor system prompt binding deferred to phase14b/c follow-up.
+  const harnessMode = activeSession ? (config.harness?.mode ?? 'deep') : 'off'
+  const harness = new HarnessStateMachine({
+    sessionId: sessions.active()?.id ?? 'default',
+    bus: eventBus,
+    home,
+    mode: harnessMode,
+    scratchpadKB: config.harness?.scratchpadKB ?? 50,
+  })
+  if (harnessMode !== 'off') {
+    tools.register(makeSequentialThinkingTool(harness) as any)
+    tools.register(makeSearchAndVerifyTool(harness, { runResearcher: async (q) => `(stub) results for: ${q}` }) as any)
+    tools.register(makeAskUserQuestionTool(harness, { askUser: async (q) => `(prompt user via TUI: ${q})` }) as any)
+  }
+  slash.register(makeHarnessCommand(harness))
 
   render(
     <App

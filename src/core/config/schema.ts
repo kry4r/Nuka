@@ -128,6 +128,39 @@ export const RewindConfigSchema = z
   })
   .optional()
 
+export const HarnessConfigSchema = z
+  .object({
+    /** deep (default): full stage walk; fast: skip Brainstorm+Spec; off: disable harness */
+    mode: z.enum(['deep', 'fast', 'off']).default('deep'),
+    /** max scratchpad size in KB before oldest-section truncation */
+    scratchpadKB: z.number().default(50),
+    /** profiles that require TDD in the implement stage */
+    forceTddProfiles: z.array(z.string()).default(['feature', 'fix', 'refactor']),
+  })
+  .optional()
+export type HarnessConfig = z.infer<typeof HarnessConfigSchema>
+
+/** Phase 14c — /recap and autoDream configuration. */
+export const RecapConfigSchema = z
+  .object({
+    /** Show the away-summary card after idle return (default: true). */
+    awayCard: z.boolean().default(true),
+    /** Idle threshold in minutes before showing the away-summary card. */
+    awayThresholdMinutes: z.number().min(1).default(5),
+    /** autoDream memory consolidation settings. */
+    autoDream: z
+      .object({
+        enabled: z.boolean().default(true),
+        /** Minimum hours since last consolidation before triggering. */
+        minHours: z.number().default(6),
+        /** Minimum new sessions since last consolidation before triggering. */
+        minSessions: z.number().default(3),
+      })
+      .default({ enabled: true, minHours: 6, minSessions: 3 }),
+  })
+  .optional()
+export type RecapConfig = z.infer<typeof RecapConfigSchema>
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -140,6 +173,9 @@ export const ConfigSchema = z.object({
   rewind: RewindConfigSchema,
   statusLine: StatusLineConfigSchema,
   statusBar: StatusBarConfigSchema,
+  harness: HarnessConfigSchema,
+  /** Phase 14c — /recap and autoDream settings. */
+  recap: RecapConfigSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.

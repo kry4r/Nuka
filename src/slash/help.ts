@@ -12,6 +12,7 @@ const CMDS: Array<[string, string]> = [
   ['/compact', 'Summarize older messages to free context'],
   ['/cost', 'Show cost and token breakdown'],
   ['/tasks', 'List/show/cancel background tasks'],
+  ['/recap [--since 1h]', 'Generate a structured recap of the current session'],
 ]
 
 export const HelpCommand: SlashCommand = {
