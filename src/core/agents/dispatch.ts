@@ -78,6 +78,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   const model = agent.model ?? parentSession?.model ?? ''
   const session = createSession({ providerId, model })
   session.allowedAgentDispatch = false
+  session.allowedTeamCreate = false
 
   // Seed with the first user message; include optional context.
   const firstText = context !== undefined && context.length > 0
