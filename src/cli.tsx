@@ -83,6 +83,9 @@ import { loadUpdates } from './core/updates/load'
 import type { UpdateEntry } from './core/updates/load'
 import { loadRecent } from './core/session/recent'
 import type { RecentEntry } from './core/session/recent'
+import { ensureNukaLayout } from './core/paths'
+import { runRetentionSweep } from './core/tasks/retention'
+import { eventBus } from './core/events/bus'
 
 const argv = process.argv.slice(2)
 
@@ -411,7 +414,10 @@ async function runInteractive(): Promise<void> {
   }))
 
   // Phase 10 §4.3 — singleton TaskManager for the lifetime of the CLI process.
-  const taskManager = new TaskManager({ home: os.homedir() })
+  const home = os.homedir()
+  ensureNukaLayout(home)
+  try { runRetentionSweep(home) } catch { /* non-fatal */ }
+  const taskManager = new TaskManager({ home, bus: eventBus })
 
   const extraDirs = parsePluginDirs(process.argv.slice(2))
   const plugins = await loadPlugins({
