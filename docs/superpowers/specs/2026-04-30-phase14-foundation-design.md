@@ -384,6 +384,12 @@ export const eventBus: EventBus = createEventBus()  // module-singleton
 
 Ring buffer is **lossy** by design — Recap reads from `events/*.ndjson` (durable), Monitor reads from ring (live + cheap).
 
+**Naming clarification:** Implementation uses `AgentBusEvent` (not
+`AgentEvent`) for the bus payload to avoid collision with the existing
+`AgentEvent` model-stream union in `src/core/agent/events.ts`. The bus
+topic name is still `agent`. Plan see `docs/superpowers/plans/2026-04-30-phase14-foundation-plan.md`
+Task 4.
+
 ### 6.3 MessageRouter (`src/core/messaging/router.ts` — NEW file)
 
 ```ts
@@ -597,6 +603,14 @@ Each M is one PR / one branch. M1–M2 are blocking (everything else depends on 
 - **phase14b — Monitor** (depends on M1–M3): Tasks panel multi-column extension (Plan / Subagents / Backgrounds / Pipeline / Messages); Tab focus + j/k + Enter zoomed view; per-Task interaction (inject message / pause / kill / approve plan-mode); `/monitor` full-screen dashboard with DAG / timeline / token tabs.
 - **phase14c — Recap** (depends on M2, M4): `/recap` command (9 fields: completed tasks, in-progress/failed, file diffs by agent, tool timeline, swarm message digest, pipeline node states, token/cost, next-step suggestion via small fast model, key decisions); auto away-summary card with idle-detection trigger; `~/.nuka/recaps/<date>.md` persistence; autoDream background consolidation.
 - **phase14d — Workflow harness** (depends on M2, plus phase14a/c primitives): stage state machine (Brainstorm → Spec → Plan → Search/Verify → Implement → Review → Recap, hard gates); editor-in-chief agent (持有 spec / 项目记忆 / 各 worker 产出，决定派工 / 审稿 / 打回 / 进下一阶段); per-stage default skill bundles; sequential-thinking + multi-search + ask_user enforced inside each stage; fast-path bypass via env/flag.
+
+**Close-out audit (M8):**
+- Bundle size: 312 KB (budget 315 KB).
+- Tests added: 11 unit suites + 2 integration tests.
+- Public exports added: EventBus, MessageRouter, TeamRegistry,
+  ProgressTracker, runForkedAgent, isCoordinatorMode, ensureNukaLayout.
+- No public type renamed except internal `AgentEvent` → `AgentBusEvent` (bus payload only).
+- Sub-spec phases unblocked: phase14a (depends on M1, M5, M6, M7 ✅).
 
 ## 9. Risks & rollbacks
 
