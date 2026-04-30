@@ -13,8 +13,8 @@ export function pickSkillsForStage(stage: HarnessStage, profile: TaskProfile): S
     case 'plan':       return { required: ['superpowers:writing-plans'],     optional: ['claudeApi'], forbidden: ['tdd'] }
     case 'search':     return { required: ['loop'],                          optional: ['claudeApi'], forbidden: ['tdd'] }
     case 'implement':  return tddRequiresProfile
-                          ? { required: ['tdd', 'simplify'], optional: [],       forbidden: [] }
-                          : { required: ['simplify'],        optional: ['tdd'],  forbidden: ['tdd'] }
+                          ? { required: ['tdd', 'simplify'], optional: [],  forbidden: [] }
+                          : { required: ['simplify'],        optional: [],  forbidden: ['tdd'] }
     case 'review':     return { required: ['superpowers:requesting-code-review'], optional: [], forbidden: ['tdd'] }
     case 'recap':      return { required: [], optional: [], forbidden: ['tdd', 'simplify', 'superpowers:brainstorming', 'superpowers:writing-plans'] }
   }
