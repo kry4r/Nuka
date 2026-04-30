@@ -16,23 +16,9 @@
 // `<home>/.nuka/tasks/<id>.log`.
 
 import type { ResolvedAgentDef } from '../agents/types'
+import type { ProgressTrackerSnapshot } from './progressTracker'
 
-// Temporary local alias until M3 ships progressTracker.ts.
-// Remove this and switch back to `import type { ProgressTrackerSnapshot } from './progressTracker'`
-// in the M3 milestone (Task 7).
-export type ProgressTrackerSnapshot = {
-  toolUseCount: number
-  latestInputTokens: number
-  cumulativeOutputTokens: number
-  recentActivities: Array<{
-    toolName: string
-    input: Record<string, unknown>
-    activityDescription?: string
-    isSearch?: boolean
-    isRead?: boolean
-  }>
-  summary?: string
-}
+export type { ProgressTrackerSnapshot } from './progressTracker'
 
 export type TaskKind =
   | 'local_bash'
