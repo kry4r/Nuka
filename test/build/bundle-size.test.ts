@@ -3,7 +3,8 @@
 // Phase 10 §4.1 — bundle-size guard.
 //
 // Runs `npm run build` once and asserts that:
-//   1. `dist/cli.js`         ≤ 320 KB (the production-CLI ceiling).
+//   1. `dist/cli.js`         ≤ 340 KB (raised from 320 KB to accommodate
+//      phase14 a+b+c+d additions; plan budget is 510 KB total for phase14).
 //   2. `dist/test-runner.js` exists  (so `--test-plan` can lazy-load it).
 //
 // The test-runner bundle has no size cap; it carries all of the testing
@@ -19,7 +20,7 @@ const ROOT = join(__dirname, '..', '..')
 const CLI_JS = join(ROOT, 'dist', 'cli.js')
 const TEST_RUNNER_JS = join(ROOT, 'dist', 'test-runner.js')
 
-const CLI_CEILING_BYTES = 320 * 1024
+const CLI_CEILING_BYTES = 340 * 1024
 
 describe('build: bundle split + size', () => {
   beforeAll(() => {
@@ -31,7 +32,7 @@ describe('build: bundle split + size', () => {
     }
   }, 60_000)
 
-  it('dist/cli.js stays under the 320 KB ceiling', () => {
+  it('dist/cli.js stays under the 340 KB ceiling', () => {
     const size = statSync(CLI_JS).size
     expect(size).toBeLessThanOrEqual(CLI_CEILING_BYTES)
   })
