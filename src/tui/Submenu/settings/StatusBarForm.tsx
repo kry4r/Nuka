@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/StatusBarForm.tsx
+// src/tui/Submenu/settings/StatusBarForm.tsx
 //
 // Phase 13 §4.2 — updated for new segment set and iconMode field.
 // Edits:
@@ -13,7 +13,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Box, Text } from 'ink'
 import { Field } from './Field'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 const LAYOUTS = ['dense', 'compact', 'oneline'] as const
 type Layout = typeof LAYOUTS[number]

@@ -1,6 +1,6 @@
 // test/core/session/session.test.ts
 import { describe, it, expect, vi } from 'vitest'
-import { createSession, branchSession, appendMessage } from '../../../src/core/session/session'
+import { createSession, forkSession, appendMessage } from '../../../src/core/session/session'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Message } from '../../../src/core/message/types'
 
@@ -21,7 +21,7 @@ describe('session factory', () => {
     expect(s.permissionCache.list()).toHaveLength(0)
   })
 
-  it('branchSession deep-clones messages and links parentId', () => {
+  it('forkSession deep-clones messages and links parentId', () => {
     const parent = createSession({ providerId: 'p1', model: 'x' })
     parent.messages.push({
       role: 'user',
@@ -29,7 +29,7 @@ describe('session factory', () => {
       ts: 1,
       content: [{ type: 'text', text: 'hi' }],
     })
-    const child = branchSession(parent)
+    const child = forkSession(parent)
     expect(child.parentId).toBe(parent.id)
     expect(child.messages).toHaveLength(1)
     // mutating child should not affect parent
@@ -37,10 +37,10 @@ describe('session factory', () => {
     expect(parent.messages).toHaveLength(1)
   })
 
-  it('branchSession copies parent permission rules into a fresh child cache', () => {
+  it('forkSession copies parent permission rules into a fresh child cache', () => {
     const parent = createSession({ providerId: 'p1', model: 'x' })
     parent.permissionCache.add({ scope: 'session', hint: 'write' })
-    const child = branchSession(parent)
+    const child = forkSession(parent)
     expect(child.permissionCache).toBeInstanceOf(PermissionCache)
     expect(child.permissionCache).not.toBe(parent.permissionCache)
     expect(child.permissionCache.list()).toHaveLength(1)

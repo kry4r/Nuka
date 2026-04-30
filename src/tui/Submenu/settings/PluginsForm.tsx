@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/PluginsForm.tsx
+// src/tui/Submenu/settings/PluginsForm.tsx
 //
 // Phase 13 §4.5 — multi-select toggle for `config.plugins.enabled`.
 // Renders every loaded plugin as a checklist row:
@@ -7,13 +7,13 @@
 //   [ ] <name>  <description>
 //
 // j/k (↑/↓) move the cursor; Space toggles enabled state; `s` (handled
-// by ConfigSubmenu) saves the resulting `enabled` array via
+// by SettingsSubmenu) saves the resulting `enabled` array via
 // saveConfigPatch. If `loadedPlugins` is empty we render a placeholder.
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export type PluginsFormProps = FormCommonProps & {
   loadedPlugins: { name: string; description?: string }[]

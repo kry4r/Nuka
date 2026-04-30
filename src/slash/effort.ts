@@ -1,0 +1,65 @@
+import os from 'node:os'
+import { saveConfigPatch } from '../core/config/save'
+import type { Effort } from '../core/config/schema'
+import type { SlashCommand, SlashContext } from './types'
+
+const LEVELS: readonly Effort[] = ['low', 'medium', 'high'] as const
+
+function isEffort(v: string): v is Effort & string {
+  return v === 'low' || v === 'medium' || v === 'high'
+}
+
+/**
+ * Models that support reasoning/thinking. Used only for the warning hint;
+ * the setting is saved either way so it activates when the user switches
+ * to a thinking-capable model.
+ */
+function modelSupportsThinking(model: string): boolean {
+  if (/^claude-(opus|sonnet)-4/.test(model)) return true
+  if (/^o\d/.test(model)) return true
+  if (/gpt-5/.test(model)) return true
+  return false
+}
+
+export const EffortCommand: SlashCommand = {
+  name: 'effort',
+  description: 'Pick reasoning effort (low / medium / high)',
+  source: 'builtin',
+  usage: '/effort [low|medium|high]',
+  args: [{ name: 'level', choices: ['low', 'medium', 'high'] }],
+  examples: ['/effort', '/effort high'],
+  run: async (args: string, ctx: SlashContext) => {
+    const arg = args.trim().toLowerCase()
+
+    if (arg === '') {
+      return { type: 'dialog', dialog: { kind: 'effort-picker' } }
+    }
+
+    if (!isEffort(arg)) {
+      return {
+        type: 'text',
+        text: `Invalid effort: "${arg}". Valid: ${LEVELS.join(', ')}.`,
+      }
+    }
+
+    try {
+      await saveConfigPatch(os.homedir(), (obj: any) => {
+        obj.effort = arg
+      })
+    } catch (err) {
+      return {
+        type: 'text',
+        text: `Failed to save effort: ${(err as Error).message}`,
+      }
+    }
+    ;(ctx.config as any).effort = arg
+
+    const session = ctx.sessions.active()
+    const model = session?.model ?? ''
+    const supports = model ? modelSupportsThinking(model) : true
+    const note = supports
+      ? ''
+      : `\nNote: ${model} does not support reasoning/thinking — value saved and will apply on a thinking-capable model.`
+    return { type: 'text', text: `Effort set to ${arg}.${note}` }
+  },
+}

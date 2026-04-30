@@ -37,12 +37,15 @@ export function appendMessage(
   msg: Message,
   sink?: (s: Session, m: Message) => void,
 ): void {
-  session.messages.push(msg)
+  // Replace the array reference (rather than push in place) so React
+  // consumers — notably ink's `<Static>`, which memoizes on the array
+  // identity — observe the new entry on the next render.
+  session.messages = [...session.messages, msg]
   session.updatedAt = Date.now()
   sink?.(session, msg)
 }
 
-export function branchSession(parent: Session): Session {
+export function forkSession(parent: Session): Session {
   const child = createSession({
     providerId: parent.providerId,
     model: parent.model,

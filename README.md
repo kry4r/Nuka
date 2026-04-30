@@ -50,7 +50,7 @@ npm link
 nuka
 ```
 
-Add a provider on first launch via `/config`, or write `~/.nuka/config.yaml`:
+Add a provider on first launch via `/settings`, or write `~/.nuka/config.yaml`:
 
 ```yaml
 providers:
@@ -101,7 +101,7 @@ collapses to a compact single-column fallback.
 | `/recap`      | Build a structured recap of the session, persisted to `~/.nuka/recaps/`     |
 | `/harness`    | Drive the workflow stage machine — `deep` · `fast` · `off` · `status` · `transition <stage>` |
 | `/teams`      | List and inspect teams persisted under `~/.nuka/teams/`                      |
-| `/config`     | Edit providers, models, theme, and feature flags inline                      |
+| `/settings`   | Edit providers, models, theme, and feature flags inline                      |
 | `/sessions`   | Browse and resume prior sessions                                             |
 | `/stats`      | Token, cost, and latency rollups                                             |
 | `/doctor`     | Health check of providers, plugins, LSP, and on-disk layout                  |

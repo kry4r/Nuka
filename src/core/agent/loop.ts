@@ -78,6 +78,8 @@ export type RunAgentDeps = {
    *  (agent.tool.start / agent.tool.end / agent.usage) for every tool
    *  call and turn-end usage update. */
   bus?: EventBus
+  /** Reasoning effort hint forwarded to provider.stream() each turn. */
+  effort?: 'low' | 'medium' | 'high'
 }
 
 /**
@@ -253,6 +255,7 @@ export async function* runAgent(
         system,
         messages: session.messages,
         tools: toolSpecs,
+        effort: deps.effort,
       },
       signal,
     )

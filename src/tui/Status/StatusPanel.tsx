@@ -32,7 +32,7 @@ import type { StatusLineConfig } from '../../core/config/schema'
 import type { TaskManager } from '../../core/tasks/manager'
 import { execFirstLine, template, type StatusLineCtx } from './statusLine'
 
-export type StatusMode = 'idle' | 'running' | 'awaiting-user' | 'primed-quit'
+export type StatusMode = 'idle' | 'running' | 'awaiting-user'
 export type StatusLayout = 'dense' | 'compact' | 'oneline'
 export type IconMode = 'icon' | 'text'
 
@@ -40,6 +40,8 @@ export type StatusPanelProps = {
   mode: StatusMode
   model: string
   providerId: string
+  /** Reasoning effort (low/medium/high), undefined when unset. */
+  effort?: 'low' | 'medium' | 'high'
   cwd: string
   gitBranch: { branch: string; dirty: boolean } | null
   contextUsed: number
@@ -210,7 +212,12 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     },
     {
       id: 'model',
-      render: () => <Text color={muted}>{props.model} · {props.providerId}</Text>,
+      render: () => (
+        <Text color={muted}>
+          {props.model} · {props.providerId}
+          {props.effort ? ` · effort:${props.effort}` : ''}
+        </Text>
+      ),
     },
     {
       id: 'cwd',

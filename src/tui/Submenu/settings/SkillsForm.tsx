@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/SkillsForm.tsx
+// src/tui/Submenu/settings/SkillsForm.tsx
 //
 // Phase 12 §4.7 — read-only listing of registered skills (no editable
 // fields in Phase 12; activation is implicit).
@@ -6,7 +6,7 @@
 import React, { useEffect } from 'react'
 import { Box, Text } from 'ink'
 import { useColors } from '../../../core/theme/context'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export type SkillsFormProps = FormCommonProps & {
   loadedSkills: { name: string; description?: string }[]

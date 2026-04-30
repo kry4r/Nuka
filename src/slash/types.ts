@@ -6,7 +6,8 @@ import type { TaskManager } from '../core/tasks/manager'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
-  | { kind: 'config' }
+  | { kind: 'effort-picker' }
+  | { kind: 'settings' }
   | { kind: 'session-picker' }
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
@@ -16,7 +17,7 @@ export type DialogDescriptor =
 
 export type SessionEffect =
   | { kind: 'new-session' }
-  | { kind: 'branch-session' }
+  | { kind: 'fork-session' }
   | { kind: 'clear-screen' }
   | { kind: 'compact' }
 

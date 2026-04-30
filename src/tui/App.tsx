@@ -5,15 +5,17 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
-import { Conversation } from './Conversation/Conversation'
 import { PromptInput } from './PromptInput/PromptInput'
 import { StatusPanel } from './Status/StatusPanel'
 import { SubmenuFrame } from './Submenu/SubmenuFrame'
 import { PermissionDialog } from './dialogs/PermissionDialog'
 import { PluginConfigDialog } from './dialogs/PluginConfigDialog'
 import { ModelPicker } from './dialogs/ModelPicker'
-import { ConfigSubmenu } from './Submenu/config/ConfigSubmenu'
+import { EffortPicker } from './dialogs/EffortPicker'
+import { SettingsSubmenu } from './Submenu/settings/SettingsSubmenu'
+import { recentAssistantMessages } from '../slash/rewind'
 import { saveConfigPatch } from '../core/config/save'
+import { appendMessage } from '../core/session/session'
 import { SessionPicker } from './dialogs/SessionPicker'
 import type { SessionMeta } from '../core/session/store'
 import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
@@ -81,8 +83,9 @@ export function findLatestDispatchAgentCallId(messages: readonly import('../core
  */
 export type SubmenuDescriptor =
   // full submenus — take over Tasks/Prompt/Status slots
-  | { kind: 'config' }
+  | { kind: 'settings' }
   | { kind: 'model-picker' }
+  | { kind: 'effort-picker' }
   | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
   | { kind: 'onboarding-wizard' }
   | { kind: 'stats' }
@@ -216,9 +219,9 @@ export type AppProps = {
   taskManager?: TaskManager
   /** Phase 12 M3 — todo store from createTodoStore(); mutated in-place by TodoWrite tool. */
   todoStore?: TodoState
-  /** Phase 12 M4 — read-only list of loaded plugins for ConfigSubmenu PluginsForm. */
+  /** Phase 12 M4 — read-only list of loaded plugins for SettingsSubmenu PluginsForm. */
   loadedPlugins?: { name: string; description?: string }[]
-  /** Phase 12 M4 — read-only list of loaded skills for ConfigSubmenu SkillsForm. */
+  /** Phase 12 M4 — read-only list of loaded skills for SettingsSubmenu SkillsForm. */
   loadedSkills?: { name: string; description?: string }[]
   /** Phase 13 M2 — updates from ~/.nuka/updates.json */
   updates?: import('../core/updates/load').UpdateEntry[]
@@ -239,7 +242,10 @@ export function App(props: AppProps): React.JSX.Element {
     dispatchUI({ type: 'slash-set', active })
   }, [])
   const [tip] = useState(() => pickTip(props.config.welcome?.tips))
-  const [primedQuit, setPrimedQuit] = useState(false)
+  // Timestamp of the most-recent Esc that landed in normal+idle state. A
+  // second Esc within 2s opens the rewind submenu (#8). Replaces the old
+  // double-Esc-quits gesture; explicit exit still works via Q / :q / /exit.
+  const lastEscRef = useRef<number>(0)
   // Bumped whenever we mutate session.messages directly so React re-renders.
   const [, setMessageTick] = useState(0)
   // Phase 12 M3 — tick drives re-renders of TasksPanel whose data sources
@@ -264,7 +270,7 @@ export function App(props: AppProps): React.JSX.Element {
   // Phase 14b review fix: prefer new panel when it has data; legacy panel is mutually exclusive.
   const useColumnsPanel = Object.values(columnsState).some(c => c.rows.length > 0)
   const [tasksFocus14b, setTasksFocus14b] = useState(() => initialFocus())
-  const { columns: terminalCols } = useTerminalSize()
+  const { columns: terminalCols, rows: terminalRows } = useTerminalSize()
 
   // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
   const [slashCursor, setSlashCursor] = useState(0)
@@ -316,8 +322,8 @@ export function App(props: AppProps): React.JSX.Element {
       next.model = session.model
       setSession(next)
       stream.reset()
-    } else if (effect.kind === 'branch-session') {
-      const next = props.sessions.branch()
+    } else if (effect.kind === 'fork-session') {
+      const next = props.sessions.fork()
       setSession(next)
       stream.reset()
     } else if (effect.kind === 'compact') {
@@ -362,7 +368,7 @@ export function App(props: AppProps): React.JSX.Element {
       else if (res.type === 'text') {
         // Render the slash output as an inline assistant-styled message so
         // the user can see what /status-bar, /vim, /tasks, etc. returned.
-        session.messages.push({
+        appendMessage(session, {
           role: 'assistant',
           content: [{ type: 'text', text: `[/${parsed.name}]\n${res.text}` }],
           id: `slash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -378,7 +384,8 @@ export function App(props: AppProps): React.JSX.Element {
       const cmd = raw.slice(1).trim()
       const output = await runBangShell(cmd, props.cwd)
       const text = `[!cmd $ ${cmd}]\n${output}`
-      session.messages.push(makeUserMessage({ text }))
+      appendMessage(session, makeUserMessage({ text }))
+      bumpMessages()
       return
     }
 
@@ -403,20 +410,13 @@ export function App(props: AppProps): React.JSX.Element {
     await stream.send(text)
   }, [props, session, stream, handleSlashEffect, exit])
 
-  useEffect(() => {
-    if (!primedQuit) return
-    const id = setTimeout(() => setPrimedQuit(false), 2000)
-    return () => clearTimeout(id)
-  }, [primedQuit])
-
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
 
   useInput((inputKey, key) => {
     if (key.escape) {
-      // Phase 12 §4.2 — Esc always returns to normal from any non-normal
-      // UIState. Inline submenus (permission/plugin-config) own their own
-      // Esc handler which resolves the pending decision; we don't preempt
-      // those here. Stream-running cancel still wins over UIState reset.
+      // Esc always returns to normal from any non-normal UIState. Inline
+      // submenus (permission/plugin-config) own their own Esc handler; we
+      // don't preempt those. Stream-running cancel wins over UIState reset.
       if (stream.running) { stream.cancel(); return }
       if (uiState.kind === 'submenu' && isInlineSubmenu(uiState.submenu)) {
         // Let the inline dialog's own useInput run.
@@ -424,10 +424,23 @@ export function App(props: AppProps): React.JSX.Element {
       }
       if (uiState.kind !== 'normal') {
         dispatchUI({ type: 'reset' })
+        lastEscRef.current = 0
         return
       }
-      if (primedQuit) { props.onExit(); exit() }
-      else { setPrimedQuit(true) }
+      // Already normal + idle: a second Esc within 2s opens the rewind
+      // submenu (#8). The first Esc just primes the timer.
+      const now = Date.now()
+      if (now - lastEscRef.current < 2000) {
+        lastEscRef.current = 0
+        const recent = recentAssistantMessages(session.messages, 10)
+        if (recent.length === 0) return
+        dispatchUI({
+          type: 'open-submenu',
+          submenu: { kind: 'message-selector', messages: recent },
+        })
+        return
+      }
+      lastEscRef.current = now
       return
     }
     // Phase 13 M4 — Tab enters Tasks focus mode when Tasks panel is non-empty;
@@ -513,16 +526,19 @@ export function App(props: AppProps): React.JSX.Element {
     }
   })
 
-  const streamingMsg = null // Phase 1 renders via messages[]; streaming text is appended via runAgent pushing to session.messages
+  // Mid-stream assistant text is mirrored on the hook's `streamingAssistant`
+  // and rendered live via Messages' non-Static streaming row. Once the loop
+  // appends the final AssistantMessage to session.messages, the hook clears
+  // streamingAssistant so the static row replaces the live one seamlessly.
+  const streamingMsg = stream.streamingAssistant
   const justCompacted = stream.events.some(e => e.type === 'auto_compacted')
   const contextUsed = session.totalUsage.inputTokens + session.totalUsage.outputTokens
   const contextMax = props.config.compact?.contextWindow ?? 200_000
   const pc = props.providers.getProviderConfig(session.providerId)
   const cost = pc ? computeCost(pc, session.model, session.totalUsage) : 0
-  const hintMode: 'idle' | 'running' | 'awaiting-user' | 'primed-quit' =
+  const hintMode: 'idle' | 'running' | 'awaiting-user' =
     uiState.kind === 'submenu' ? 'awaiting-user'
       : stream.running ? 'running'
-      : primedQuit ? 'primed-quit'
       : 'idle'
 
   const activeTheme = resolveTheme((props.config.theme as any)?.name ?? 'default-dark')
@@ -545,12 +561,16 @@ export function App(props: AppProps): React.JSX.Element {
   // by SlashCard in M5). Inline submenus replace the Prompt; full
   // submenus take the whole lower stack.
   const promptVisible = !submenuFull && !submenuInline
-  // Status zone is hidden by the slash card (M5 will move SlashCard into
-  // the Status slot) and by full submenus.
-  const statusVisible = !submenuFull && !slashActive
-  // Welcome stays OUTSIDE the Conversation frame when there are no
-  // messages — keeps the centered avocado logo at full canvas (§4.4 note).
-  const showWelcomeRaw = session.messages.length === 0
+  // Status zone is hidden by full submenus only — the slash card now sits
+  // above the prompt (instead of replacing the status slot), so status
+  // stays visible while the user is typing a slash command.
+  const statusVisible = !submenuFull
+  // Welcome lives outside the Static stream when no messages exist (so it
+  // can re-render as cwd/branch/model change), then flips INTO the Static
+  // stream as the first item the moment the first message lands — that way
+  // it scrolls upward with subsequent messages instead of being toggled off.
+  // Full submenus (e.g. /settings) are rendered later in the tree on top of
+  // the conversation zone, so we don't need to gate Welcome on submenu state.
   // Phase 12 §4.9 — focus-ring rule: only the frame currently owning
   // keyboard focus renders its border with `primary`; every other frame
   // uses `fgMuted`. The Conversation frame is never the keyboard target
@@ -565,13 +585,19 @@ export function App(props: AppProps): React.JSX.Element {
 
   return (
     <ThemeProvider theme={activeTheme}>
-    <Box flexDirection="column">
-      {/* Conversation zone */}
-      <Box flexDirection="column" flexGrow={1}>
+    {/* Anchor the prompt + status to the bottom of the terminal: the outer
+        column is forced to full terminal height, the conversation zone
+        absorbs the leftover space via flexGrow=1, and every other zone
+        keeps its natural height (flexShrink=0). */}
+    <Box flexDirection="column" height={terminalRows}>
+      {/* Conversation zone — soft layout region (no frame). Welcome rides
+          inside the Static stream as the first item so it scrolls off-screen
+          as messages accumulate, rather than staying glued to the live area. */}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1}>
         {justCompacted && (
           <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
         )}
-        {showWelcomeRaw ? (
+        {session.messages.length === 0 && (
           <Welcome
             cwd={props.cwd}
             gitBranch={props.gitBranch}
@@ -581,17 +607,27 @@ export function App(props: AppProps): React.JSX.Element {
             updates={props.updates}
             recent={props.recent}
           />
-        ) : (
-          <Conversation focused={false}>
-            <Messages
-              items={session.messages}
-              streaming={streamingMsg}
-              expandedAgentCallIds={expandedAgentCallIds}
-              resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
-              resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
-            />
-          </Conversation>
         )}
+        <Messages
+          items={session.messages}
+          streaming={streamingMsg}
+          expandedAgentCallIds={expandedAgentCallIds}
+          resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
+          resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
+          prologue={
+            session.messages.length > 0 ? (
+              <Welcome
+                cwd={props.cwd}
+                gitBranch={props.gitBranch}
+                model={session.model}
+                version={props.version}
+                tip={tip}
+                updates={props.updates}
+                recent={props.recent}
+              />
+            ) : null
+          }
+        />
       </Box>
 
       {/* Tasks zone — M3: full TasksPanel when expanded, summary row when collapsed.
@@ -649,6 +685,16 @@ export function App(props: AppProps): React.JSX.Element {
           />
         </SubmenuFrame>
       )}
+      {/* SlashCard expands UPWARD above the prompt — it sits BEFORE PromptInput
+          in source order so the suggestion list stacks above the input box. */}
+      {slashActive && props.slash && promptVisible && (
+        <SlashCard
+          value={input}
+          registry={props.slash}
+          selectedIndex={slashCursor}
+          focused={true}
+        />
+      )}
       {promptVisible && (
         <PromptInput
           value={input}
@@ -665,35 +711,62 @@ export function App(props: AppProps): React.JSX.Element {
           onSlashCursorChange={setSlashCursor}
         />
       )}
-      {/* Phase 12 §4.8 — SlashCard takes over the Status slot when slash is active. */}
-      {slashActive && props.slash && (
-        <SlashCard
-          value={input}
-          registry={props.slash}
-          selectedIndex={slashCursor}
-          focused={true}
-        />
-      )}
 
       {/* Full submenus — replace Tasks/Prompt/Status entirely. */}
       {submenuFull && submenu?.kind === 'model-picker' && (
         <SubmenuFrame mode="full" title="Model picker" focused>
           <ModelPicker
             providers={props.providers.listProviders()}
+            activeProviderId={session.providerId}
+            activeModel={session.model}
+            onSave={async (mutate) => {
+              await saveConfigPatch(os.homedir(), (obj) => {
+                mutate(obj)
+                mutate(props.config as unknown as Record<string, unknown>)
+              })
+              bumpMessages()
+            }}
             onSelect={(providerId, model) => {
               session.providerId = providerId
               session.model = model
               closeSubmenu()
             }}
             onAddProvider={() => dispatchUI({ type: 'open-submenu', submenu: { kind: 'onboarding-wizard' } })}
-            onRefresh={async (providerId) => props.providers.fetchRemoteModels(providerId)}
+            onFetchRemote={async (providerId) => props.providers.fetchRemoteModels(providerId)}
             onCancel={closeSubmenu}
           />
         </SubmenuFrame>
       )}
-      {submenuFull && submenu?.kind === 'config' && (
-        <SubmenuFrame mode="full" title="Config" focused>
-          <ConfigSubmenu
+      {submenuFull && submenu?.kind === 'effort-picker' && (
+        <SubmenuFrame mode="full" title="Reasoning effort" focused>
+          <EffortPicker
+            current={props.config.effort}
+            onSelect={async (level) => {
+              try {
+                await saveConfigPatch(os.homedir(), (obj) => {
+                  obj.effort = level
+                })
+                ;(props.config as unknown as { effort?: 'low' | 'medium' | 'high' }).effort = level
+              } catch (err) {
+                const e = err as NodeJS.ErrnoException
+                const text = `[/effort] save failed: [${e?.code ?? 'ERR'}] ${(err as Error).message ?? ''}`
+                appendMessage(session, {
+                  role: 'assistant',
+                  content: [{ type: 'text', text }],
+                  id: `effort-err-${Date.now()}`,
+                  ts: Date.now(),
+                })
+              }
+              bumpMessages()
+              closeSubmenu()
+            }}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {submenuFull && submenu?.kind === 'settings' && (
+        <SubmenuFrame mode="full" title="Settings" focused>
+          <SettingsSubmenu
             config={props.config}
             onSave={async (mutate) => {
               try {
@@ -711,8 +784,8 @@ export function App(props: AppProps): React.JSX.Element {
                 // are still re-thrown so forms can flash the offending field.
                 const e = err as NodeJS.ErrnoException
                 if (e?.code) {
-                  const text = `[/config] save failed: [${e.code}] ${e.message}`
-                  session.messages.push({
+                  const text = `[/settings] save failed: [${e.code}] ${e.message}`
+                  appendMessage(session, {
                     role: 'assistant',
                     content: [{ type: 'text', text }],
                     id: `cfg-err-${Date.now()}`,
@@ -811,6 +884,7 @@ export function App(props: AppProps): React.JSX.Element {
           mode={hintMode}
           model={session.model}
           providerId={session.providerId || '—'}
+          effort={props.config.effort}
           cwd={props.cwd}
           gitBranch={props.gitBranch}
           contextUsed={contextUsed}

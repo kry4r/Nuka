@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/ModelForm.tsx
+// src/tui/Submenu/settings/ModelForm.tsx
 //
 // Phase 12 §4.7 — model selector. Lists models known to the active
 // provider; the user can pick one (it becomes provider.selectedModel)
@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react'
 import { Box, Text } from 'ink'
 import { useColors } from '../../../core/theme/context'
 import { Field } from './Field'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export function ModelForm(props: FormCommonProps): React.JSX.Element {
   const colors = useColors()

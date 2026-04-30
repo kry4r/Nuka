@@ -28,7 +28,7 @@ import type { UpdateEntry } from '../../core/updates/load'
 import type { RecentEntry } from '../../core/session/recent'
 
 // ≈ rows consumed by Tasks + Prompt + Status zones
-const RESERVED_ROWS = 12
+const RESERVED_ROWS = 18
 const NARROW_THRESHOLD = 100
 
 export type WelcomeProps = {
@@ -53,8 +53,8 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
 
   const narrow = columns < NARROW_THRESHOLD
 
-  // Vertical centering: total rows minus reserved bottom zones, floor at 8
-  const contentHeight = Math.max(8, rows - RESERVED_ROWS)
+  // Vertical centering: total rows minus reserved bottom zones, floor at 5
+  const contentHeight = Math.max(5, rows - RESERVED_ROWS)
 
   // Branch display
   const git = gitBranch
@@ -66,19 +66,12 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
 
   const heroContent = (
     <Box flexDirection="column" alignItems="center" justifyContent="center" height={contentHeight}>
-      {/* Logo */}
       <Box justifyContent="center">
-        <Logo />
+        <Logo compact />
       </Box>
-      {/* Blank */}
-      <Box height={1} />
-      {/* NUKA wordmark */}
       <Box justifyContent="center">
         <Text color={P.primary} bold>NUKA</Text>
       </Box>
-      {/* Blank */}
-      <Box height={1} />
-      {/* <model> · <cwd> <branch> — no labels */}
       <Box justifyContent="center">
         <Text color={P.fgMuted}>
           {model}
@@ -88,9 +81,6 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
           {git}
         </Text>
       </Box>
-      {/* Blank */}
-      <Box height={1} />
-      {/* Hint */}
       <Box justifyContent="center">
         <Text color={P.accentInfo}>Type <Text color={P.primary}>/</Text> for commands</Text>
       </Box>

@@ -2,7 +2,7 @@
 //
 // Phase 7 §7.2 acceptance — offline mode no longer hard-exits when no
 // providers are configured; the CLI prints the offline banner and waits
-// for the user to launch the wizard via /config or `nuka init`.
+// for the user to launch the wizard via /settings or `nuka init`.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'

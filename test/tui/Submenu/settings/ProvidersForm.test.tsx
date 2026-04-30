@@ -1,4 +1,4 @@
-// test/tui/Submenu/config/ProvidersForm.test.tsx
+// test/tui/Submenu/settings/ProvidersForm.test.tsx
 //
 // Phase 13 §4.5 — list rendering, edit-mode entry, save round-trip,
 // delete confirmation, and Enter-to-activate.
@@ -6,7 +6,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { ProvidersForm } from '../../../../src/tui/Submenu/config/ProvidersForm'
+import { ProvidersForm } from '../../../../src/tui/Submenu/settings/ProvidersForm'
 import type { Config } from '../../../../src/core/config/schema'
 
 function installRawShim() {

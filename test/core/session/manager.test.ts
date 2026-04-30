@@ -27,11 +27,11 @@ describe('SessionManager', () => {
     expect(m.list()).toEqual([a, b])
   })
 
-  it('branch() forks active, makes fork active, preserves parent', () => {
+  it('fork() forks active, makes fork active, preserves parent', () => {
     const m = new SessionManager()
     const a = m.start({ providerId: 'p', model: 'x' })
     a.messages.push({ role: 'user', id: 'u', ts: 1, content: [] })
-    const b = m.branch()
+    const b = m.fork()
     expect(b.parentId).toBe(a.id)
     expect(m.active()).toBe(b)
     expect(m.list()).toHaveLength(2)

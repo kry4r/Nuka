@@ -20,16 +20,15 @@ import { ExitCommand } from './slash/exit'
 import { HelpCommand } from './slash/help'
 import { ClearCommand } from './slash/clear'
 import { NewCommand } from './slash/new'
-import { BranchCommand } from './slash/branch'
+import { ForkCommand } from './slash/fork'
 import { BtwCommand } from './slash/btw'
 import { CostCommand } from './slash/cost'
 import { ModelCommand } from './slash/model'
-import { ConfigCommand } from './slash/config'
+import { EffortCommand } from './slash/effort'
+import { SettingsCommand } from './slash/settings'
 import { CompactCommand } from './slash/compact'
 import { ResumeCommand } from './slash/resume'
-import { HistoryCommand } from './slash/history'
 import { MemdirCommand, setMemdirSynthCallable } from './slash/memdir'
-import { DeleteSessionCommand } from './slash/delete-session'
 import { VimCommand } from './slash/vim'
 import { DoctorCommand } from './slash/doctor'
 import { RewindCommand } from './slash/rewind'
@@ -355,7 +354,7 @@ async function runInteractive(): Promise<void> {
   const hasProviders = config.providers.length > 0
   if (!hasProviders) {
     console.error(
-      `\u001b[33m[nuka]\u001b[0m No providers configured. Starting in offline mode — use /config or /model to add a provider, or edit ${globalConfigPath()}.`,
+      `\u001b[33m[nuka]\u001b[0m No providers configured. Starting in offline mode — use /settings or /model to add a provider, or edit ${globalConfigPath()}.`,
     )
   }
 
@@ -407,9 +406,9 @@ async function runInteractive(): Promise<void> {
 
   const slash = new SlashRegistry()
   ;[
-    ExitCommand, HelpCommand, ClearCommand, NewCommand, BranchCommand, BtwCommand,
-    CostCommand, ModelCommand, ConfigCommand, CompactCommand, ResumeCommand,
-    HistoryCommand, DeleteSessionCommand, MemdirCommand, VimCommand, DoctorCommand,
+    ExitCommand, HelpCommand, ClearCommand, NewCommand, ForkCommand, BtwCommand,
+    CostCommand, ModelCommand, EffortCommand, SettingsCommand, CompactCommand, ResumeCommand,
+    MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
     StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
   ].forEach(c => slash.register(c))
@@ -641,7 +640,7 @@ async function runInteractive(): Promise<void> {
 
   const runAgent = (input: { text: string }, session: Session, signal: AbortSignal) => {
     if (!session.providerId) {
-      throw new Error('No provider configured. Use /config to add one, or edit ~/.nuka/config.yaml.')
+      throw new Error('No provider configured. Use /settings to add one, or edit ~/.nuka/config.yaml.')
     }
     return runAgentLoop(input, session, {
       provider: providers,
@@ -657,6 +656,7 @@ async function runInteractive(): Promise<void> {
       hooks,
       lsp: lspManager,
       costTracker,
+      effort: config.effort,
     }, signal)
   }
 

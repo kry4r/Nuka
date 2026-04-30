@@ -111,8 +111,7 @@ export function MessageRow(props: {
 }): React.JSX.Element | null {
   const { m } = props
   if (m.role === 'system') return null
-  const speaker = m.role === 'user' ? 'you' : m.role === 'assistant' ? 'nuka' : 'tool'
-  const color = m.role === 'user' ? P.primarySoft : m.role === 'assistant' ? P.primary : P.accentCool
+  const barColor = m.role === 'user' ? P.success : m.role === 'assistant' ? P.error : P.accentCool
 
   if (m.role === 'tool') {
     // Suppress the standalone tool-role block for dispatch_agent — the
@@ -125,11 +124,9 @@ export function MessageRow(props: {
         ? m.content
         : m.content.map(b => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n')
     return (
-      <Box flexDirection="column" marginY={1}>
-        <Text color={color} bold>
-          ▎ {speaker}
-        </Text>
-        <Box marginLeft={2}>
+      <Box flexDirection="row" marginY={1}>
+        <Text color={barColor} bold>▎ </Text>
+        <Box flexDirection="column" flexGrow={1}>
           <Markdown source={toolContent} />
         </Box>
       </Box>
@@ -139,11 +136,9 @@ export function MessageRow(props: {
   if (m.role === 'assistant') {
     const blocks = m.content
     return (
-      <Box flexDirection="column" marginY={1}>
-        <Text color={color} bold>
-          ▎ {speaker}
-        </Text>
-        <Box flexDirection="column" marginLeft={2}>
+      <Box flexDirection="row" marginY={1}>
+        <Text color={barColor} bold>▎ </Text>
+        <Box flexDirection="column" flexGrow={1}>
           {blocks.map((b: any, i: number) => {
             if (b.type === 'text') {
               return <Markdown key={i} source={b.text} />
@@ -213,12 +208,10 @@ export function MessageRow(props: {
   // user message
   const text = m.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('')
   return (
-    <Box flexDirection="column" marginY={1}>
-      <Text color={color} bold>
-        ▎ {speaker}
-      </Text>
-      <Box marginLeft={2}>
-        <Markdown source={text} />
+    <Box flexDirection="row" marginY={1}>
+      <Text color={barColor} bold>▎ </Text>
+      <Box flexGrow={1}>
+        <Text color={P.fg} backgroundColor={P.bgPanel}>{text}</Text>
       </Box>
     </Box>
   )

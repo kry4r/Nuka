@@ -1,4 +1,4 @@
-// test/tui/Submenu/config/PluginsForm.test.tsx
+// test/tui/Submenu/settings/PluginsForm.test.tsx
 //
 // Phase 13 §4.5 — checklist render, space-toggle round-trip via formSave,
 // and placeholder when no plugins are detected.
@@ -6,7 +6,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { PluginsForm } from '../../../../src/tui/Submenu/config/PluginsForm'
+import { PluginsForm } from '../../../../src/tui/Submenu/settings/PluginsForm'
 import type { Config } from '../../../../src/core/config/schema'
 
 function installRawShim() {

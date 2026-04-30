@@ -15,6 +15,24 @@ function makeFakeSdkStream(events: unknown[]): AsyncIterable<unknown> {
   }
 }
 
+/**
+ * Like makeFakeSdkStream but yields each event after awaiting a per-iteration
+ * promise so two streams can be interleaved deterministically.
+ */
+function makeGatedSdkStream(
+  events: unknown[],
+  gate: () => Promise<void>,
+): AsyncIterable<unknown> {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const e of events) {
+        await gate()
+        yield e
+      }
+    },
+  }
+}
+
 describe('AnthropicProvider.translate', () => {
   it('translates content_block_delta text into text_delta events', async () => {
     const provider = new AnthropicProvider({
@@ -94,5 +112,67 @@ describe('AnthropicProvider.translate', () => {
         usage: { inputTokens: 5, outputTokens: 8 },
       },
     ])
+  })
+
+  it('preserves per-stream usage/stopReason when two translateStream calls run concurrently', async () => {
+    // Single provider instance — same one would be reused across parallel
+    // dispatch_agent subagents. Two interleaved streams must not clobber
+    // each other's message_delta/usage.
+    const provider = new AnthropicProvider({
+      id: 'p',
+      apiKey: 'sk',
+      baseUrl: 'https://api.anthropic.com',
+    })
+
+    const eventsA = [
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'A' } },
+      { type: 'content_block_stop', index: 0 },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn' },
+        usage: { input_tokens: 100, output_tokens: 11 },
+      },
+      { type: 'message_stop' },
+    ]
+    const eventsB = [
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'B' } },
+      { type: 'content_block_stop', index: 0 },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: 'tool_use' },
+        usage: { input_tokens: 200, output_tokens: 22 },
+      },
+      { type: 'message_stop' },
+    ]
+
+    // Each gate awaits a setTimeout(0) to force interleaving across the two
+    // for-await loops on the JS event-loop turn boundary.
+    const yieldTurn = (): Promise<void> => new Promise(r => setTimeout(r, 0))
+
+    const consume = async (stream: AsyncIterable<ProviderEvent>): Promise<ProviderEvent[]> => {
+      const out: ProviderEvent[] = []
+      for await (const ev of stream) out.push(ev)
+      return out
+    }
+
+    const [outA, outB] = await Promise.all([
+      consume(provider.translateStream(makeGatedSdkStream(eventsA, yieldTurn))),
+      consume(provider.translateStream(makeGatedSdkStream(eventsB, yieldTurn))),
+    ])
+
+    const stopA = outA.find(e => e.type === 'message_stop')
+    const stopB = outB.find(e => e.type === 'message_stop')
+    expect(stopA).toEqual({
+      type: 'message_stop',
+      stopReason: 'end_turn',
+      usage: { inputTokens: 100, outputTokens: 11 },
+    })
+    expect(stopB).toEqual({
+      type: 'message_stop',
+      stopReason: 'tool_use',
+      usage: { inputTokens: 200, outputTokens: 22 },
+    })
   })
 })

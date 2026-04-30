@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/ThemeForm.tsx
+// src/tui/Submenu/settings/ThemeForm.tsx
 //
 // Phase 12 §4.7 — selects theme.name among the five seed themes.
 
@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react'
 import { Box, Text } from 'ink'
 import { Field } from './Field'
 import { listThemes } from '../../../core/theme/themes'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export function ThemeForm(props: FormCommonProps): React.JSX.Element {
   const choices = listThemes().map(t => t.name)

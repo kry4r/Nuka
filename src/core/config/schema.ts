@@ -161,6 +161,9 @@ export const RecapConfigSchema = z
   .optional()
 export type RecapConfig = z.infer<typeof RecapConfigSchema>
 
+export const EffortSchema = z.enum(['low', 'medium', 'high']).optional()
+export type Effort = z.infer<typeof EffortSchema>
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema,
@@ -176,6 +179,8 @@ export const ConfigSchema = z.object({
   harness: HarnessConfigSchema,
   /** Phase 14c — /recap and autoDream settings. */
   recap: RecapConfigSchema,
+  /** Reasoning effort for thinking-capable models (low/medium/high). */
+  effort: EffortSchema,
   /**
    * Enterprise-only: dot-paths that cannot be overridden by lower-priority scopes.
    * Declared in the enterprise config; ignored if declared in other scopes.

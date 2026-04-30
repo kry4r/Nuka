@@ -1,126 +1,228 @@
-// src/tui/dialogs/ModelPicker.tsx
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { ProviderConfig } from '../../core/config/schema'
-import { defaultPalette as P } from '../theme'
+import { useColors } from '../../core/theme/context'
 
-type View = { kind: 'root' } | { kind: 'models'; providerId: string }
+type Stage =
+  | { kind: 'providers' }
+  | { kind: 'models'; providerId: string }
 
-type MenuItem = { label: string; action: () => void | Promise<void> }
-
-export function ModelPicker(props: {
+export type ModelPickerProps = {
   providers: ProviderConfig[]
+  /** Active session model — used to mark `[●]` when also shortlisted. */
+  activeProviderId?: string
+  activeModel?: string
+  /** Persist + mirror config: mutator runs against the YAML config object. */
+  onSave: (mutate: (obj: any) => void) => Promise<void>
+  /** Called after the user activates a model — switches the session. */
   onSelect: (providerId: string, model: string) => void
   onAddProvider: () => void
-  onRefresh: (providerId: string) => Promise<string[]>
+  /** Fetches /v1/models for a provider. */
+  onFetchRemote: (providerId: string) => Promise<string[]>
   onCancel: () => void
-}): React.JSX.Element {
-  // All hooks are hoisted unconditionally to the top of the component to
-  // satisfy React Rules of Hooks (no conditional hook calls).
-  const [view, setView] = useState<View>({ kind: 'root' })
+}
+
+type LoadState =
+  | { kind: 'loading' }
+  | { kind: 'loaded'; models: string[]; remote: boolean; error?: string }
+
+export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
+  const colors = useColors()
+  const [stage, setStage] = useState<Stage>({ kind: 'providers' })
   const [cursor, setCursor] = useState(0)
 
-  // models state is always present; populated when drilling into a provider.
   const currentProvider =
-    view.kind === 'models'
-      ? (props.providers.find(p => p.id === view.providerId) ?? null)
+    stage.kind === 'models'
+      ? props.providers.find(p => p.id === stage.providerId) ?? null
       : null
-  const [models, setModels] = useState<string[]>(currentProvider?.models ?? [])
 
-  // Build the item list for the current view.
-  const items: MenuItem[] =
-    view.kind === 'root'
-      ? [
-          ...props.providers.map(p => ({
-            label: `${p.name}    ${p.baseUrl}`,
-            action: () => {
-              setModels(p.models ?? [])
-              setView({ kind: 'models', providerId: p.id })
-              setCursor(0)
-            },
-          })),
-          { label: '[+] Add provider…', action: props.onAddProvider },
-        ]
-      : currentProvider !== null
-        ? [
-            ...models.map(m => ({
-              label: m,
-              action: () => props.onSelect(currentProvider.id, m),
-            })),
-            {
-              label: '[↻] Refresh from /v1/models',
-              action: async () => {
-                const fresh = await props.onRefresh(currentProvider.id)
-                setModels(fresh)
-                setCursor(0)
-              },
-            },
-            {
-              label: '[← Back]',
-              action: () => {
-                setView({ kind: 'root' })
-                setCursor(0)
-              },
-            },
-          ]
-        : []
+  const [load, setLoad] = useState<LoadState>({ kind: 'loaded', models: [], remote: false })
+  const [shortlist, setShortlist] = useState<string[]>([])
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined)
 
-  // Use a ref so the stable useInput callback always reads the latest state
-  // without creating a new function reference on every render (which would
-  // cause ink's useEffect to re-subscribe on each render — but async, meaning
-  // rapid stdin writes would hit a stale listener).
-  const stateRef = useRef({ items, cursor, view })
-  stateRef.current = { items, cursor, view }
-
-  // Single, stable useInput call — always at the top level (Rules of Hooks).
-  // Logic is gated by view.kind at runtime via the ref.
-  const inputHandler = useCallback((_input: string, key: import('ink').Key) => {
-    const { items: currentItems, cursor: currentCursor, view: currentView } = stateRef.current
-    if (key.upArrow) {
-      setCursor(c => Math.max(0, c - 1))
-    } else if (key.downArrow) {
-      setCursor(c => Math.min(currentItems.length - 1, c + 1))
-    } else if (key.return) {
-      const item = currentItems[currentCursor]
-      if (item !== undefined) {
-        void item.action()
+  // Stage 2 entry — fetch remote /v1/models. Falls back to the static
+  // shortlist on failure with a small inline error line.
+  useEffect(() => {
+    if (stage.kind !== 'models' || !currentProvider) return
+    let cancelled = false
+    setShortlist([...(currentProvider.models ?? [])])
+    setSelectedModel(currentProvider.selectedModel)
+    setCursor(0)
+    setLoad({ kind: 'loading' })
+    void (async () => {
+      try {
+        const remote = await props.onFetchRemote(currentProvider.id)
+        if (cancelled) return
+        if (remote.length === 0) {
+          setLoad({ kind: 'loaded', models: [...(currentProvider.models ?? [])], remote: false })
+          return
+        }
+        setLoad({ kind: 'loaded', models: remote, remote: true })
+      } catch (err) {
+        if (cancelled) return
+        setLoad({
+          kind: 'loaded',
+          models: [...(currentProvider.models ?? [])],
+          remote: false,
+          error: (err as Error).message ?? 'fetch failed',
+        })
       }
-    } else if (key.escape) {
-      if (currentView.kind === 'models') {
-        setView({ kind: 'root' })
-        setCursor(0)
-      } else {
+    })()
+    return () => { cancelled = true }
+  }, [stage, currentProvider, props])
+
+  const persistShortlist = useCallback(async (providerId: string, next: string[]) => {
+    await props.onSave((obj: any) => {
+      const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
+      const p = list.find((x: any) => x.id === providerId)
+      if (p) p.models = next
+    })
+  }, [props])
+
+  const persistActive = useCallback(async (providerId: string, model: string, ensureShortlist: string[]) => {
+    await props.onSave((obj: any) => {
+      const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
+      const p = list.find((x: any) => x.id === providerId)
+      if (p) {
+        p.models = ensureShortlist
+        p.selectedModel = model
+      }
+      obj.active = { providerId }
+    })
+  }, [props])
+
+  const stateRef = useRef({ stage, cursor, load, shortlist, selectedModel, currentProvider })
+  stateRef.current = { stage, cursor, load, shortlist, selectedModel, currentProvider }
+
+  const inputHandler = useCallback((input: string, key: import('ink').Key) => {
+    const s = stateRef.current
+    if (s.stage.kind === 'providers') {
+      const total = props.providers.length + 1 // +1 for "Add provider…"
+      if (key.upArrow) setCursor(c => Math.max(0, c - 1))
+      else if (key.downArrow) setCursor(c => Math.min(total - 1, c + 1))
+      else if (key.return) {
+        if (s.cursor === props.providers.length) {
+          props.onAddProvider()
+          return
+        }
+        const provider = props.providers[s.cursor]
+        if (provider) {
+          setStage({ kind: 'models', providerId: provider.id })
+          setCursor(0)
+        }
+      } else if (key.escape) {
         props.onCancel()
       }
+      return
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // intentionally empty: all mutable state is accessed through stateRef
+    // models stage
+    if (s.load.kind === 'loading') {
+      if (key.escape) {
+        setStage({ kind: 'providers' })
+        setCursor(0)
+      }
+      return
+    }
+    const total = s.load.models.length
+    if (total === 0) {
+      if (key.escape) {
+        setStage({ kind: 'providers' })
+        setCursor(0)
+      }
+      return
+    }
+    if (key.upArrow) setCursor(c => Math.max(0, c - 1))
+    else if (key.downArrow) setCursor(c => Math.min(total - 1, c + 1))
+    else if (input === ' ') {
+      const model = s.load.models[s.cursor]
+      if (!model || !s.currentProvider) return
+      const isIn = s.shortlist.includes(model)
+      const next = isIn ? s.shortlist.filter(m => m !== model) : [...s.shortlist, model]
+      setShortlist(next)
+      void persistShortlist(s.currentProvider.id, next)
+    } else if (key.return) {
+      const model = s.load.models[s.cursor]
+      if (!model || !s.currentProvider) return
+      let next = s.shortlist
+      if (!next.includes(model)) {
+        next = [...next, model]
+        setShortlist(next)
+      }
+      setSelectedModel(model)
+      void persistActive(s.currentProvider.id, model, next).then(() => {
+        props.onSelect(s.currentProvider!.id, model)
+      })
+    } else if (key.escape) {
+      setStage({ kind: 'providers' })
+      setCursor(0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props, persistShortlist, persistActive])
 
   useInput(inputHandler)
 
-  if (view.kind === 'root') {
+  if (stage.kind === 'providers') {
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
-        <Text color={P.primary} bold>Select provider</Text>
-        {items.map((it, i) => (
-          <Text key={i} color={i === cursor ? P.primary : P.fg}>
-            {i === cursor ? '›' : ' '} {it.label}
-          </Text>
-        ))}
+      <Box flexDirection="column">
+        <Text color={colors.fg}>Select provider:</Text>
+        {props.providers.map((p, i) => {
+          const selected = i === cursor
+          return (
+            <Text key={p.id} color={selected ? colors.primary : colors.fg} bold={selected}>
+              {selected ? '›' : ' '} {p.name}  <Text color={colors.fgMuted}>{p.baseUrl}</Text>
+            </Text>
+          )
+        })}
+        {(() => {
+          const i = props.providers.length
+          const selected = i === cursor
+          return (
+            <Text color={selected ? colors.primary : colors.fg} bold={selected}>
+              {selected ? '›' : ' '} [+] Add provider…
+            </Text>
+          )
+        })()}
+        <Box marginTop={1}>
+          <Text color={colors.fgMuted}>↑↓ navigate · ⏎ open · Esc cancel</Text>
+        </Box>
       </Box>
     )
   }
 
-  // models view
-  const provider = currentProvider ?? props.providers[0]!
+  // models stage
+  const provider = currentProvider!
+  const sessionActive =
+    props.activeProviderId === provider.id ? props.activeModel : undefined
+  const activeMark = selectedModel ?? sessionActive
+
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
-      <Text color={P.primary} bold>{provider.name}</Text>
-      {items.map((it, i) => (
-        <Text key={i} color={i === cursor ? P.primary : P.fg}>
-          {i === cursor ? '›' : ' '} {it.label}
+    <Box flexDirection="column">
+      <Text color={colors.fg}>{provider.name} <Text color={colors.fgMuted}>· {provider.baseUrl}</Text></Text>
+      {load.kind === 'loading' && (
+        <Text color={colors.fgMuted}>Loading models from /v1/models…</Text>
+      )}
+      {load.kind === 'loaded' && load.error && (
+        <Text color={colors.error}>fetch failed: {load.error} (fallback to local shortlist)</Text>
+      )}
+      {load.kind === 'loaded' && load.models.length === 0 && (
+        <Text color={colors.fgMuted}>No models available. Add one via /settings.</Text>
+      )}
+      {load.kind === 'loaded' && load.models.map((m, i) => {
+        const inShortlist = shortlist.includes(m)
+        const isActive = m === activeMark
+        const mark = isActive && inShortlist ? '●' : inShortlist ? 'x' : ' '
+        const selected = i === cursor
+        return (
+          <Text key={m} color={selected ? colors.primary : colors.fg} bold={selected}>
+            {selected ? '›' : ' '} [{mark}] {m}
+          </Text>
+        )
+      })}
+      <Box marginTop={1}>
+        <Text color={colors.fgMuted}>
+          space toggle · ⏎ activate · Esc back
         </Text>
-      ))}
+      </Box>
     </Box>
   )
 }

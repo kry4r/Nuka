@@ -21,7 +21,7 @@
 #      regular user input. This is the only frame-visible side effect
 #      of a text-returning slash in the current App.
 #
-# We CANNOT use /config to open the ConfigEditor dialog as a proxy
+# We CANNOT use /settings to open the ConfigEditor dialog as a proxy
 # because ConfigEditor's useInput consumes the same Enter keystroke
 # that opens it (calling onOpen, which closes the dialog), so the
 # dialog flashes shut on the same render tick — see Phase 10 review.

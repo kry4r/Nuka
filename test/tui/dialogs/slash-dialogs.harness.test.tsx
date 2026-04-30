@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mountApp } from '../../../src/tui/testing/harness'
 import { SlashRegistry } from '../../../src/slash/registry'
 import { StatsCommand } from '../../../src/slash/stats'
-import { ConfigCommand } from '../../../src/slash/config'
+import { SettingsCommand } from '../../../src/slash/settings'
 import { DoctorCommand } from '../../../src/slash/doctor'
 
 const wait = (ms = 50) => new Promise(r => setTimeout(r, ms))
@@ -12,7 +12,7 @@ describe('dialog-returning slashes', () => {
     // StatsView always shows the tab labels (Overview / Models) regardless
     // of whether the cost-tracker has data; assert on the structural label.
     ['stats', StatsCommand, 'overview'],
-    ['config', ConfigCommand, 'no providers configured'],
+    ['settings', SettingsCommand, 'no providers configured'],
     ['doctor', DoctorCommand, 'doctor'],
   ] as const) {
     it(`/${name} renders its dialog`, async () => {

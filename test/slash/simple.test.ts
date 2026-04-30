@@ -3,7 +3,7 @@ import { ExitCommand } from '../../src/slash/exit'
 import { HelpCommand } from '../../src/slash/help'
 import { ClearCommand } from '../../src/slash/clear'
 import { NewCommand } from '../../src/slash/new'
-import { BranchCommand } from '../../src/slash/branch'
+import { ForkCommand } from '../../src/slash/fork'
 import { BtwCommand } from '../../src/slash/btw'
 import { CostCommand } from '../../src/slash/cost'
 import { SessionManager } from '../../src/core/session/manager'
@@ -40,8 +40,8 @@ describe('simple slash commands', () => {
     expect(await NewCommand.run('', ctx())).toEqual({ type: 'effect', effect: { kind: 'new-session' } })
   })
 
-  it('/branch returns branch-session effect', async () => {
-    expect(await BranchCommand.run('', ctx())).toEqual({ type: 'effect', effect: { kind: 'branch-session' } })
+  it('/fork returns fork-session effect', async () => {
+    expect(await ForkCommand.run('', ctx())).toEqual({ type: 'effect', effect: { kind: 'fork-session' } })
   })
 
   it('/btw enqueues text into the active session', async () => {

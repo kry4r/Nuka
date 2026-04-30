@@ -1,7 +1,7 @@
 // src/core/session/manager.ts
 import type { Session } from './types'
 import type { Message } from '../message/types'
-import { createSession, branchSession } from './session'
+import { createSession, forkSession } from './session'
 import type { SessionStore, DebouncedMetaWriter, SessionMeta } from './store'
 import { PermissionCache } from '../permission/cache'
 import { MessageQueue } from './queue'
@@ -37,10 +37,10 @@ export class SessionManager {
     return s
   }
 
-  branch(): Session {
+  fork(): Session {
     const base = this.active()
-    if (!base) throw new Error('no active session to branch from')
-    const forked = branchSession(base)
+    if (!base) throw new Error('no active session to fork from')
+    const forked = forkSession(base)
     this.sessions.push(forked)
     this.activeId = forked.id
     this.metaWriter?.schedule(forked)

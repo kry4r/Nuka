@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/WelcomeForm.tsx
+// src/tui/Submenu/settings/WelcomeForm.tsx
 //
 // Phase 12 §4.7 — read-only display of welcome.tips. Tips can already be
 // edited in the YAML directly via `o`; the submenu surfaces them so the
@@ -7,7 +7,7 @@
 import React, { useEffect } from 'react'
 import { Box, Text } from 'ink'
 import { useColors } from '../../../core/theme/context'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export function WelcomeForm(props: FormCommonProps): React.JSX.Element {
   const colors = useColors()

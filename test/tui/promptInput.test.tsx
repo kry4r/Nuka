@@ -3,8 +3,12 @@ import React, { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import { PromptInput } from '../../src/tui/PromptInput/PromptInput'
+import { mountApp } from '../../src/tui/testing/harness'
+import { SlashRegistry } from '../../src/slash/registry'
+import { HelpCommand } from '../../src/slash/help'
 
 const flush = () => new Promise(r => setImmediate(r))
+const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
 describe('PromptInput', () => {
   it('renders the prompt marker and initial value', () => {
@@ -85,5 +89,29 @@ describe('PromptInput', () => {
     rerender(<PromptInput value="beta" onChange={onChange} onSubmit={() => {}} disabled={false} />)
     stdin.write('\u001B[B'); await flush()
     expect(onChange).toHaveBeenLastCalledWith('')
+  })
+})
+
+describe('Slash hint persistence after submit', () => {
+  it('shows the slash card again after submitting a non-slash message', async () => {
+    const slash = new SlashRegistry()
+    slash.register(HelpCommand)
+
+    const h = mountApp({ target: 'app', slash })
+    try {
+      await wait()
+      // Type a non-slash message and submit it.
+      h.stdin.write('hello')
+      await wait()
+      h.stdin.write('\r')
+      await wait()
+      // After submit the input is cleared. Now type '/'. The slash card should reappear.
+      h.stdin.write('/')
+      await h.waitFor({ contains: '/help' }, 500)
+      const frame = h.frames().pop() ?? ''
+      expect(frame).toContain('/help')
+    } finally {
+      h.unmount()
+    }
   })
 })

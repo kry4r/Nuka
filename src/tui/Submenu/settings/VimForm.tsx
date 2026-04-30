@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/VimForm.tsx
+// src/tui/Submenu/settings/VimForm.tsx
 //
 // Phase 12 §4.7 — single-toggle form for `vim.enabled`. Smallest example
 // of the form contract: holds one Field, registers a save-all callback,
@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Text } from 'ink'
 import { Field } from './Field'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export function VimForm(props: FormCommonProps): React.JSX.Element {
   const initial = props.config.vim?.enabled === true

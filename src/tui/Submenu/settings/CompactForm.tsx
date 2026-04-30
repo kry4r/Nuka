@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/CompactForm.tsx
+// src/tui/Submenu/settings/CompactForm.tsx
 //
 // Phase 12 §4.7 — three numeric fields: keepTurns, autoThreshold,
 // contextWindow. All edited as text and parsed at save time so zod
@@ -7,7 +7,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Text } from 'ink'
 import { Field } from './Field'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 
 export function CompactForm(props: FormCommonProps): React.JSX.Element {
   const c = props.config.compact

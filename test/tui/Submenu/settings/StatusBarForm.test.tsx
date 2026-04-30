@@ -1,4 +1,4 @@
-// test/tui/Submenu/config/StatusBarForm.test.tsx
+// test/tui/Submenu/settings/StatusBarForm.test.tsx
 //
 // Phase 12 §4.7 — canonical StatusBar form. Verifies the layout select
 // updates statusBar.layout and the per-segment toggle list round-trips
@@ -7,7 +7,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { StatusBarForm } from '../../../../src/tui/Submenu/config/StatusBarForm'
+import { StatusBarForm } from '../../../../src/tui/Submenu/settings/StatusBarForm'
 import type { Config } from '../../../../src/core/config/schema'
 
 const baseConfig: Config = {

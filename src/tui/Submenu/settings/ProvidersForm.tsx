@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/ProvidersForm.tsx
+// src/tui/Submenu/settings/ProvidersForm.tsx
 //
 // Phase 13 §4.5 — Providers form (add/edit/delete + activate). Replaces
 // the read-only ProviderForm from Phase 12. Layout:
@@ -23,7 +23,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
 import { Field } from './Field'
-import type { FormCommonProps } from './ConfigSubmenu'
+import type { FormCommonProps } from './SettingsSubmenu'
 import type { ProviderConfig } from '../../../core/config/schema'
 
 type Mode =

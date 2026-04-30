@@ -40,25 +40,29 @@ export class OpenAIProvider implements LLMProvider {
     req: LLMRequest,
     signal: AbortSignal,
   ): AsyncIterable<ProviderEvent> {
+    const params: Record<string, unknown> = {
+      model: req.model,
+      stream: true,
+      stream_options: { include_usage: true },
+      temperature: req.temperature,
+      max_tokens: req.maxTokens,
+      messages: toOpenAIMessages(req.system, req.messages),
+      tools: req.tools.length > 0
+        ? req.tools.map(t => ({
+            type: 'function' as const,
+            function: {
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            },
+          }))
+        : undefined,
+    }
+    if (req.effort) {
+      params['reasoning'] = { effort: req.effort }
+    }
     const sdkStream = await this.client.chat.completions.create(
-      {
-        model: req.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        temperature: req.temperature,
-        max_tokens: req.maxTokens,
-        messages: toOpenAIMessages(req.system, req.messages) as any,
-        tools: req.tools.length > 0
-          ? req.tools.map(t => ({
-              type: 'function' as const,
-              function: {
-                name: t.name,
-                description: t.description,
-                parameters: t.parameters,
-              },
-            }))
-          : undefined,
-      },
+      params as any,
       { signal },
     )
     for await (const ev of this.translateStream(sdkStream as any)) {

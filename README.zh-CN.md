@@ -47,7 +47,7 @@ npm link
 nuka
 ```
 
-首次启动通过 `/config` 添加 Provider，或直接写 `~/.nuka/config.yaml`：
+首次启动通过 `/settings` 添加 Provider，或直接写 `~/.nuka/config.yaml`：
 
 ```yaml
 providers:
@@ -97,7 +97,7 @@ defaultProvider: anthropic
 | `/recap`      | 生成结构化的会话回顾，落盘到 `~/.nuka/recaps/`                        |
 | `/harness`    | 驱动工作流状态机 —— `deep` · `fast` · `off` · `status` · `transition <stage>` |
 | `/teams`      | 列出与查看 `~/.nuka/teams/` 下的持久化团队                            |
-| `/config`     | 内联编辑 Provider、模型、主题、特性开关                                |
+| `/settings`   | 内联编辑 Provider、模型、主题、特性开关                                |
 | `/sessions`   | 浏览并恢复历史会话                                                    |
 | `/stats`      | Token、花费、延迟统计                                                  |
 | `/doctor`     | 体检：Provider、插件、LSP、磁盘布局是否健康                           |

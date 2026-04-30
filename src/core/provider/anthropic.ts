@@ -41,17 +41,24 @@ export class AnthropicProvider implements LLMProvider {
     req: LLMRequest,
     signal: AbortSignal,
   ): AsyncIterable<ProviderEvent> {
-    const sdkStream = this.client.messages.stream(
-      {
-        model: req.model,
-        system: req.system,
-        max_tokens: req.maxTokens ?? 4096,
-        temperature: req.temperature,
-        messages: toAnthropicMessages(req.messages) as any,
-        tools: req.tools.map(toAnthropicTool) as any,
-      },
-      { signal },
-    )
+    const thinking = effortToAnthropicThinking(req.effort)
+    const baseMax = req.maxTokens ?? 4096
+    const maxTokens = thinking
+      ? Math.max(baseMax, thinking.budget_tokens + 4096)
+      : baseMax
+    const params: Record<string, unknown> = {
+      model: req.model,
+      system: req.system,
+      max_tokens: maxTokens,
+      messages: toAnthropicMessages(req.messages),
+      tools: req.tools.map(toAnthropicTool),
+    }
+    if (thinking) {
+      params['thinking'] = thinking
+    } else if (req.temperature !== undefined) {
+      params['temperature'] = req.temperature
+    }
+    const sdkStream = this.client.messages.stream(params as any, { signal })
     for await (const ev of this.translateStream(sdkStream)) {
       yield ev
     }
@@ -63,6 +70,9 @@ export class AnthropicProvider implements LLMProvider {
   ): AsyncIterable<ProviderEvent> {
     const toolInputBuffers = new Map<string, string>()
     const blockMeta = new Map<number, { kind: 'text' | 'tool_use'; id?: string }>()
+    // Per-stream state — must be local so concurrent translateStream calls on
+    // the same provider instance don't clobber each other's usage/stop_reason.
+    let lastDelta: any = undefined
 
     for await (const raw of sdkStream) {
       const ev = raw as any
@@ -104,9 +114,9 @@ export class AnthropicProvider implements LLMProvider {
         }
       } else if (ev.type === 'message_delta') {
         // capture usage + stop_reason for the final message_stop
-        ;(this as any)._lastDelta = ev
+        lastDelta = ev
       } else if (ev.type === 'message_stop') {
-        const last = (this as any)._lastDelta
+        const last = lastDelta
         const stopReason: StopReason = normalizeStop(
           last?.delta?.stop_reason ?? 'end_turn',
         )
@@ -132,6 +142,14 @@ export class AnthropicProvider implements LLMProvider {
       extraHeaders: this.extraHeaders,
     })
   }
+}
+
+function effortToAnthropicThinking(
+  effort: LLMRequest['effort'],
+): { type: 'enabled'; budget_tokens: number } | undefined {
+  if (!effort) return undefined
+  const budget = effort === 'low' ? 1024 : effort === 'medium' ? 4096 : 16000
+  return { type: 'enabled', budget_tokens: budget }
 }
 
 function normalizeStop(r: string): StopReason {

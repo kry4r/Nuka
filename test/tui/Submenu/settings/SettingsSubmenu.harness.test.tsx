@@ -1,12 +1,12 @@
-// test/tui/Submenu/config/ConfigSubmenu.harness.test.tsx
+// test/tui/Submenu/settings/SettingsSubmenu.harness.test.tsx
 //
-// Phase 12 §4.7 — j/k navigation in the left rail, right-pane re-renders
-// to the selected category's form.
+// j/k navigation in the left rail, right-pane re-renders to the selected
+// category's form.
 
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { ConfigSubmenu } from '../../../../src/tui/Submenu/config/ConfigSubmenu'
+import { SettingsSubmenu } from '../../../../src/tui/Submenu/settings/SettingsSubmenu'
 import type { Config } from '../../../../src/core/config/schema'
 
 // ink-testing-library's stdin doesn't always preserve key state across
@@ -28,11 +28,11 @@ const baseConfig: Config = {
 
 const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
-describe('ConfigSubmenu harness', () => {
-  it('renders all nine categories in fixed order on first paint', () => {
+describe('SettingsSubmenu harness', () => {
+  it('renders all ten categories in fixed order on first paint', () => {
     installRawShim()
     const { lastFrame, unmount } = render(
-      <ConfigSubmenu
+      <SettingsSubmenu
         config={baseConfig}
         onSave={async () => {}}
         onOpenEditor={() => {}}
@@ -41,6 +41,7 @@ describe('ConfigSubmenu harness', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('Providers')
     expect(f).toContain('Model')
+    expect(f).toContain('Effort')
     expect(f).toContain('Theme')
     expect(f).toContain('StatusBar')
     expect(f).toContain('Vim')
@@ -58,7 +59,7 @@ describe('ConfigSubmenu harness', () => {
   it('j moves the cursor to the next category and the right pane re-renders', async () => {
     installRawShim()
     const inst = render(
-      <ConfigSubmenu
+      <SettingsSubmenu
         config={baseConfig}
         onSave={async () => {}}
         onOpenEditor={() => {}}
@@ -82,11 +83,37 @@ describe('ConfigSubmenu harness', () => {
     }
   })
 
+  it('Effort category renders the level select with current value', async () => {
+    installRawShim()
+    const cfgWithEffort = { ...baseConfig, effort: 'high' } as Config
+    const inst = render(
+      <SettingsSubmenu
+        config={cfgWithEffort}
+        onSave={async () => {}}
+        onOpenEditor={() => {}}
+      />,
+    )
+    try {
+      await wait()
+      // j twice (Providers -> Model -> Effort).
+      inst.stdin.write('j')
+      await wait()
+      inst.stdin.write('j')
+      await wait()
+      const after = (inst as any).frames.slice().pop() ?? ''
+      expect(after).toContain('Effort')
+      expect(after).toContain('level')
+      expect(after).toContain('high')
+    } finally {
+      inst.unmount()
+    }
+  })
+
   it('o triggers onOpenEditor for the external-editor escape hatch', async () => {
     installRawShim()
     let opened = false
     const inst = render(
-      <ConfigSubmenu
+      <SettingsSubmenu
         config={baseConfig}
         onSave={async () => {}}
         onOpenEditor={() => { opened = true }}

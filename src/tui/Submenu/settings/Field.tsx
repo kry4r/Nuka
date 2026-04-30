@@ -1,4 +1,4 @@
-// src/tui/Submenu/config/Field.tsx
+// src/tui/Submenu/settings/Field.tsx
 //
 // Phase 12 §4.7 — Field primitive used by every category form. It owns
 // label + value and switches between view / edit / error modes.
@@ -15,7 +15,7 @@
 //
 // Modes:
 //   - view  : Enter/⏎ enters edit mode (when focused). Tab/↓ moves focus
-//             to the next field; the parent ConfigSubmenu manages cursor.
+//             to the next field; the parent SettingsSubmenu manages cursor.
 //   - edit  : printable chars append, Backspace deletes, Enter commits
 //             pending value to onChange and returns to view; Esc reverts.
 //   - error : 1.5 s flash with `error`-coloured frame after a failed save.
@@ -74,7 +74,7 @@ export function Field(props: FieldProps): React.JSX.Element {
   // Internal cursor for `list` field type, indexes into props.choices.
   const [listCursor, setListCursor] = useState(0)
   // Keep the draft in sync with parent-driven value changes (e.g. when the
-  // ConfigSubmenu re-mounts with fresh config).
+  // SettingsSubmenu re-mounts with fresh config).
   const lastValueRef = useRef<string | boolean | string[]>(props.value)
   useEffect(() => {
     if (lastValueRef.current !== props.value) {

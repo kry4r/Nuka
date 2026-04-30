@@ -1,9 +1,8 @@
-// src/tui/Submenu/config/ConfigSubmenu.tsx
+// src/tui/Submenu/settings/SettingsSubmenu.tsx
 //
-// Phase 12 §4.7 — Config submenu shell. Replaces the old ConfigEditor's
-// "punt to $EDITOR" UX with a left-rail (18-col, fixed) list of
-// categories + right-pane form. j/k (or ↑/↓) cycles category; the
-// selected category renders its <CategoryForm/> on the right.
+// Settings submenu shell. Left rail (18-col, fixed) of categories +
+// right pane form. j/k (or ↑/↓) cycles category; the selected category
+// renders its <CategoryForm/> on the right.
 //
 // Top-level keys (no field focused yet):
 //   j / ↓        next category
@@ -23,6 +22,7 @@ import { useColors } from '../../../core/theme/context'
 import type { Config } from '../../../core/config/schema'
 import { ProvidersForm } from './ProvidersForm'
 import { ModelForm } from './ModelForm'
+import { EffortForm } from './EffortForm'
 import { ThemeForm } from './ThemeForm'
 import { StatusBarForm } from './StatusBarForm'
 import { VimForm } from './VimForm'
@@ -31,9 +31,10 @@ import { SkillsForm } from './SkillsForm'
 import { WelcomeForm } from './WelcomeForm'
 import { CompactForm } from './CompactForm'
 
-export type ConfigCategory =
+export type SettingsCategory =
   | 'Providers'
   | 'Model'
+  | 'Effort'
   | 'Theme'
   | 'StatusBar'
   | 'Vim'
@@ -42,9 +43,10 @@ export type ConfigCategory =
   | 'Welcome'
   | 'Compact'
 
-export const CATEGORIES: readonly ConfigCategory[] = [
+export const CATEGORIES: readonly SettingsCategory[] = [
   'Providers',
   'Model',
+  'Effort',
   'Theme',
   'StatusBar',
   'Vim',
@@ -54,7 +56,7 @@ export const CATEGORIES: readonly ConfigCategory[] = [
   'Compact',
 ] as const
 
-export type ConfigSubmenuProps = {
+export type SettingsSubmenuProps = {
   /**
    * Live config — forms render bound values from this object. After save,
    * the App's onConfigPatch mutates this object in place and bumps a tick
@@ -75,7 +77,7 @@ export type ConfigSubmenuProps = {
   loadedPlugins?: { name: string; description?: string }[]
 }
 
-export function ConfigSubmenu(props: ConfigSubmenuProps): React.JSX.Element {
+export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element {
   const colors = useColors()
   const [cursor, setCursor] = useState(0)
   // True when keyboard focus has descended into the right pane.
@@ -193,6 +195,7 @@ export function ConfigSubmenu(props: ConfigSubmenuProps): React.JSX.Element {
       <Box flexGrow={1} flexDirection="column" paddingLeft={1}>
         {category === 'Providers' && <ProvidersForm {...formCommon} />}
         {category === 'Model' && <ModelForm {...formCommon} />}
+        {category === 'Effort' && <EffortForm {...formCommon} />}
         {category === 'Theme' && <ThemeForm {...formCommon} />}
         {category === 'StatusBar' && <StatusBarForm {...formCommon} />}
         {category === 'Vim' && <VimForm {...formCommon} />}
@@ -215,7 +218,7 @@ export function ConfigSubmenu(props: ConfigSubmenuProps): React.JSX.Element {
 }
 
 /**
- * Common props every form receives from ConfigSubmenu. Forms own their
+ * Common props every form receives from SettingsSubmenu. Forms own their
  * pending-edits state internally; the shell only owns category/field
  * navigation and per-field error flash.
  */

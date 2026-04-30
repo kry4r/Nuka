@@ -16,8 +16,9 @@ describe('Messages', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('hello')
     expect(f).toContain('hi there')
-    expect(f).toContain('you')
-    expect(f).toContain('nuka')
+    // Speaker labels (you/nuka/tool) are removed — rows are identified by the
+    // coloured left bar only. Check that the bar glyph is rendered.
+    expect(f).toContain('▎')
   })
 
   it('renders ToolCall for tool_use content blocks', () => {

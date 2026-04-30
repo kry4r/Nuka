@@ -3,7 +3,7 @@
 // Phase 12 M6 — end-to-end harness pass over every UIState transition.
 //
 // Drives App through the full state machine:
-//   normal → slash:list → slash:arg-hint → submenu (full, /config) →
+//   normal → slash:list → slash:arg-hint → submenu (full, /settings) →
 //   inline submenu (permission) → back to normal
 //
 // At each transition asserts the hide rules from spec §4.3:
@@ -18,24 +18,24 @@
 //
 // (*) Tasks frame is hidden when all sources are empty (spec §4.4).
 //
-// The full-submenu transition uses the `/config` flow exactly as the user
+// The full-submenu transition uses the `/settings` flow exactly as the user
 // would; the inline-submenu transition is exercised by calling
 // `permissionBridge.ask(...)` directly (the harness exposes the bridge).
 
 import { describe, it, expect } from 'vitest'
 import { mountApp } from '../../src/tui/testing/harness'
 import { SlashRegistry } from '../../src/slash/registry'
-import { ConfigCommand } from '../../src/slash/config'
+import { SettingsCommand } from '../../src/slash/settings'
 import { ModelCommand } from '../../src/slash/model'
 
 // Anchor strings rendered in each zone — used to assert visibility.
 const STATUS_ANCHOR = /⬢ idle|⬢ awaiting/   // Status panel mode badge
 const PROMPT_ANCHOR = /│ >/                   // PromptInput border + cursor
-const SLASH_LIST_ANCHOR = /\/config/          // CommandList row
+const SLASH_LIST_ANCHOR = /\/settings/        // CommandList row
 const ARG_HINT_ANCHOR = /Usage/               // ArgHint card
-// The ConfigSubmenu footer renders the unique hint string "j/k · ⏎ open"
+// The SettingsSubmenu footer renders the unique hint string "j/k · ⏎ open"
 // while the rail is in nav mode. No slash description contains this, so
-// it disambiguates "config menu open" from "command list shows /config".
+// it disambiguates "settings menu open" from "command list shows /settings".
 const FULL_SUB_ANCHOR = /j\/k · ⏎ open/
 const PERMISSION_ANCHOR = /Yes, once|No$/m     // PermissionDialog options
 
@@ -44,7 +44,7 @@ const wait = (ms = 60) => new Promise(r => setTimeout(r, ms))
 describe('Phase 12 M6 — UIState e2e harness', () => {
   it('drives normal → slash:list → slash:arg-hint → submenu(full) → submenu(inline) → normal, asserting §4.3 hide rules at each step', async () => {
     const slash = new SlashRegistry()
-    slash.register(ConfigCommand)
+    slash.register(SettingsCommand)
     slash.register(ModelCommand)
     const cfg = {
       providers: [
@@ -66,31 +66,32 @@ describe('Phase 12 M6 — UIState e2e harness', () => {
 
       // --- Step 2: normal → slash:list ---------------------------------------
       h.stdin.write('/')
-      await h.waitFor({ contains: '/config' })
+      await h.waitFor({ contains: '/settings' })
       const f1 = h.frames().pop() ?? ''
       expect(f1).toMatch(SLASH_LIST_ANCHOR)       // SlashCard visible
       expect(f1).toMatch(PROMPT_ANCHOR)            // Prompt still shown
-      expect(f1).not.toMatch(STATUS_ANCHOR)        // Status hidden (replaced)
+      // Status now stays visible during slash so the user keeps live context.
+      expect(f1).toMatch(STATUS_ANCHOR)
       expect(f1).not.toMatch(/Tasks ▸/)             // Tasks hidden (collapsed-summary not shown either)
       expect(f1).not.toMatch(FULL_SUB_ANCHOR)       // no submenu
 
       // --- Step 3: slash:list → slash:arg-hint -------------------------------
-      h.stdin.write('config ')                  // type space — switches to arg-hint
+      h.stdin.write('settings ')                // type space — switches to arg-hint
       await h.waitFor({ contains: 'Usage' })
       const f2 = h.frames().pop() ?? ''
       expect(f2).toMatch(ARG_HINT_ANCHOR)            // ArgHint card
       expect(f2).toMatch(PROMPT_ANCHOR)              // Prompt still shown
-      expect(f2).not.toMatch(STATUS_ANCHOR)          // Status replaced
+      expect(f2).toMatch(STATUS_ANCHOR)              // Status stays visible
       expect(f2).not.toMatch(/builtins \(/)          // grouped list NOT visible
 
-      // --- Step 4: slash → submenu (full, /config) ---------------------------
-      // The current input is "/config ". Submitting it runs /config (the
+      // --- Step 4: slash → submenu (full, /settings) -------------------------
+      // The current input is "/settings ". Submitting it runs /settings (the
       // SlashRegistry parses by name, ignoring trailing args), which dispatches
-      // a `dialog: { kind: 'config' }` SlashResult and opens the ConfigSubmenu.
+      // a `dialog: { kind: 'settings' }` SlashResult and opens the SettingsSubmenu.
       h.stdin.write('\r')                         // submit
       await h.waitFor({ contains: 'j/k · ⏎ open' }, 1000)
       const f3 = h.frames().pop() ?? ''
-      expect(f3).toMatch(FULL_SUB_ANCHOR)          // ConfigSubmenu visible
+      expect(f3).toMatch(FULL_SUB_ANCHOR)          // SettingsSubmenu visible
       expect(f3).not.toMatch(STATUS_ANCHOR)         // Status hidden
       expect(f3).not.toMatch(PROMPT_ANCHOR)         // Prompt hidden
       expect(f3).not.toMatch(/Tasks ▸/)             // Tasks hidden

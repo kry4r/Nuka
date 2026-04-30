@@ -9,6 +9,8 @@ export type ToolSpec = {
   parameters: Record<string, unknown> // JSON schema
 }
 
+export type Effort = 'low' | 'medium' | 'high'
+
 export type LLMRequest = {
   model: string
   messages: Message[]
@@ -16,6 +18,8 @@ export type LLMRequest = {
   tools: ToolSpec[]
   maxTokens?: number
   temperature?: number
+  /** Reasoning effort hint; mapped per-provider (Anthropic thinking, OpenAI reasoning). */
+  effort?: Effort
 }
 
 export type ProviderEvent =
