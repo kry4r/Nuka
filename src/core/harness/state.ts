@@ -64,7 +64,7 @@ export class HarnessStateMachine {
 
   async transition(to: HarnessStage, reason = 'completed'): Promise<void> {
     const r = this.canTransition(to)
-    if (!r.ok) throw new Error(`refused: ${r.reason}`)
+    if (!r.ok) throw new Error(`refused: ${(r as { ok: false; reason: string }).reason}`)
     if (this.state.currentStage) {
       const entry = this.state.history[this.state.history.length - 1]
       if (entry) { entry.exitedAt = Date.now(); entry.exitReason = reason as StageEntry['exitReason'] }
