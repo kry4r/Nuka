@@ -261,6 +261,8 @@ export function App(props: AppProps): React.JSX.Element {
 
   // Phase 14b — 5-column tasks panel state driven by eventBus
   const columnsState = useTasksColumns(eventBus)
+  // Phase 14b review fix: prefer new panel when it has data; legacy panel is mutually exclusive.
+  const useColumnsPanel = Object.values(columnsState).some(c => c.rows.length > 0)
   const [tasksFocus14b, setTasksFocus14b] = useState(() => initialFocus())
   const { columns: terminalCols } = useTerminalSize()
 
@@ -593,8 +595,9 @@ export function App(props: AppProps): React.JSX.Element {
       </Box>
 
       {/* Tasks zone — M3: full TasksPanel when expanded, summary row when collapsed.
-          Phase 13 M4: tasks-focused state passes focused/cursor to TasksPanel. */}
-      {tasksVisible && !tasksCollapsed && props.todoStore && (
+          Phase 13 M4: tasks-focused state passes focused/cursor to TasksPanel.
+          Phase 14b review fix: hidden when new panel has data (mutually exclusive). */}
+      {tasksVisible && !tasksCollapsed && !useColumnsPanel && props.todoStore && (
         <TasksPanel
           todoStore={props.todoStore}
           messages={session.messages}
@@ -617,7 +620,7 @@ export function App(props: AppProps): React.JSX.Element {
         </Box>
       )}
       {/* Phase 14b — 5-column Tasks panel (eventBus-driven, shown when data exists) */}
-      {tasksVisible && !tasksCollapsed && Object.values(columnsState).some(c => c.rows.length > 0) && (
+      {tasksVisible && !tasksCollapsed && useColumnsPanel && (
         <TasksPanelNew
           state={columnsState}
           focus={tasksFocus14b}
