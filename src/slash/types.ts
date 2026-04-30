@@ -11,6 +11,8 @@ export type DialogDescriptor =
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
   | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
+  // Phase 14b — monitor dashboard
+  | { kind: 'monitor' }
 
 export type SessionEffect =
   | { kind: 'new-session' }

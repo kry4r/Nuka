@@ -46,6 +46,7 @@ import type { TodoState } from '../core/tools/todoWrite'
 import { TasksPanel, flattenedTasksLength } from './Tasks/TasksPanel'
 import { TasksSubmenu } from './Submenu/TasksSubmenu'
 import { findInFlightSubagents } from './Tasks/SubagentList'
+import { MonitorSubmenuWrapper } from './Monitor/MonitorSubmenu'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -97,6 +98,8 @@ export type SubmenuDescriptor =
     }
   // Phase 13 M4 — tasks focus mode submenu (full)
   | { kind: 'tasks'; focusItem: number }
+  // Phase 14b — monitor dashboard
+  | { kind: 'monitor' }
 
 const INLINE_SUBMENU_KINDS = new Set<SubmenuDescriptor['kind']>([
   'permission',
@@ -753,6 +756,11 @@ export function App(props: AppProps): React.JSX.Element {
             tasks={props.taskManager ? props.taskManager.list() : []}
           />
         </SubmenuFrame>
+      )}
+
+      {/* Phase 14b — Monitor dashboard submenu */}
+      {submenuFull && submenu?.kind === 'monitor' && (
+        <MonitorSubmenuWrapper onClose={closeSubmenu} />
       )}
 
       {/* Status zone */}
