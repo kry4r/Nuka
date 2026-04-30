@@ -2,7 +2,7 @@ import { defineTool } from '../define'
 import { z } from 'zod'
 import { ulid } from 'ulid'
 import { ProtocolMessageSchema } from '../../messaging/types'
-import { resolveTarget } from '../../messaging/addresses'
+import { parseAddress, resolveTarget } from '../../messaging/addresses'
 import type { MessageEnvelope } from '../../messaging/types'
 import type { MessageRouter } from '../../messaging/router'
 import type { TeamRegistry } from '../../teams/registry'
@@ -43,6 +43,18 @@ export function makeSendMessageTool(deps: { router: MessageRouter; teams: TeamRe
           if (!team) return { output: 'team not found', isError: true }
           const n = await deps.router.broadcast({
             teamName: callerTeam,
+            members: team.members.map(m => m.agentName),
+            base: { id: ulid(), from: fromAddr, summary: input.summary, message: input.message, sentAt: Date.now() },
+          })
+          return { output: JSON.stringify({ delivered: n > 0, count: n }), isError: false }
+        }
+        // team:X/* coordinator broadcast — e.g. team:demo/* sends to all demo members.
+        const parsed = parseAddress(input.to)
+        if (parsed.kind === 'team' && parsed.agent === '*') {
+          const team = deps.teams.find(parsed.team)
+          if (!team) return { output: `team "${parsed.team}" not found`, isError: true }
+          const n = await deps.router.broadcast({
+            teamName: parsed.team,
             members: team.members.map(m => m.agentName),
             base: { id: ulid(), from: fromAddr, summary: input.summary, message: input.message, sentAt: Date.now() },
           })

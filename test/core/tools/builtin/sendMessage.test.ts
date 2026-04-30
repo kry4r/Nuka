@@ -40,4 +40,21 @@ describe('send_message', () => {
     expect(r.isError).toBe(false)
     expect(n).toBeGreaterThanOrEqual(1)
   })
+
+  it('broadcasts with team:X/* coordinator form to all team members', async () => {
+    // Add a second member to demo team
+    await teams.addMember('demo', { agentName: 'carol', agentDefRef: 'core:carol', spawnedAt: 2 })
+    let bobCount = 0; let carolCount = 0
+    backend.subscribe('team:demo/bob', () => bobCount++)
+    backend.subscribe('team:demo/carol', () => carolCount++)
+    // Lead coordinator (no teamName context) uses qualified team:demo/* address
+    const ctx = { session: { agentName: 'lead' } } as never
+    const r = await tool.run({ to: 'team:demo/*', summary: 'broadcast all', message: 'hello all' }, ctx)
+    expect(r.isError).toBe(false)
+    const result = JSON.parse(r.output as string)
+    expect(result.delivered).toBe(true)
+    expect(result.count).toBeGreaterThanOrEqual(2)
+    expect(bobCount).toBe(1)
+    expect(carolCount).toBe(1)
+  })
 })
