@@ -94,6 +94,17 @@ import { makeSequentialThinkingTool, makeSearchAndVerifyTool, makeAskUserQuestio
 import { makeHarnessCommand } from './slash/harness'
 import * as fs from 'node:fs'
 import { initAutoDream } from './core/recap/autoDream'
+import { makeTeamCreateTool } from './core/tools/builtin/teamCreate'
+import { makeTeamDeleteTool } from './core/tools/builtin/teamDelete'
+import { makeSendMessageTool } from './core/tools/builtin/sendMessage'
+import { makePipelineRunTool } from './core/tools/builtin/pipelineRun'
+import { makeRoundtableTool } from './core/tools/builtin/roundtable'
+import { TeamRegistry } from './core/teams/registry'
+import { MessageRouter } from './core/messaging/router'
+import { InProcessBackend } from './core/messaging/inProcessBackend'
+import { ROLE_AGENTS } from './core/agents/builtin/roles'
+import { runPipeline } from './core/swarm/pipeline'
+import { runRoundtable } from './core/swarm/roundtable'
 
 const argv = process.argv.slice(2)
 
@@ -509,6 +520,23 @@ async function runInteractive(): Promise<void> {
   // Phase 14d — register core:editor agent before dispatch_agent so it
   // appears in the dispatch_agent description (which snapshots agents.list()).
   agents.register(editorAgent)
+
+  // Phase 14a — swarm tools + role agents
+  const swarmTeams = new TeamRegistry({ home })
+  const swarmBackend = new InProcessBackend()
+  const swarmRouter = new MessageRouter({ backends: [swarmBackend], bus: eventBus })
+
+  tools.register(makeTeamCreateTool({ teams: swarmTeams }) as any)
+  tools.register(makeTeamDeleteTool({ teams: swarmTeams }) as any)
+  tools.register(makeSendMessageTool({ router: swarmRouter, teams: swarmTeams }) as any)
+  tools.register(makePipelineRunTool({
+    runPipeline: (i) => runPipeline({ input: i, runStage: async () => '' }),
+  }) as any)
+  tools.register(makeRoundtableTool({
+    runRoundtable: (i) => runRoundtable({ input: i, sendRound: async () => '', synthesize: async () => '' }),
+  }) as any)
+
+  for (const role of ROLE_AGENTS) agents.register(role)
 
   // Register the dispatch_agent tool after all plugins have wired their agents
   // (so the tool's description enumerates every <plugin>:<agent> pair).
