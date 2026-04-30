@@ -3,6 +3,7 @@ import type { EventBus } from '../events/bus'
 import type { MessageRouter } from '../messaging/router'
 import type { ProtocolMessage, MessageEnvelope } from '../messaging/types'
 import { ProgressTracker } from './progressTracker'
+import { startAgentSummarizer, buildSummaryPrompt } from '../agent/agentSummary'
 import { ulid } from 'ulid'
 
 export type RunTeammateDeps = {
@@ -82,6 +83,18 @@ export async function runTeammate(task: Task, signal: AbortSignal, deps?: RunTea
     messages: [] as unknown[],
   }
 
+  // Start the 30s agent summarizer tick.
+  const summarizer = startAgentSummarizer({
+    taskId: task.id,
+    tracker,
+    intervalMs: deps.summarizerInterval ?? 30_000,
+    runFork: async (prompt) => {
+      const result = await deps.runOneTurn(session, prompt)
+      return { text: result.text }
+    },
+    buildPrompt: buildSummaryPrompt,
+  })
+
   while (!signal.aborted && !shutdown) {
     if (pendingMessages.length === 0) {
       deps.bus.emit('task', { type: 'task.state', id: task.id, from: 'running', to: 'idle' })
@@ -102,6 +115,7 @@ export async function runTeammate(task: Task, signal: AbortSignal, deps?: RunTea
     }
   }
 
+  summarizer.stop()
   inboxOff()
   busOff()
 }

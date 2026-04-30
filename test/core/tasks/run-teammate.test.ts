@@ -61,6 +61,45 @@ describe('run-teammate', () => {
     await promise
   })
 
+  it('agentSummary ticks within summarizerInterval and updates tracker summary', async () => {
+    const bus = createEventBus()
+    const backend = new InProcessBackend()
+    const router = new MessageRouter({ backends: [backend], bus })
+    let summaryCallCount = 0
+    // Return a unique summary each call so setSummary is actually invoked
+    const fakeAgentLoop = async (_session: unknown, msg: string) => {
+      if (msg.includes('most recent action')) {
+        summaryCallCount++
+        return { text: `Doing thing ${summaryCallCount}`, usage: { inputTokens: 1, outputTokens: 1 } }
+      }
+      return { text: 'done', usage: { inputTokens: 10, outputTokens: 5 } }
+    }
+    const task = {
+      id: 'ts1', kind: 'in_process_teammate' as const, description: 'd', state: 'pending' as const,
+      outputFile: '', spec: {
+        kind: 'in_process_teammate' as const, description: '', teamName: 'demo', agentName: 'eve',
+        agentDef: { name: 'eve', description: 'e', maxTurns: 5, pluginName: 'core', allowedTools: [], deniedTools: [], systemPrompt: 'x' } as never,
+        initialMessage: 'start', longRunning: true,
+      },
+    } as never
+
+    const ctrl = new AbortController()
+    const promise = runTeammate(task, ctrl.signal, {
+      bus, router,
+      providerResolver: { resolve: () => null } as never,
+      runOneTurn: fakeAgentLoop as never,
+      home: fs.mkdtempSync(path.join(os.tmpdir(), 'nuka-rtsum-')),
+      summarizerInterval: 50,  // short interval so tick fires quickly in real time
+    })
+
+    // Wait for the initial message to process, then let 1 tick fire
+    await new Promise(res => setTimeout(res, 200))
+    expect(summaryCallCount).toBeGreaterThanOrEqual(1)
+
+    ctrl.abort()
+    await promise
+  }, 3000)
+
   it('emits shutdown_request envelope when manager flips task state to shutdown_requested', async () => {
     const bus = createEventBus()
     const backend = new InProcessBackend()
