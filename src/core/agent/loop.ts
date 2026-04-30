@@ -30,6 +30,19 @@ import type { CostTracker } from '../cost/tracker'
 import type { CheckpointLog } from '../rewind/checkpoint'
 import { captureFileSnapshot, filePathsFromToolInput } from '../rewind/checkpoint'
 import type { EventBus } from '../events/bus'
+import { isCoordinatorMode, COORDINATOR_INTERNAL_TOOLS } from './coordinatorMode'
+
+/**
+ * Apply coordinator-mode tool filtering.
+ * - Coordinator lead (isWorker=false): only coordinator-internal tools.
+ * - Coordinator worker (isWorker=true): strip coordinator-internal tools.
+ * - Non-coordinator: identity (no filtering).
+ */
+export function applyCoordinatorFilter<T extends { name: string }>(tools: T[], session: { isWorker?: boolean }): T[] {
+  if (!isCoordinatorMode()) return tools
+  if (session.isWorker) return tools.filter(t => !COORDINATOR_INTERNAL_TOOLS.has(t.name))
+  return tools.filter(t => COORDINATOR_INTERNAL_TOOLS.has(t.name))
+}
 
 export type RunAgentDeps = {
   provider: ProviderResolver
@@ -224,7 +237,8 @@ export async function* runAgent(
     // returns full registry when no skills matched, preserving existing behaviour).
     // On top of narrowing, alwaysLoad tools always pass through; shouldDefer tools
     // are excluded unless already un-deferred via searchHint or manual unlock.
-    const narrowed = activeToolsForMany(matchedSkills, deps.tools)
+    // Phase 14a: apply coordinator-mode filter (lead vs worker).
+    const narrowed = applyCoordinatorFilter(activeToolsForMany(matchedSkills, deps.tools), session)
     const toolSpecs = narrowed.flatMap(tool => {
       if (tool.alwaysLoad) return [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
       if (tool.shouldDefer?.(input)) {
