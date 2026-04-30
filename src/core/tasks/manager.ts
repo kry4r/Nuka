@@ -12,6 +12,10 @@
 import { randomUUID } from 'node:crypto'
 import { runBash } from './run-bash'
 import { runAgent } from './run-agent'
+import { runTeammate } from './run-teammate'
+import { runShell } from './run-shell'
+import { runRemoteAgent } from './run-remote-agent'
+import { runDream } from './run-dream'
 import {
   appendOutputSync,
   ensureTasksDirSync,
@@ -124,24 +128,57 @@ export class TaskManager {
 
   private async startRunner(task: Task, signal: AbortSignal): Promise<void> {
     const spec = task.spec
-    if (spec.kind === 'local_bash') {
-      const handle = runBash({ spec, outputFile: task.outputFile, signal })
-      const { code } = await handle.done
-      this.complete(task, code)
-      return
-    }
-    if (spec.kind === 'local_agent') {
-      try {
-        await runAgent({ spec, outputFile: task.outputFile, signal })
-        this.complete(task, 0)
-      } catch (err) {
-        if (signal.aborted) return // already marked killed
-        this.fail(task, (err as Error)?.message ?? 'agent error')
+    switch (spec.kind) {
+      case 'local_bash': {
+        const handle = runBash({ spec, outputFile: task.outputFile, signal })
+        const { code } = await handle.done
+        this.complete(task, code)
+        return
       }
-      return
+      case 'local_agent': {
+        try {
+          await runAgent({ spec, outputFile: task.outputFile, signal })
+          this.complete(task, 0)
+        } catch (err) {
+          if (signal.aborted) return
+          this.fail(task, (err as Error)?.message ?? 'agent error')
+        }
+        return
+      }
+      case 'in_process_teammate': {
+        try { await runTeammate(task, signal); this.complete(task, 0) }
+        catch (err) {
+          if (signal.aborted) return
+          this.fail(task, (err as Error)?.message ?? 'teammate error')
+        }
+        return
+      }
+      case 'local_shell': {
+        try { await runShell(task, signal); this.complete(task, 0) }
+        catch (err) {
+          if (signal.aborted) return
+          this.fail(task, (err as Error)?.message ?? 'shell error')
+        }
+        return
+      }
+      case 'remote_agent': {
+        try { await runRemoteAgent(task, signal); this.complete(task, 0) }
+        catch (err) {
+          if (signal.aborted) return
+          this.fail(task, (err as Error)?.message ?? 'remote-agent error')
+        }
+        return
+      }
+      case 'dream': {
+        try { await runDream(task, signal); this.complete(task, 0) }
+        catch (err) {
+          if (signal.aborted) return
+          this.fail(task, (err as Error)?.message ?? 'dream error')
+        }
+        return
+      }
     }
-    // Unknown kind — should be impossible by typing but guard anyway.
-    this.fail(task, `unknown task kind: ${(spec as { kind: string }).kind}`)
+    const _exhaustive: never = spec; void _exhaustive
   }
 
   private complete(task: Task, code: number | null): void {
