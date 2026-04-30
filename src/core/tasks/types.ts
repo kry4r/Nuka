@@ -15,14 +15,22 @@
 // `failed` | `killed`) and persist their textual output under
 // `<home>/.nuka/tasks/<id>.log`.
 
-export type TaskKind = 'local_bash' | 'local_agent'
+export type TaskKind =
+  | 'local_bash'
+  | 'local_agent'
+  | 'in_process_teammate'
+  | 'local_shell'
+  | 'remote_agent'
+  | 'dream'
 
 export type TaskState =
   | 'pending'
   | 'running'
+  | 'idle'
   | 'completed'
   | 'failed'
   | 'killed'
+  | 'shutdown_requested'
 
 /** Discriminated union — each kind carries its own spec. */
 export type TaskSpec =
