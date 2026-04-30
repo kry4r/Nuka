@@ -28,4 +28,11 @@ export type Session = {
    * Undefined / true means the session may dispatch agents.
    */
   allowedAgentDispatch?: boolean
+  /** True when the session is created by dispatchAgent or runTeammate. */
+  isWorker?: boolean
+  /** Recursion guard — when false, team_create tool refuses. */
+  allowedTeamCreate?: boolean
+  /** Set by runTeammate; coordinator session leaves these undefined. */
+  agentName?: string
+  teamName?: string
 }

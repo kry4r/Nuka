@@ -5,7 +5,14 @@ import type { Message } from '../message/types'
 import { MessageQueue } from './queue'
 import { PermissionCache } from '../permission/cache'
 
-export function createSession(opts: { providerId: string; model: string }): Session {
+export function createSession(opts: {
+  providerId: string
+  model: string
+  isWorker?: boolean
+  agentName?: string
+  teamName?: string
+  allowedTeamCreate?: boolean
+}): Session {
   return {
     id: ulid(),
     providerId: opts.providerId,
@@ -18,6 +25,10 @@ export function createSession(opts: { providerId: string; model: string }): Sess
     createdAt: Date.now(),
     updatedAt: Date.now(),
     unDeferredToolNames: new Set(),
+    isWorker: opts.isWorker,
+    agentName: opts.agentName,
+    teamName: opts.teamName,
+    allowedTeamCreate: opts.allowedTeamCreate,
   }
 }
 
