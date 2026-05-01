@@ -34,25 +34,29 @@ export class HarnessStateMachine {
   }
 
   /**
-   * Bootstrap the harness from a fresh user message:
-   * - Run triage (LLM fork classifier — at this checkpoint still uses the legacy
-   *   single-axis classifier; T2.1/T2.2 will replace this with the full three-axis
-   *   triage + ask_user confirmation flow).
-   * - Persist the triage on state.
-   * - Append header to scratchpad.
+   * Bootstrap the harness from a fresh user message.
+   * Runs three-axis triage, optionally surfaces it to the user via `askUser` for
+   * confirmation/override, persists the triage, then writes a header to the scratchpad.
+   *
+   * Backwards-compat: if `askUser` is omitted (e.g. unit tests / non-interactive),
+   * the triage is committed without confirmation (`userConfirmed: false`).
    */
   async start(
     userMessage: string,
-    deps: { runFork: (p: string) => Promise<{ text: string }> },
+    deps: {
+      runFork: (p: string) => Promise<{ text: string }>
+      askUser?: (q: string) => Promise<string>
+      repoSummary?: string
+    },
   ): Promise<Triage> {
-    const { classifyTaskProfile } = await import('./classifier')
-    const profile = await classifyTaskProfile({ userMessage, runFork: deps.runFork })
-    const triage: Triage = {
-      profile,
-      difficulty: 'medium',
-      testStrategy: 'tdd',
-      reasoning: 'legacy classifier output; difficulty/testStrategy use defaults until T2.1',
-      userConfirmed: false,
+    const { triageMessage, confirmTriage } = await import('./triage')
+    let triage = await triageMessage({
+      userMessage,
+      repoSummary: deps.repoSummary ?? '',
+      runFork: deps.runFork,
+    })
+    if (deps.askUser) {
+      triage = await confirmTriage(triage, { askUser: deps.askUser, runFork: deps.runFork })
     }
     this.state.triage = triage
     this.appendScratchpad(
@@ -61,6 +65,7 @@ export class HarnessStateMachine {
         `- Difficulty:   ${triage.difficulty}\n` +
         `- TestStrategy: ${triage.testStrategy}\n` +
         `- Mode:         ${this.state.mode}\n` +
+        `- Confirmed:    ${triage.userConfirmed ? 'yes' : 'no (auto)'}\n` +
         `- Reasoning:    ${triage.reasoning}\n`,
     )
     return triage
