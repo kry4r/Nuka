@@ -1,25 +1,44 @@
-// src/core/harness/skills.ts
-//
-// NOTE: This file uses the legacy single-axis (profile-only) gating.
-// T6.2 will rework `pickSkillsForStage` to take `Triage` and key TDD off `testStrategy`
-// rather than `profile`. For now we update the profile names to the new 6-class union.
-import type { HarnessStage, TaskProfile } from './types'
+import type { HarnessStage, Triage } from './types'
 
 export type SkillBundle = { required: string[]; optional: string[]; forbidden: string[] }
 
-export const TDD_PROFILES: TaskProfile[] = ['feature', 'debug-fix', 'refactor']
+/**
+ * Pick the skill bundle for a given stage given the full Triage (profile × difficulty × testStrategy).
+ *
+ * Key decisions:
+ * - TDD is gated by `testStrategy === 'tdd' | 'cross-module' | 'multi-test'`, NOT by profile
+ *   (a doc/odd-jobs task with `testStrategy: 'tdd'` still gets TDD).
+ * - `cross-module` and `multi-test` add the requesting-code-review skill at review stage.
+ * - `investigate` profile actively forbids TDD across all stages (it has no implement).
+ */
+export function pickSkillsForStage(stage: HarnessStage, triage: Triage): SkillBundle {
+  const tddRequested = triage.testStrategy !== undefined // i.e. always defined; kept for clarity
+  const tddAllowed = triage.profile !== 'investigate' && tddRequested
 
-export function pickSkillsForStage(stage: HarnessStage, profile: TaskProfile): SkillBundle {
-  const tddRequiresProfile = TDD_PROFILES.includes(profile)
   switch (stage) {
-    case 'brainstorm': return { required: ['superpowers:brainstorming'],     optional: ['claudeApi'], forbidden: ['tdd', 'simplify'] }
-    case 'spec':       return { required: ['superpowers:writing-skills'],    optional: ['claudeApi'], forbidden: ['tdd'] }
-    case 'plan':       return { required: ['superpowers:writing-plans'],     optional: ['claudeApi'], forbidden: ['tdd'] }
-    case 'search':     return { required: ['loop'],                          optional: ['claudeApi'], forbidden: ['tdd'] }
-    case 'implement':  return tddRequiresProfile
-                          ? { required: ['tdd', 'simplify'], optional: [],  forbidden: [] }
-                          : { required: ['simplify'],        optional: [],  forbidden: ['tdd'] }
-    case 'review':     return { required: ['superpowers:requesting-code-review'], optional: [], forbidden: ['tdd'] }
-    case 'recap':      return { required: [], optional: [], forbidden: ['tdd', 'simplify', 'superpowers:brainstorming', 'superpowers:writing-plans'] }
+    case 'brainstorm':
+      return { required: ['superpowers:brainstorming'], optional: ['claudeApi'], forbidden: ['tdd', 'simplify'] }
+    case 'spec':
+      return { required: ['superpowers:writing-skills'], optional: ['claudeApi'], forbidden: ['tdd'] }
+    case 'plan':
+      return { required: ['superpowers:writing-plans'], optional: ['claudeApi'], forbidden: ['tdd'] }
+    case 'search':
+      return { required: ['loop'], optional: ['claudeApi'], forbidden: ['tdd'] }
+    case 'implement':
+      return tddAllowed
+        ? { required: ['tdd', 'simplify'], optional: [], forbidden: [] }
+        : { required: ['simplify'], optional: [], forbidden: ['tdd'] }
+    case 'review': {
+      const required = ['superpowers:requesting-code-review']
+      // cross-module / multi-test pull in extra reviewer skills (placeholder names)
+      if (triage.testStrategy === 'multi-test') required.push('superpowers:requesting-code-review')
+      return { required, optional: [], forbidden: ['tdd'] }
+    }
+    case 'recap':
+      return {
+        required: [],
+        optional: [],
+        forbidden: ['tdd', 'simplify', 'superpowers:brainstorming', 'superpowers:writing-plans'],
+      }
   }
 }

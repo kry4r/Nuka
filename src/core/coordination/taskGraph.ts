@@ -87,25 +87,25 @@ export class TaskGraph {
    * Cross-level edges are handled (graph need not be layered).
    */
   toposort(): SubTaskId[] {
+    const nodes = this.data.nodes
     const indeg: Record<SubTaskId, number> = {}
-    for (const id of Object.keys(this.data.nodes)) indeg[id] = this.data.nodes[id].dependsOn.length
+    for (const id of Object.keys(nodes)) indeg[id] = nodes[id]!.dependsOn.length
     const queue: SubTaskId[] = Object.keys(indeg).filter((id) => indeg[id] === 0)
     const out: SubTaskId[] = []
     while (queue.length) {
       const id = queue.shift() as SubTaskId
       out.push(id)
-      const node = this.data.nodes[id]
       // every node that depends on `id` has its indeg decremented
-      for (const otherId of Object.keys(this.data.nodes)) {
-        const other = this.data.nodes[otherId]
+      for (const otherId of Object.keys(nodes)) {
+        const other = nodes[otherId]
+        if (!other) continue
         if (other.dependsOn.includes(id)) {
-          indeg[otherId] -= 1
+          indeg[otherId] = (indeg[otherId] ?? 0) - 1
           if (indeg[otherId] === 0) queue.push(otherId)
         }
       }
-      void node
     }
-    if (out.length !== Object.keys(this.data.nodes).length) {
+    if (out.length !== Object.keys(nodes).length) {
       throw new Error('cycle detected in TaskGraph')
     }
     return out
