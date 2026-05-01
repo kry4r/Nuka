@@ -92,6 +92,7 @@ import { HarnessStateMachine } from './core/harness/state'
 import { editorAgent } from './core/agents/builtin/editor'
 import { makeSequentialThinkingTool, makeSearchAndVerifyTool, makeAskUserQuestionTool } from './core/harness/primitives'
 import { makeHarnessCommand } from './slash/harness'
+import { makeTriageCommand } from './slash/triage'
 import * as fs from 'node:fs'
 import { initAutoDream } from './core/recap/autoDream'
 import { makeTeamCreateTool } from './core/tools/builtin/teamCreate'
@@ -697,7 +698,16 @@ async function runInteractive(): Promise<void> {
     tools.register(makeSearchAndVerifyTool(harness, { runResearcher: async (q) => `(stub) results for: ${q}` }) as any)
     tools.register(makeAskUserQuestionTool(harness, { askUser: async (q) => `(prompt user via TUI: ${q})` }) as any)
   }
-  slash.register(makeHarnessCommand(harness))
+  // T8.1 — three-axis triage slash command. `runFork` is currently stubbed
+  // (the production fork bridge is wired through dispatch_agent and not yet
+  // exposed as a plain prompt-in/text-out callable here); this matches the
+  // stub style above for the harness primitives.
+  const triageRunFork = async (_p: string): Promise<{ text: string }> => ({
+    text: '(stub triage fork response)',
+  })
+  const triageDeps = { runFork: triageRunFork }
+  slash.register(makeHarnessCommand(harness, triageDeps))
+  slash.register(makeTriageCommand({ harness, ...triageDeps }))
 
   render(
     <App
