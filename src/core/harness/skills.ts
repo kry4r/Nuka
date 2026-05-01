@@ -1,9 +1,13 @@
 // src/core/harness/skills.ts
+//
+// NOTE: This file uses the legacy single-axis (profile-only) gating.
+// T6.2 will rework `pickSkillsForStage` to take `Triage` and key TDD off `testStrategy`
+// rather than `profile`. For now we update the profile names to the new 6-class union.
 import type { HarnessStage, TaskProfile } from './types'
 
 export type SkillBundle = { required: string[]; optional: string[]; forbidden: string[] }
 
-export const TDD_PROFILES: TaskProfile[] = ['feature', 'fix', 'refactor']
+export const TDD_PROFILES: TaskProfile[] = ['feature', 'debug-fix', 'refactor']
 
 export function pickSkillsForStage(stage: HarnessStage, profile: TaskProfile): SkillBundle {
   const tddRequiresProfile = TDD_PROFILES.includes(profile)
