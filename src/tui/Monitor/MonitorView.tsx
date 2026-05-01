@@ -6,13 +6,14 @@ import { Box, Text } from 'ink'
 import { DagView } from './DagView'
 import { TimelineView } from './TimelineView'
 import { TokensView } from './TokensView'
+import type { TimelineLane } from './bucketTimeline'
 import { useTheme } from '../../core/theme/context'
 import { defaultPalette } from '../theme'
 
 type Tab = 'dag' | 'timeline' | 'tokens'
 
 export function MonitorView(p: {
-  events: Array<{ t: number; topic: 'task' | 'agent' | 'message' | 'harness' }>
+  events: Array<{ t: number; topic: TimelineLane }>
   dagNodes: Array<{ id: string; agentName: string; status: string; parents: string[] }>
   agentUsage?: Array<{ agentName: string; inputTokens: number; outputTokens: number }>
   cols?: number

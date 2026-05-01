@@ -1,7 +1,14 @@
 # Phase 14d — Workflow harness: stage state machine + editor-in-chief agent
 
+> **⚠ Superseded by:** `docs/plans/2026-05-01-harness-three-axis-refactor-design.md` (2026-05-01).
+> The 7-class single-axis profile model defined here was replaced by a three-axis
+> (profile × difficulty × testStrategy) model with a new `coordination/` layer for
+> sub-task DAGs and event-driven a2a routing. Implementation lives on branch
+> `worktree-refactor-harness-three-axis`. This document is retained as historical
+> context.
+
 **Date:** 2026-04-30
-**Status:** Spec
+**Status:** Superseded
 **Depends on:** `2026-04-30-phase14-foundation-design.md` (HarnessEvent + HarnessStage already reserved on the EventBus, forkedAgent for editor calls), `2026-04-30-phase14a-swarm-design.md` (the editor dispatches workers via the swarm primitives), `2026-04-30-phase14c-recap-design.md` (Recap stage emits a recap doc)
 **Author:** Brainstorming session 2026-04-30
 
