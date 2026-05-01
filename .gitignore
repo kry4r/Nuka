@@ -7,3 +7,4 @@ core.*
 .DS_Store
 coverage/
 .claude
+.worktrees/
