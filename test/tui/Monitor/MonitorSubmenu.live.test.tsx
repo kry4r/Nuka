@@ -13,9 +13,10 @@ import { useMonitorEvents } from '../../../src/tui/Monitor/useMonitorEvents'
 // Helper: renders a component that exposes hook state as text so we can assert it.
 function HookHarness({ bus }: { bus: ReturnType<typeof createEventBus> }) {
   const { events, agentUsage } = useMonitorEvents(bus)
+  const lanes = events.map(e => e.topic).join(',')
   return (
     <Text>
-      {`events:${events.length} usage:${agentUsage.length} names:${agentUsage.map(u => u.agentName).join(',')}`}
+      {`events:${events.length} usage:${agentUsage.length} names:${agentUsage.map(u => u.agentName).join(',')} lanes:${lanes}`}
     </Text>
   )
 }
@@ -71,5 +72,28 @@ describe('useMonitorEvents', () => {
     const frame = lastFrame() ?? ''
     // harness event should now appear in the flat events list.
     expect(frame).toContain('events:1')
+    // ...and on the harness lane (not coordination).
+    expect(frame).toMatch(/lanes:[^\s]*harness/)
+  })
+
+  it('routes coordination.* harness events to the coordination lane (T8.4)', async () => {
+    const bus = createEventBus()
+    const { lastFrame, rerender } = render(<HookHarness bus={bus} />)
+
+    bus.emit('harness', { type: 'coordination.task.created', sessionId: 's1', taskId: 't1' })
+    bus.emit('harness', { type: 'coordination.task.started', sessionId: 's1', taskId: 't1', agentId: 'a1' })
+    bus.emit('harness', { type: 'coordination.task.completed', sessionId: 's1', taskId: 't1', agentId: 'a1' })
+    bus.emit('harness', { type: 'coordination.a2a.dispatched', sessionId: 's1', from: 'a1', to: 'a2', reason: 'r' })
+    bus.emit('harness', { type: 'harness.stage.enter', stage: 'implement', sessionId: 's1' })
+    await new Promise(r => setTimeout(r, 20))
+    rerender(<HookHarness bus={bus} />)
+
+    const frame = lastFrame() ?? ''
+    expect(frame).toContain('events:5')
+    // Four coordination + one harness
+    const lanesField = (/lanes:([^\s]+)/.exec(frame) ?? [])[1] ?? ''
+    const lanes = lanesField.split(',')
+    expect(lanes.filter(l => l === 'coordination').length).toBe(4)
+    expect(lanes.filter(l => l === 'harness').length).toBe(1)
   })
 })

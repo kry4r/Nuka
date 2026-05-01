@@ -134,8 +134,9 @@ export const HarnessConfigSchema = z
     mode: z.enum(['deep', 'fast', 'off']).default('deep'),
     /** max scratchpad size in KB before oldest-section truncation */
     scratchpadKB: z.number().default(50),
-    /** profiles that require TDD in the implement stage */
-    forceTddProfiles: z.array(z.string()).default(['feature', 'fix', 'refactor']),
+    /** profiles that require TDD in the implement stage (legacy fallback; the
+     *  primary gate is now `Triage.testStrategy` — see harness/skills.ts) */
+    forceTddProfiles: z.array(z.string()).default(['feature', 'debug-fix', 'refactor']),
   })
   .optional()
 export type HarnessConfig = z.infer<typeof HarnessConfigSchema>

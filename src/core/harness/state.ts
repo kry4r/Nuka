@@ -1,9 +1,8 @@
-// src/core/harness/state.ts
 import * as path from 'node:path'
 import type { EventBus } from '../events/bus'
-import type { HarnessState, HarnessStage, HarnessMode, TaskProfile, StageEntry } from './types'
+import type { HarnessState, HarnessStage, HarnessMode, Triage, StageEntry } from './types'
 import { canTransition as transitionCheck } from './transitions'
-import { stageRequirement } from './matrix'
+import { effectiveStageRequirement } from './matrix'
 import { readScratchpad, writeScratchpad, truncateToCap } from './scratchpad'
 
 export type HarnessStateMachineOpts = {
@@ -25,28 +24,74 @@ export class HarnessStateMachine {
     this.state = {
       sessionId: opts.sessionId,
       mode: opts.mode ?? 'deep',
-      taskProfile: null,
+      triage: null,
       currentStage: null,
       history: [],
       scratchpadPath: path.join(opts.home, '.nuka', 'harness', `${opts.sessionId}.md`),
+      taskGraphPath: path.join(opts.home, '.nuka', 'coordination', `${opts.sessionId}.json`),
       startedAt: Date.now(),
     }
   }
 
-  async start(userMessage: string, deps: { runFork: (p: string) => Promise<{ text: string }> }): Promise<TaskProfile> {
-    const { classifyTaskProfile } = await import('./classifier')
-    this.state.taskProfile = await classifyTaskProfile({ userMessage, runFork: deps.runFork })
-    this.appendScratchpad(`# Harness — ${this.state.sessionId}\n- Profile: ${this.state.taskProfile}\n- Mode: ${this.state.mode}\n`)
-    return this.state.taskProfile
+  /**
+   * Bootstrap the harness from a fresh user message.
+   * Runs three-axis triage, optionally surfaces it to the user via `askUser` for
+   * confirmation/override, persists the triage, then writes a header to the scratchpad.
+   *
+   * Backwards-compat: if `askUser` is omitted (e.g. unit tests / non-interactive),
+   * the triage is committed without confirmation (`userConfirmed: false`).
+   */
+  async start(
+    userMessage: string,
+    deps: {
+      runFork: (p: string) => Promise<{ text: string }>
+      askUser?: (q: string) => Promise<string>
+      repoSummary?: string
+    },
+  ): Promise<Triage> {
+    const { triageMessage, confirmTriage } = await import('./triage')
+    let triage = await triageMessage({
+      userMessage,
+      repoSummary: deps.repoSummary ?? '',
+      runFork: deps.runFork,
+    })
+    if (deps.askUser) {
+      triage = await confirmTriage(triage, { askUser: deps.askUser, runFork: deps.runFork })
+    }
+    this.state.triage = triage
+    this.appendScratchpad(
+      `# Harness — ${this.state.sessionId}\n` +
+        `- Profile:      ${triage.profile}\n` +
+        `- Difficulty:   ${triage.difficulty}\n` +
+        `- TestStrategy: ${triage.testStrategy}\n` +
+        `- Mode:         ${this.state.mode}\n` +
+        `- Confirmed:    ${triage.userConfirmed ? 'yes' : 'no (auto)'}\n` +
+        `- Reasoning:    ${triage.reasoning}\n`,
+    )
+    return triage
+  }
+
+  /** Override the current triage (used by /harness retriage and tests). */
+  setTriage(triage: Triage): void {
+    this.state.triage = triage
   }
 
   canTransition(to: HarnessStage): { ok: true } | { ok: false; reason: string } {
-    if (!this.state.taskProfile) return { ok: false, reason: 'profile not classified yet' }
+    const triage = this.state.triage
+    if (!triage) return { ok: false, reason: 'triage not classified yet' }
     if (this.state.currentStage === null) {
-      if (stageRequirement(this.state.taskProfile, to) === 'forbidden') return { ok: false, reason: `forbidden by profile` }
+      if (effectiveStageRequirement(triage.profile, triage.difficulty, to) === 'forbidden') {
+        return { ok: false, reason: `forbidden by profile×difficulty` }
+      }
       return { ok: true }
     }
-    return transitionCheck({ from: this.state.currentStage, to, profile: this.state.taskProfile, mode: this.state.mode })
+    return transitionCheck({
+      from: this.state.currentStage,
+      to,
+      profile: triage.profile,
+      difficulty: triage.difficulty,
+      mode: this.state.mode,
+    })
   }
 
   canExit(_nextStage: HarnessStage): { ok: true } | { ok: false; reason: string } {
@@ -56,8 +101,8 @@ export class HarnessStateMachine {
     if (['brainstorm', 'spec', 'plan'].includes(this.state.currentStage)) {
       const p = entry.primitivesSeen
       if (!p.sequentialThinking) return { ok: false, reason: 'missing primitive: sequential_thinking' }
-      if (!p.searchAndVerify)    return { ok: false, reason: 'missing primitive: search_and_verify' }
-      if (!p.askUser)            return { ok: false, reason: 'missing primitive: ask_user_question' }
+      if (!p.searchAndVerify) return { ok: false, reason: 'missing primitive: search_and_verify' }
+      if (!p.askUser) return { ok: false, reason: 'missing primitive: ask_user_question' }
     }
     return { ok: true }
   }
@@ -67,12 +112,22 @@ export class HarnessStateMachine {
     if (!r.ok) throw new Error(`refused: ${(r as { ok: false; reason: string }).reason}`)
     if (this.state.currentStage) {
       const entry = this.state.history[this.state.history.length - 1]
-      if (entry) { entry.exitedAt = Date.now(); entry.exitReason = reason as StageEntry['exitReason'] }
-      this.bus.emit('harness', { type: 'harness.stage.exit', stage: this.state.currentStage, sessionId: this.state.sessionId, reason })
+      if (entry) {
+        entry.exitedAt = Date.now()
+        entry.exitReason = reason as StageEntry['exitReason']
+      }
+      this.bus.emit('harness', {
+        type: 'harness.stage.exit',
+        stage: this.state.currentStage,
+        sessionId: this.state.sessionId,
+        reason,
+      })
     }
     this.state.currentStage = to
     this.state.history.push({
-      stage: to, enteredAt: Date.now(), workersSpawned: [],
+      stage: to,
+      enteredAt: Date.now(),
+      workersSpawned: [],
       primitivesSeen: { sequentialThinking: false, searchAndVerify: false, askUser: false },
     })
     this.bus.emit('harness', { type: 'harness.stage.enter', stage: to, sessionId: this.state.sessionId })
@@ -84,9 +139,37 @@ export class HarnessStateMachine {
     if (entry) entry.primitivesSeen[name] = true
   }
 
-  snapshot(): HarnessState { return JSON.parse(JSON.stringify(this.state)) as HarnessState }
+  /**
+   * Plan execution for the implement stage based on the current Triage's difficulty:
+   *   - simple/medium → returns { kind: 'inline' } (caller runs the work in main agent)
+   *   - hard/hell      → returns { kind: 'graph', graph, listening }
+   *
+   * The graph is NOT auto-executed by the state machine — callers (editor agent /
+   * coordination/scheduler.runGraph) drive execution and emit
+   * `coordination.task.*` events on the bus to update progress.
+   */
+  async planExecution(
+    rootMessage: string,
+    deps: { runFork: (p: string) => Promise<{ text: string }> },
+  ): Promise<{ kind: 'inline' } | { kind: 'graph'; listening: boolean; sessionId: string }> {
+    const triage = this.state.triage
+    if (!triage) throw new Error('cannot plan execution before triage')
+    const { planExecution } = await import('../coordination/scheduler')
+    const plan = await planExecution({ triage, rootMessage, runFork: deps.runFork })
+    if (plan.kind === 'inline') return { kind: 'inline' }
+    // Persist the graph; callers re-load via persist.loadGraph.
+    const { saveGraph } = await import('../coordination/persist')
+    saveGraph(this.state.taskGraphPath, plan.graph)
+    return { kind: 'graph', listening: plan.listening, sessionId: this.state.sessionId }
+  }
 
-  setMode(mode: HarnessMode): void { this.state.mode = mode }
+  snapshot(): HarnessState {
+    return JSON.parse(JSON.stringify(this.state)) as HarnessState
+  }
+
+  setMode(mode: HarnessMode): void {
+    this.state.mode = mode
+  }
 
   private appendScratchpad(chunk: string): void {
     const cur = readScratchpad(this.state.scratchpadPath)
@@ -94,5 +177,7 @@ export class HarnessStateMachine {
     writeScratchpad(this.state.scratchpadPath, next)
   }
 
-  async flushScratchpad(): Promise<void> { /* no-op — append already flushes */ }
+  async flushScratchpad(): Promise<void> {
+    /* no-op — append already flushes */
+  }
 }

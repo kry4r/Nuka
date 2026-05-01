@@ -1,0 +1,55 @@
+profiles:
+  feature:
+    stages:
+      brainstorm: mandatory
+      spec: mandatory
+      plan: mandatory
+      search: mandatory
+      implement: mandatory
+      review: mandatory
+      recap: mandatory
+  debug-fix:
+    stages:
+      brainstorm: optional
+      spec: optional
+      plan: mandatory
+      search: mandatory
+      implement: mandatory
+      review: mandatory
+      recap: mandatory
+  refactor:
+    stages:
+      brainstorm: optional
+      spec: mandatory
+      plan: mandatory
+      search: mandatory
+      implement: mandatory
+      review: mandatory
+      recap: mandatory
+  investigate:
+    stages:
+      brainstorm: mandatory
+      spec: optional
+      plan: optional
+      search: mandatory
+      implement: forbidden
+      review: optional
+      recap: mandatory
+  doc:
+    stages:
+      brainstorm: optional
+      spec: optional
+      plan: optional
+      search: mandatory
+      implement: mandatory
+      review: optional
+      recap: mandatory
+  odd-jobs:
+    stages:
+      brainstorm: optional
+      spec: optional
+      plan: optional
+      search: mandatory
+      implement: mandatory
+      review: optional
+      recap: mandatory
