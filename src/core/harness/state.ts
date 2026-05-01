@@ -139,6 +139,30 @@ export class HarnessStateMachine {
     if (entry) entry.primitivesSeen[name] = true
   }
 
+  /**
+   * Plan execution for the implement stage based on the current Triage's difficulty:
+   *   - simple/medium → returns { kind: 'inline' } (caller runs the work in main agent)
+   *   - hard/hell      → returns { kind: 'graph', graph, listening }
+   *
+   * The graph is NOT auto-executed by the state machine — callers (editor agent /
+   * coordination/scheduler.runGraph) drive execution and emit
+   * `coordination.task.*` events on the bus to update progress.
+   */
+  async planExecution(
+    rootMessage: string,
+    deps: { runFork: (p: string) => Promise<{ text: string }> },
+  ): Promise<{ kind: 'inline' } | { kind: 'graph'; listening: boolean; sessionId: string }> {
+    const triage = this.state.triage
+    if (!triage) throw new Error('cannot plan execution before triage')
+    const { planExecution } = await import('../coordination/scheduler')
+    const plan = await planExecution({ triage, rootMessage, runFork: deps.runFork })
+    if (plan.kind === 'inline') return { kind: 'inline' }
+    // Persist the graph; callers re-load via persist.loadGraph.
+    const { saveGraph } = await import('../coordination/persist')
+    saveGraph(this.state.taskGraphPath, plan.graph)
+    return { kind: 'graph', listening: plan.listening, sessionId: this.state.sessionId }
+  }
+
   snapshot(): HarnessState {
     return JSON.parse(JSON.stringify(this.state)) as HarnessState
   }
