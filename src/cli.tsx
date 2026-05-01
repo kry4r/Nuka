@@ -93,6 +93,7 @@ import { editorAgent } from './core/agents/builtin/editor'
 import { makeSequentialThinkingTool, makeSearchAndVerifyTool, makeAskUserQuestionTool } from './core/harness/primitives'
 import { makeHarnessCommand } from './slash/harness'
 import { makeTriageCommand } from './slash/triage'
+import { makeCoordinationCommand } from './slash/coordination'
 import * as fs from 'node:fs'
 import { initAutoDream } from './core/recap/autoDream'
 import { makeTeamCreateTool } from './core/tools/builtin/teamCreate'
@@ -708,6 +709,15 @@ async function runInteractive(): Promise<void> {
   const triageDeps = { runFork: triageRunFork }
   slash.register(makeHarnessCommand(harness, triageDeps))
   slash.register(makeTriageCommand({ harness, ...triageDeps }))
+  // T8.2 — coordination layer slash command. Reuses the same paths the
+  // harness uses internally and the swarm's MessageRouter for a2a sends.
+  slash.register(
+    makeCoordinationCommand({
+      graphPath: () => harness.snapshot().taskGraphPath,
+      subsPath: () => path.join(home, '.nuka', 'coordination', `${harness.snapshot().sessionId}.subs.json`),
+      router: swarmRouter,
+    }),
+  )
 
   render(
     <App
