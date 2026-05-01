@@ -28,6 +28,11 @@ export type HarnessEvent =
   | { type: 'harness.stage.enter'; stage: HarnessStage; sessionId: string }
   | { type: 'harness.stage.exit'; stage: HarnessStage; sessionId: string; reason: string }
   | { type: 'harness.editor.directive'; sessionId: string; directive: string }
+  // coordination layer events (T3+: task graph + a2a router)
+  | { type: 'coordination.task.created'; sessionId: string; taskId: string; agentId?: string }
+  | { type: 'coordination.task.started'; sessionId: string; taskId: string; agentId: string }
+  | { type: 'coordination.task.completed'; sessionId: string; taskId: string; agentId: string }
+  | { type: 'coordination.a2a.dispatched'; sessionId: string; from: string; to: string; reason: string }
 
 export type EventPayload<T extends Topic> =
   T extends 'task' ? TaskEvent :
