@@ -2,13 +2,19 @@
 //
 // Phase 14b review fix — live subscription hook for MonitorSubmenu.
 // Mirrors the useTasksColumns pattern: useReducer + useEffect + bus.subscribe.
+//
+// T8.4 — coordination.* harness events are routed to a separate visual lane
+// (`coordination`) rather than the generic `harness` lane.
 import { useEffect, useReducer } from 'react'
 import type { EventBus } from '../../core/events/bus'
 import type { TaskEvent, AgentBusEvent, MessageEvent, HarnessEvent } from '../../core/events/types'
+import type { TimelineLane } from './bucketTimeline'
 
 export type MonitorEventItem = {
   t: number
-  topic: 'task' | 'agent' | 'message' | 'harness'
+  /** Visualization lane. Note: `coordination` is derived in the reducer
+   *  from harness payloads whose `type` starts with `coordination.`. */
+  topic: TimelineLane
 }
 
 export type AgentUsageItem = {
@@ -22,27 +28,59 @@ type BucketedState = {
   agent: AgentBusEvent[]
   message: MessageEvent[]
   harness: HarnessEvent[]
+  coordination: HarnessEvent[]
   events: MonitorEventItem[]
   agentUsage: AgentUsageItem[]
 }
 
+type BusTopic = 'task' | 'agent' | 'message' | 'harness'
 type Dispatch = {
-  topic: 'task' | 'agent' | 'message' | 'harness'
+  topic: BusTopic
   payload: unknown
   t: number
 }
 
 function initialState(): BucketedState {
-  return { task: [], agent: [], message: [], harness: [], events: [], agentUsage: [] }
+  return { task: [], agent: [], message: [], harness: [], coordination: [], events: [], agentUsage: [] }
+}
+
+/**
+ * Decide which visualization lane a payload belongs to. Bus topics task/agent/
+ * message map 1:1 to lanes. Harness topic is split: `coordination.*` events
+ * go to the coordination lane, everything else to harness.
+ */
+function laneOf(topic: BusTopic, payload: unknown): TimelineLane {
+  if (topic !== 'harness') return topic
+  const t = (payload as { type?: string } | null)?.type ?? ''
+  return t.startsWith('coordination.') ? 'coordination' : 'harness'
 }
 
 function monitorReducer(prev: BucketedState, ev: Dispatch): BucketedState {
   const { topic, payload, t } = ev
-  const arr = prev[topic] as unknown[]
-  const nextArr = [...arr.slice(-499), payload] as never[]
+  const lane = laneOf(topic, payload)
+  // Store the typed payload in either harness or coordination bucket.
+  let nextHarness = prev.harness
+  let nextCoordination = prev.coordination
+  let nextTask = prev.task
+  let nextAgent = prev.agent
+  let nextMessage = prev.message
 
-  // Rebuild flat timeline events list
-  const nextEvents: MonitorEventItem[] = [...prev.events.slice(-499), { t, topic }]
+  if (topic === 'harness') {
+    if (lane === 'coordination') {
+      nextCoordination = [...prev.coordination.slice(-499), payload as HarnessEvent]
+    } else {
+      nextHarness = [...prev.harness.slice(-499), payload as HarnessEvent]
+    }
+  } else if (topic === 'task') {
+    nextTask = [...prev.task.slice(-499), payload as TaskEvent]
+  } else if (topic === 'agent') {
+    nextAgent = [...prev.agent.slice(-499), payload as AgentBusEvent]
+  } else if (topic === 'message') {
+    nextMessage = [...prev.message.slice(-499), payload as MessageEvent]
+  }
+
+  // Rebuild flat timeline events list using the visualization lane.
+  const nextEvents: MonitorEventItem[] = [...prev.events.slice(-499), { t, topic: lane }]
 
   // Rebuild agentUsage if this is an agent.usage event
   let nextAgentUsage = prev.agentUsage
@@ -67,8 +105,11 @@ function monitorReducer(prev: BucketedState, ev: Dispatch): BucketedState {
   }
 
   return {
-    ...prev,
-    [topic]: nextArr,
+    task: nextTask,
+    agent: nextAgent,
+    message: nextMessage,
+    harness: nextHarness,
+    coordination: nextCoordination,
     events: nextEvents,
     agentUsage: nextAgentUsage,
   }
