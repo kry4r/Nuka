@@ -1,18 +1,16 @@
 // src/tui/Messages/Messages.tsx
-import React, { useMemo, useRef } from 'react'
-import { Box, Static } from 'ink'
+import React from 'react'
+import { Box } from 'ink'
 import { MessageRow } from './MessageRow'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
 import type { Message } from '../../core/message/types'
 
-type StaticItem =
-  | { kind: 'welcome' }
-  | { kind: 'message'; m: Message }
-
-// Sentinel object reused across renders so `<Static>` doesn't treat the
-// Welcome prologue as a new item on every parent re-render. The actual
-// React node lives in a ref outside the items array.
-const WELCOME_ITEM: StaticItem = { kind: 'welcome' }
+// Tail-N: only the most recent N messages are rendered live so the
+// conversation zone can't overflow the available terminal rows and push
+// the prompt/status bar off-screen. Earlier messages are dropped from
+// the live area (the user still has full history via /resume + the
+// session log file).
+const TAIL_N = 50
 
 /**
  * Build a map of tool_use id → {output, isError} for dispatch_agent tool
@@ -49,45 +47,29 @@ export function Messages(props: {
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
-  /** Optional prologue rendered as the first Static item — typically the Welcome
-   *  hero. Lives inside Static so it scrolls up to scrollback as messages
-   *  accumulate, instead of staying glued to the live area. */
+  /** Optional prologue rendered above the message list — typically the
+   *  Welcome hero. Stays in the live area (no longer pushed to scrollback). */
   prologue?: React.ReactNode
 }): React.JSX.Element {
   const toolResultsById = buildToolResultsById(props.items)
-  // Keep latest prologue node in a ref so the rendered Welcome stays current
-  // (cwd/branch/model can shift), but the Static items array's identity for
-  // the welcome slot is stable — `<Static>` only emits new items on length
-  // change, which is what we want.
-  const prologueRef = useRef<React.ReactNode>(null)
-  prologueRef.current = props.prologue ?? null
-  const hasPrologue = props.prologue !== undefined && props.prologue !== null
-  const items = useMemo<StaticItem[]>(() => {
-    const arr: StaticItem[] = []
-    if (hasPrologue) arr.push(WELCOME_ITEM)
-    for (const m of props.items) arr.push({ kind: 'message', m })
-    return arr
-  }, [hasPrologue, props.items])
+  // Tail-N truncation keeps the live conversation zone bounded so a long
+  // session can't overflow and shove the prompt/status panel out of view.
+  const tail = props.items.length > TAIL_N
+    ? props.items.slice(props.items.length - TAIL_N)
+    : props.items
   return (
     <Box flexDirection="column">
-      <Static items={items}>
-        {(item, i) => {
-          if (item.kind === 'welcome') {
-            return <Box key="welcome-prologue">{prologueRef.current}</Box>
-          }
-          const m = item.m
-          return (
-            <MessageRow
-              key={'id' in m ? m.id : `m-${i}`}
-              m={m}
-              toolResultsById={toolResultsById}
-              expandedAgentCallIds={props.expandedAgentCallIds}
-              resolveToolSource={props.resolveToolSource}
-              resolveToolAnnotations={props.resolveToolAnnotations}
-            />
-          )
-        }}
-      </Static>
+      {props.prologue && <Box>{props.prologue}</Box>}
+      {tail.map((m, i) => (
+        <MessageRow
+          key={'id' in m ? m.id : `m-${i}`}
+          m={m}
+          toolResultsById={toolResultsById}
+          expandedAgentCallIds={props.expandedAgentCallIds}
+          resolveToolSource={props.resolveToolSource}
+          resolveToolAnnotations={props.resolveToolAnnotations}
+        />
+      ))}
       {props.streaming && (
         <MessageRow
           m={props.streaming}

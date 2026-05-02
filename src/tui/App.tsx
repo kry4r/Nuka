@@ -537,7 +537,19 @@ export function App(props: AppProps): React.JSX.Element {
   // streamingAssistant so the static row replaces the live one seamlessly.
   const streamingMsg = stream.streamingAssistant
   const justCompacted = stream.events.some(e => e.type === 'auto_compacted')
-  const contextUsed = session.totalUsage.inputTokens + session.totalUsage.outputTokens
+  // contextUsed = the most recent assistant turn's `inputTokens` — that
+  // represents the actual size of the current context window, NOT the
+  // running total across the session. (Cumulative totals are still shown
+  // via the in:/out: segment as session-wide stats.)
+  const contextUsed = (() => {
+    for (let i = session.messages.length - 1; i >= 0; i--) {
+      const m = session.messages[i]
+      if (m && m.role === 'assistant' && m.usage) {
+        return m.usage.inputTokens
+      }
+    }
+    return 0
+  })()
   const contextMax = props.config.compact?.contextWindow ?? 200_000
   const pc = props.providers.getProviderConfig(session.providerId)
   const cost = pc ? computeCost(pc, session.model, session.totalUsage) : 0
@@ -824,7 +836,22 @@ export function App(props: AppProps): React.JSX.Element {
         <SubmenuFrame mode="full" title="Onboarding" focused>
           <Wizard
             onDone={async (patch) => {
-              try { await saveWizardPatch(os.homedir(), patch) } catch { /* ignore */ }
+              try {
+                await saveWizardPatch(os.homedir(), patch)
+              } catch (err) {
+                // Surface failures (zod validation, FS errors, etc.) as an
+                // assistant message instead of silently swallowing them.
+                const e = err as NodeJS.ErrnoException
+                const tag = e?.code ? `[${e.code}] ` : ''
+                const text = `[/onboarding] save failed: ${tag}${(err as Error).message ?? String(err)}`
+                appendMessage(session, {
+                  role: 'assistant',
+                  content: [{ type: 'text', text }],
+                  id: `onboarding-err-${Date.now()}`,
+                  ts: Date.now(),
+                })
+                bumpMessages()
+              }
               closeSubmenu()
             }}
             onCancel={closeSubmenu}

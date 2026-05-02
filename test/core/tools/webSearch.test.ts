@@ -8,14 +8,41 @@ afterEach(() => {
 })
 
 describe('makeWebSearchTool', () => {
-  it('returns not-configured error when cfg is undefined', async () => {
+  it('falls back to the default backend when cfg is undefined', async () => {
+    let capturedUrl: string | undefined
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      const html = `
+        <a class="result__a" href="https://duckduckgo.com/l/?uddg=${encodeURIComponent('https://example.com/')}&rut=x">Example Site</a>
+        <a class="result__snippet" href="#">Example snippet text</a>
+        <a class="result__a" href="https://duckduckgo.com/l/?uddg=${encodeURIComponent('https://example.org/')}&rut=y">Org Site</a>
+        <a class="result__snippet" href="#">Org snippet</a>
+      `
+      return Promise.resolve({ ok: true, status: 200, text: async () => html })
+    }))
     const tool = makeWebSearchTool(undefined)
-    const r = await tool.run({ query: 'hello' }, ctx)
-    expect(r.isError).toBe(true)
-    expect(r.output).toContain('not configured')
+    const r = await tool.run({ query: 'hello world' }, ctx)
+    expect(r.isError).toBe(false)
+    expect(capturedUrl).toContain('duckduckgo.com')
+    expect(capturedUrl).toContain('hello%20world')
+    const out = String(r.output)
+    expect(out).toContain('[Example Site](https://example.com/)')
+    expect(out).toContain('[Org Site](https://example.org/)')
   })
 
-  it('substitutes {query} placeholder in the endpoint URL', async () => {
+  it('returns an error when the default backend is unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      statusText: 'Too Many Requests',
+    }))
+    const tool = makeWebSearchTool(undefined)
+    const r = await tool.run({ query: 'test' }, ctx)
+    expect(r.isError).toBe(true)
+    expect(r.output).toContain('429')
+  })
+
+  it('substitutes {query} placeholder in the configured endpoint URL', async () => {
     let capturedUrl: string | undefined
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
       capturedUrl = url
@@ -66,7 +93,7 @@ describe('makeWebSearchTool', () => {
     expect(capturedHeaders?.['Authorization']).toBe('Bearer mytoken')
   })
 
-  it('returns error on non-200 response', async () => {
+  it('returns error on non-200 response from configured endpoint', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 503,

@@ -93,12 +93,13 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
   )
 
   if (narrow) {
-    // Narrow: welcome takes 100% width, no right column
+    // Narrow: welcome takes 100% width, no right column.
+    // Bug fix: dropped outer flexGrow=1 so the frame hugs its content
+    // instead of inflating to fill the whole conversation zone.
     return (
       <Box
         borderStyle="round"
         borderColor={P.fgMuted}
-        flexGrow={1}
         flexDirection="column"
       >
         {heroContent}
@@ -106,9 +107,12 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
     )
   }
 
-  // Wide: 2:1 split
+  // Wide: 2:1 split.
+  // Bug fix: dropped outer-row flexGrow=1 so the row hugs its content
+  // height. The inner flexGrow={2}/flexGrow={1} still govern the left/right
+  // width split.
   return (
-    <Box flexDirection="row" flexGrow={1}>
+    <Box flexDirection="row">
       {/* Left: framed Welcome panel, flexGrow=2 */}
       <Box
         flexGrow={2}
