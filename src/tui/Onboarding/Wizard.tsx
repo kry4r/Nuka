@@ -11,6 +11,7 @@
 
 import React, { useReducer, useEffect, useRef, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
+import stringWidth from 'string-width'
 import {
   reducer,
   initialState,
@@ -19,11 +20,30 @@ import {
 } from '../../core/onboarding/wizard'
 import { probeProvider, type FetchLike } from '../../core/onboarding/providerProbe'
 import { defaultPalette as P } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 import { PickProvider } from './Steps/PickProvider'
 import { EnterKey } from './Steps/EnterKey'
 import { PickModel } from './Steps/PickModel'
 import { Verifying } from './Steps/Verifying'
 import { Done } from './Steps/Done'
+
+/** Width-aware right-truncation: keeps the head, drops the tail with "…". */
+function truncateRightToFit(s: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  if (stringWidth(s) <= maxWidth) return s
+  const budget = maxWidth - 1
+  const chars = Array.from(s)
+  let width = 0
+  let i = 0
+  while (i < chars.length) {
+    const ch = chars[i]!
+    const w = stringWidth(ch)
+    if (width + w > budget) break
+    width += w
+    i++
+  }
+  return chars.slice(0, i).join('') + '…'
+}
 
 type LocalUI = {
   /** cursor for pickProvider / pickModel */
@@ -271,15 +291,19 @@ function CustomDetailsScreen(props: {
   ui: { name: string; baseUrl: string; model: string; format: 'anthropic' | 'openai'; field: 0 | 1 | 2 | 3 }
 }): React.JSX.Element {
   const { ui: u } = props
+  const { columns } = useTerminalSize()
+  // 30 cols of chrome: label width(10) + "│ "(2) + cursor(1) + hint padding +
+  // border(2) + paddingX(2) + safety. The hint is dropped when narrow.
+  const valueWidth = Math.max(8, columns - 30)
   const Field = (i: 0 | 1 | 2 | 3, label: string, val: string, hint?: string) => (
     <Box>
       <Box width={10}>
         <Text color={u.field === i ? P.primary : P.fgMuted} bold={u.field === i}>{label}</Text>
       </Box>
       <Text color={P.fgMuted}>│ </Text>
-      <Text color={P.fg}>{val}</Text>
+      <Text color={P.fg}>{truncateRightToFit(val, valueWidth)}</Text>
       {u.field === i && <Text color={P.fg} inverse> </Text>}
-      {hint && <Text color={P.fgMuted}>  {hint}</Text>}
+      {hint && columns >= 80 && <Text color={P.fgMuted}>  {hint}</Text>}
     </Box>
   )
   return (
@@ -296,10 +320,24 @@ function CustomDetailsScreen(props: {
 }
 
 function ErrorScreen(props: { message: string }): React.JSX.Element {
+  const { columns } = useTerminalSize()
+  // Cap at first newline + 200 chars so a server-side stack trace doesn't
+  // blow out the frame; render multi-line in a paddingLeft={4} sub-box.
+  const capped = props.message.length > 200
+    ? props.message.slice(0, 200) + '…'
+    : props.message
+  const lines = capped.split('\n')
+  const lineWidth = Math.max(20, columns - 8)
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.error} paddingX={1}>
       <Text color={P.error} bold>Verification failed</Text>
-      <Text color={P.fg}>{props.message}</Text>
+      <Box flexDirection="column" paddingLeft={4}>
+        {lines.map((line, i) => (
+          <Box key={i} width={lineWidth}>
+            <Text color={P.fg} wrap="truncate-end">{line}</Text>
+          </Box>
+        ))}
+      </Box>
       <Text color={P.fgMuted}>Enter retry · Esc cancel</Text>
     </Box>
   )

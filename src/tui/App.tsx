@@ -1,5 +1,5 @@
 // src/tui/App.tsx
-import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Box, Text, useApp, useInput } from 'ink'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -145,6 +145,10 @@ export type UIAction =
   | { type: 'tasks-focus-enter' }
   | { type: 'tasks-focus-cursor'; delta: -1 | 1; total: number }
   | { type: 'tasks-focus-open' }
+  // Bug fix #18: clamp the focused cursor when the live total shrinks
+  // (e.g. a subagent finishes and rolls off the panel). When `total` is 0
+  // we exit focus mode entirely.
+  | { type: 'tasks-clamp'; total: number }
 
 export function uiReducer(state: UIState, action: UIAction): UIState {
   // Phase 13 M2.5 — every branch must return the same state reference when
@@ -191,6 +195,15 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
       // Only meaningful in tasks-focused state.
       if (state.kind !== 'tasks-focused') return state
       return { kind: 'submenu', submenu: { kind: 'tasks', focusItem: state.cursor } }
+    case 'tasks-clamp': {
+      // Only meaningful in tasks-focused state.
+      if (state.kind !== 'tasks-focused') return state
+      // Total dropped to 0 → exit focus mode entirely.
+      if (action.total <= 0) return { kind: 'normal' }
+      const max = action.total - 1
+      if (state.cursor <= max) return state
+      return { kind: 'tasks-focused', cursor: max }
+    }
     default:
       return state
   }
@@ -417,6 +430,27 @@ export function App(props: AppProps): React.JSX.Element {
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
 
+  // Bug fix #18: live count of focusable Tasks rows. When a subagent finishes
+  // and rolls off the panel mid-focus, dispatch a clamp so cursor never
+  // points past the last item (or exits focus mode if the panel empties).
+  // Recomputed on every render the panel could change — tasksTick is bumped
+  // on agent events, taskManager change subscription, and todo writes.
+  const flattenedTotal = useMemo(
+    () => flattenedTasksLength({
+      todoStore: props.todoStore,
+      messages: session.messages,
+      tasks: props.taskManager ? props.taskManager.list() : [],
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.todoStore, props.todoStore?.items.length, session.messages, props.taskManager, tasksTick],
+  )
+  useEffect(() => {
+    if (uiState.kind !== 'tasks-focused') return
+    if (uiState.cursor >= flattenedTotal) {
+      dispatchUI({ type: 'tasks-clamp', total: flattenedTotal })
+    }
+  }, [flattenedTotal, uiState])
+
   useInput((inputKey, key) => {
     if (key.escape) {
       // Esc always returns to normal from any non-normal UIState. Inline
@@ -450,7 +484,11 @@ export function App(props: AppProps): React.JSX.Element {
     }
     // Phase 13 M4 — Tab enters Tasks focus mode when Tasks panel is non-empty;
     // also exits focus mode when already focused.
+    // Bug fix #38: when slash card is active, Tab is owned by the slash
+    // suggestion completion — bail out early so the Tasks-focus dispatch
+    // doesn't race with PromptInput's Tab handler.
     if (key.tab) {
+      if (uiState.kind === 'slash') return
       if (uiState.kind === 'tasks-focused') {
         dispatchUI({ type: 'reset' })
         return
@@ -600,6 +638,37 @@ export function App(props: AppProps): React.JSX.Element {
   const tasksFocused = uiState.kind === 'tasks-focused'
   const tasksCursor = uiState.kind === 'tasks-focused' ? uiState.cursor : undefined
 
+  // Bug fix #39: the prologue Welcome is a relatively heavy element (logo,
+  // updates panel, recent panel) — memoize it so it isn't rebuilt on every
+  // App render (which fires on every keystroke). gitBranch is destructured
+  // because it's an object whose identity may change per render.
+  const branchName = props.gitBranch?.branch
+  const branchDirty = props.gitBranch?.dirty
+  const prologueNode = useMemo(
+    () => (
+      <Welcome
+        cwd={props.cwd}
+        gitBranch={props.gitBranch}
+        model={session.model}
+        version={props.version}
+        tip={tip}
+        updates={props.updates}
+        recent={props.recent}
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.cwd, branchName, branchDirty, session.model, props.version, tip, props.updates, props.recent],
+  )
+
+  // Bug fix #9: compute a row budget so Messages can clamp its own height
+  // and stop shoving the prompt off-screen on small terminals. Reserved
+  // rows budget = status (~3) + tasks summary when collapsed (~3) + bordered
+  // prompt input (~4) + safety margin (~4). The Messages component falls
+  // back to its old TAIL_N=50 behavior if availableRows is omitted, so this
+  // change is opt-in.
+  const RESERVED_ROWS = 14
+  const conversationAvailableRows = Math.max(8, terminalRows - RESERVED_ROWS)
+
   return (
     <ThemeProvider theme={activeTheme}>
     {/* Anchor the prompt + status to the bottom of the terminal: the outer
@@ -609,41 +678,23 @@ export function App(props: AppProps): React.JSX.Element {
     <Box flexDirection="column" height={terminalRows}>
       {/* Conversation zone — soft layout region (no frame). Welcome rides
           inside the Static stream as the first item so it scrolls off-screen
-          as messages accumulate, rather than staying glued to the live area. */}
-      <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          as messages accumulate, rather than staying glued to the live area.
+          Bug fix #9: overflow="hidden" so children that overflow the flex
+          region are clipped, never pushing the bottom-anchored Prompt zone
+          off-screen. Messages clamps its tail length via availableRows. */}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
         {justCompacted && (
           <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
         )}
-        {session.messages.length === 0 && (
-          <Welcome
-            cwd={props.cwd}
-            gitBranch={props.gitBranch}
-            model={session.model}
-            version={props.version}
-            tip={tip}
-            updates={props.updates}
-            recent={props.recent}
-          />
-        )}
+        {session.messages.length === 0 && prologueNode}
         <Messages
           items={session.messages}
           streaming={streamingMsg}
           expandedAgentCallIds={expandedAgentCallIds}
           resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
           resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
-          prologue={
-            session.messages.length > 0 ? (
-              <Welcome
-                cwd={props.cwd}
-                gitBranch={props.gitBranch}
-                model={session.model}
-                version={props.version}
-                tip={tip}
-                updates={props.updates}
-                recent={props.recent}
-              />
-            ) : null
-          }
+          availableRows={conversationAvailableRows}
+          prologue={session.messages.length > 0 ? prologueNode : null}
         />
       </Box>
 
@@ -666,8 +717,9 @@ export function App(props: AppProps): React.JSX.Element {
           borderStyle="round"
           borderColor={activeTheme.colors.fgMuted}
           paddingX={1}
+          flexShrink={0}
         >
-          <Text color={activeTheme.colors.fgMuted}>
+          <Text color={activeTheme.colors.fgMuted} wrap="truncate-end">
             Tasks ▸  Plan {props.todoStore ? props.todoStore.items.length : 0} · {props.taskManager ? props.taskManager.list().length : 0} backgrounds   (Ctrl+T to expand)
           </Text>
         </Box>

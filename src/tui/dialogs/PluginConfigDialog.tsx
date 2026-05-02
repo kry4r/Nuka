@@ -110,7 +110,11 @@ export function PluginConfigDialog(props: {
         })
       )}
       <Box height={1} />
-      <Text color={P.fgMuted}>tab/↑↓ field · ⏎ save · esc skip plugin this session</Text>
+      <Text color={P.fgMuted}>
+        {fields.length === 0
+          ? '⏎ continue · Esc cancel'
+          : 'tab/↑↓ field · ⏎ save · esc skip plugin this session'}
+      </Text>
     </Box>
   )
 }

@@ -15,6 +15,8 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import type { Task, TaskState } from '../../core/tasks/types'
+import { useTheme } from '../../core/theme/context'
+import { defaultPalette as P } from '../theme'
 
 const STATE_ICON: Record<TaskState, string> = {
   running: '▶',
@@ -26,40 +28,44 @@ const STATE_ICON: Record<TaskState, string> = {
   shutdown_requested: '◎',
 }
 
-const STATE_COLOR: Record<TaskState, string> = {
-  running: 'cyan',
-  completed: 'green',
-  failed: 'red',
-  killed: 'yellow',
-  pending: 'gray',
-  idle: 'cyan',
-  shutdown_requested: 'yellow',
-}
-
 export type BackgroundListProps = {
   tasks: Task[]
   maxItems: number
 }
 
 export function BackgroundList({ tasks, maxItems }: BackgroundListProps): React.JSX.Element | null {
+  const { colors } = useTheme()
   if (tasks.length === 0) return null
 
   const visible = tasks.slice(0, maxItems)
   const overflow = tasks.length - visible.length
 
+  const STATE_COLOR: Record<TaskState, string> = {
+    running: colors.accentCool ?? P.accentCool,
+    completed: colors.success ?? P.success,
+    failed: colors.error ?? P.error,
+    killed: colors.warn ?? P.warn,
+    pending: colors.fgMuted ?? P.fgMuted,
+    idle: colors.accentCool ?? P.accentCool,
+    shutdown_requested: colors.warn ?? P.warn,
+  }
+  const titleColor = colors.accentWarm ?? P.accentWarm
+  const fgColor = colors.fg ?? P.fg
+  const fgMuted = colors.fgMuted ?? P.fgMuted
+
   return (
     <Box flexDirection="column">
-      <Text color="yellow" bold>Backgrounds</Text>
+      <Text color={titleColor} bold>Backgrounds</Text>
       {visible.map(task => (
         <Box key={task.id} flexDirection="row" gap={1}>
           <Text color={STATE_COLOR[task.state]}>{STATE_ICON[task.state]}</Text>
-          <Text color={task.state === 'completed' || task.state === 'failed' || task.state === 'killed' ? 'gray' : 'white'}>
+          <Text color={task.state === 'completed' || task.state === 'failed' || task.state === 'killed' ? fgMuted : fgColor}>
             {task.description}
           </Text>
         </Box>
       ))}
       {overflow > 0 && (
-        <Text color="gray">  … +{overflow} more</Text>
+        <Text color={fgMuted}>  … +{overflow} more</Text>
       )}
     </Box>
   )

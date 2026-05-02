@@ -2,6 +2,7 @@
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 import type { PermissionCall, PermissionDecision } from '../../core/permission/types'
 import type { AnnotationBadge } from '../../core/permission/bridge'
 
@@ -19,6 +20,11 @@ export function PermissionDialog(props: {
 }): React.JSX.Element {
   const isDestructive = props.annotationBadges?.includes('destructive') ?? false
   const isReadOnly = props.annotationBadges?.includes('read-only') ?? false
+  const { columns } = useTerminalSize()
+  // On narrow terminals the full pattern row competes for space with the
+  // input summary; drop it so the dialog fits without wrapping.
+  const isNarrow = columns < 80
+  const includePattern = !!props.suggestedPattern && !isNarrow
 
   // Default cursor: 0 (Allow) for readOnly non-destructive; last option (No/Deny) for destructive
   const options: Array<{ label: string; decide: () => PermissionDecision }> = [
@@ -27,7 +33,7 @@ export function PermissionDialog(props: {
       label: `Yes, always for ${props.call.hint} in this session`,
       decide: () => ({ allowed: true, remember: { scope: 'session', hint: props.call.hint } }),
     },
-    ...(props.suggestedPattern
+    ...(includePattern
       ? [{
           label: `Yes, always for ${props.suggestedPattern}`,
           decide: () => ({
@@ -59,7 +65,13 @@ export function PermissionDialog(props: {
     }
   })
 
-  const inputSummary = JSON.stringify(props.call.input).slice(0, 120)
+  // Was hardcoded slice(0, 120). Use the live terminal width so wide TTYs
+  // show the full call and narrow ones don't wrap. 4 cols of chrome.
+  const summaryWidth = Math.max(20, columns - 4)
+  const summaryRaw = JSON.stringify(props.call.input)
+  const inputSummary = summaryRaw.length > summaryWidth
+    ? summaryRaw.slice(0, summaryWidth - 1) + '…'
+    : summaryRaw
   const badges = props.annotationBadges ?? []
 
   return (

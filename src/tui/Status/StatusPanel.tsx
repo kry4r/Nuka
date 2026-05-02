@@ -32,6 +32,23 @@ import type { StatusLineConfig } from '../../core/config/schema'
 import type { TaskManager } from '../../core/tasks/manager'
 import { execFirstLine, template, type StatusLineCtx } from './statusLine'
 
+/** Strip CR/LF from a status output so embedded newlines never blow the row layout. */
+function stripNewlines(s: string): string {
+  return String(s).replace(/[\r\n]+/g, ' ').trim()
+}
+
+/**
+ * Truncate `s` to a maximum width, prepending an ellipsis when the value has
+ * to be cut. Mirrors the local `shortenCwd` helper instead of pulling in a
+ * heavy width-measurement dependency — model/provider strings in the dense
+ * status row are ASCII in practice, so character length matches display
+ * width. `max <= 1` returns the string verbatim.
+ */
+function truncateLeftEllipsis(s: string, max: number): string {
+  if (max <= 1 || s.length <= max) return s
+  return '…' + s.slice(s.length - (max - 1))
+}
+
 export type StatusMode = 'idle' | 'running' | 'awaiting-user'
 export type StatusLayout = 'dense' | 'compact' | 'oneline'
 export type IconMode = 'icon' | 'text'
@@ -144,6 +161,9 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const cmdErrLogged = useRef(false)
   useEffect(() => {
     const cmd = props.statusLineConfig?.command
+    // P2 #40 — reset the error-logging guard whenever the command itself
+    // changes so a fresh failure on a new command logs once.
+    cmdErrLogged.current = false
     if (!cmd) {
       setCmdOut(null)
       return
@@ -158,7 +178,9 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
           cmdErrLogged.current = true
           process.stderr.write(`[statusline] command error: ${cmd}\n`)
         }
-        setCmdOut(out)
+        // P1 #28 — strip embedded CR/LF so multi-line command output
+        // doesn't break the status row layout.
+        setCmdOut(stripNewlines(out))
       } catch {
         if (!cancelled) setCmdOut('?')
       }
@@ -205,6 +227,16 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     return `plugins:${plugins} · agents:${props.agentInFlight} · bg:${bg}`
   }
 
+  // P0 #11 — In dense layout the left column is roughly half the width,
+  // and the model row also carries provider + optional effort. Pre-truncate
+  // the model name so the dense row never wraps.
+  // Budget: ~one third of the terminal minus a small allowance for borders
+  // and the " · provider" suffix.
+  const modelBudget = Math.max(8, Math.floor(columns / 3) - 4)
+  const displayModel = layout === 'dense'
+    ? truncateLeftEllipsis(props.model, modelBudget)
+    : props.model
+
   const segments: Array<{ id: string; render: () => React.JSX.Element }> = [
     {
       id: 'mode',
@@ -214,7 +246,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
       id: 'model',
       render: () => (
         <Text color={muted}>
-          {props.model} · {props.providerId}
+          {displayModel} · {props.providerId}
           {props.effort ? ` · effort:${props.effort}` : ''}
         </Text>
       ),
@@ -268,7 +300,9 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
       tasks: backgroundCount(props.taskManager),
       branch: props.gitBranch?.branch ?? null,
     }
-    const tplOut = template(props.statusLineConfig?.format, ctx)
+    // P1 #28 — strip CR/LF from both template output and command output
+    // before composing the status line.
+    const tplOut = stripNewlines(template(props.statusLineConfig?.format, ctx))
     const display = cmdOut !== null ? `${tplOut} ${cmdOut}` : tplOut
     return <Text color={muted}>{display}</Text>
   }

@@ -143,15 +143,35 @@ export function TasksPanel({
   const subOffset = planItems.length
   const bgOffset = planItems.length + subagents.length
 
+  // Phase 14b — palette-driven status colors (replaces hard-coded ANSI names).
+  const c = theme.colors
+  const PLAN_STATUS_COLOR: Record<string, string> = {
+    completed: c.success ?? P.success,
+    in_progress: c.accentCool ?? P.accentCool,
+    pending: c.fgMuted ?? P.fgMuted,
+  }
+  const BG_STATE_COLOR: Record<string, string> = {
+    running: c.accentCool ?? P.accentCool,
+    completed: c.success ?? P.success,
+    failed: c.error ?? P.error,
+    killed: c.warn ?? P.warn,
+    pending: c.fgMuted ?? P.fgMuted,
+    idle: c.accentCool ?? P.accentCool,
+    shutdown_requested: c.warn ?? P.warn,
+  }
+  const fgColor      = c.fg ?? P.fg
+  const fgMutedColor = c.fgMuted ?? P.fgMuted
+  const subAccent    = c.accentCool ?? P.accentCool
+  const sectionTitle = c.accentWarm ?? P.accentWarm
+
   const renderPlanRow = (item: TodoState['items'][number], idx: number): React.JSX.Element => {
     const absIdx = planOffset + idx
     const isCursor = focused && cursor !== undefined && absIdx === cursor
     const STATUS_ICON: Record<string, string> = { completed: '✓', in_progress: '▶', pending: '☐' }
-    const STATUS_COLOR: Record<string, string> = { completed: 'green', in_progress: 'cyan', pending: 'gray' }
     return (
       <Box key={idx} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
-        <Text color={STATUS_COLOR[item.status] ?? 'gray'}>{STATUS_ICON[item.status] ?? '☐'}</Text>
-        <Text color={item.status === 'completed' ? 'gray' : 'white'} inverse={isCursor}>{item.title}</Text>
+        <Text color={PLAN_STATUS_COLOR[item.status] ?? fgMutedColor}>{STATUS_ICON[item.status] ?? '☐'}</Text>
+        <Text color={item.status === 'completed' ? fgMutedColor : fgColor} inverse={isCursor}>{item.title}</Text>
       </Box>
     )
   }
@@ -161,8 +181,8 @@ export function TasksPanel({
     const isCursor = focused && cursor !== undefined && absIdx === cursor
     return (
       <Box key={sub.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
-        <Text color="cyan">▶</Text>
-        <Text color="white" inverse={isCursor}>{sub.label}</Text>
+        <Text color={subAccent}>▶</Text>
+        <Text color={fgColor} inverse={isCursor}>{sub.label}</Text>
       </Box>
     )
   }
@@ -171,12 +191,11 @@ export function TasksPanel({
     const absIdx = bgOffset + idx
     const isCursor = focused && cursor !== undefined && absIdx === cursor
     const STATE_ICON: Record<string, string> = { running: '▶', completed: '✓', failed: '✗', killed: '◉', pending: '☐' }
-    const STATE_COLOR: Record<string, string> = { running: 'cyan', completed: 'green', failed: 'red', killed: 'yellow', pending: 'gray' }
     const dimmed = task.state === 'completed' || task.state === 'failed' || task.state === 'killed'
     return (
       <Box key={task.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
-        <Text color={STATE_COLOR[task.state] ?? 'gray'}>{STATE_ICON[task.state] ?? '☐'}</Text>
-        <Text color={dimmed ? 'gray' : 'white'} inverse={isCursor}>{task.description}</Text>
+        <Text color={BG_STATE_COLOR[task.state] ?? fgMutedColor}>{STATE_ICON[task.state] ?? '☐'}</Text>
+        <Text color={dimmed ? fgMutedColor : fgColor} inverse={isCursor}>{task.description}</Text>
       </Box>
     )
   }
@@ -188,36 +207,36 @@ export function TasksPanel({
       borderColor={borderColor}
       paddingX={1}
     >
-      <Text color={titleColor} bold>Tasks  <Text color={P.fgMuted} dimColor>{focused ? '(↑↓/jk: move  ⏎: detail  Tab: exit)' : '(Ctrl+T to collapse)'}</Text></Text>
+      <Text color={titleColor} bold>Tasks  <Text color={fgMutedColor} dimColor>{focused ? '(↑↓/jk: move  ⏎: detail  Tab: exit)' : '(Ctrl+T to collapse)'}</Text></Text>
       {hasplan && (
         <Box flexDirection="column">
-          <Text color="yellow" bold>Plan</Text>
+          <Text color={sectionTitle} bold>Plan</Text>
           {planItems.slice(0, planCap).map((item, i) => renderPlanRow(item, i))}
           {planItems.length - Math.min(planCap, planItems.length) > 0 && (
-            <Text color="gray">  … +{planItems.length - planCap} more</Text>
+            <Text color={fgMutedColor}>  … +{planItems.length - planCap} more</Text>
           )}
         </Box>
       )}
       {hasSubs && (
         <>
-          {hasplan && <Text color={P.fgMuted}>─</Text>}
+          {hasplan && <Text color={fgMutedColor}>─</Text>}
           <Box flexDirection="column">
-            <Text color="yellow" bold>Subagents</Text>
+            <Text color={sectionTitle} bold>Subagents</Text>
             {subagents.slice(0, subCap).map((sub, i) => renderSubRow(sub, i))}
             {subagents.length - Math.min(subCap, subagents.length) > 0 && (
-              <Text color="gray">  … +{subagents.length - subCap} more</Text>
+              <Text color={fgMutedColor}>  … +{subagents.length - subCap} more</Text>
             )}
           </Box>
         </>
       )}
       {hasBgs && (
         <>
-          {(hasplan || hasSubs) && <Text color={P.fgMuted}>─</Text>}
+          {(hasplan || hasSubs) && <Text color={fgMutedColor}>─</Text>}
           <Box flexDirection="column">
-            <Text color="yellow" bold>Backgrounds</Text>
+            <Text color={sectionTitle} bold>Backgrounds</Text>
             {bgTasks.slice(0, bgCap).map((task, i) => renderBgRow(task, i))}
             {bgTasks.length - Math.min(bgCap, bgTasks.length) > 0 && (
-              <Text color="gray">  … +{bgTasks.length - bgCap} more</Text>
+              <Text color={fgMutedColor}>  … +{bgTasks.length - bgCap} more</Text>
             )}
           </Box>
         </>

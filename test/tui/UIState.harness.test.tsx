@@ -137,7 +137,10 @@ describe('Phase 12 M6 — UIState e2e harness', () => {
     } finally {
       h.unmount()
     }
-  }, 10_000)
+    // Bumped from 10s to 30s: the e2e harness drives many state transitions
+    // (slash → arg-hint → submenu full → inline → normal) and gets squeezed
+    // when vitest is running the full suite in parallel — passes < 1s alone.
+  }, 30_000)
 
   it('Ctrl+T toggles tasks-collapsed; Status / Prompt remain visible per §4.3', async () => {
     const h = mountApp({ target: 'app' })

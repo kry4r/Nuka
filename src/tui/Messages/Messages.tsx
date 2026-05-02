@@ -12,6 +12,14 @@ import type { Message } from '../../core/message/types'
 // session log file).
 const TAIL_N = 50
 
+// Approximate row count to reserve for the Welcome hero when it is
+// rendered as the prologue. Mirrors HERO_MAX_HEIGHT in Welcome.tsx.
+const PROLOGUE_ROWS = 12
+
+// Floor on tailN so the live area never collapses below a couple of
+// recent turns even on a tiny terminal.
+const TAIL_FLOOR = 5
+
 /**
  * Build a map of tool_use id → {output, isError} for dispatch_agent tool
  * calls. Only dispatch_agent entries are included so that MessageRow
@@ -50,15 +58,31 @@ export function Messages(props: {
   /** Optional prologue rendered above the message list — typically the
    *  Welcome hero. Stays in the live area (no longer pushed to scrollback). */
   prologue?: React.ReactNode
+  /**
+   * Bug fix #9 — height-aware tail: when the parent passes the row budget
+   * available to the conversation zone, Messages clamps its visible-message
+   * count to fit. If omitted, falls back to the static TAIL_N=50 to preserve
+   * existing behavior for callers/tests that don't supply it.
+   */
+  availableRows?: number
 }): React.JSX.Element {
   const toolResultsById = buildToolResultsById(props.items)
   // Tail-N truncation keeps the live conversation zone bounded so a long
   // session can't overflow and shove the prompt/status panel out of view.
-  const tail = props.items.length > TAIL_N
-    ? props.items.slice(props.items.length - TAIL_N)
+  let tailLimit = TAIL_N
+  if (typeof props.availableRows === 'number') {
+    const prologueRows = props.prologue ? PROLOGUE_ROWS : 0
+    const budget = props.availableRows - prologueRows
+    tailLimit = Math.min(TAIL_N, Math.max(TAIL_FLOOR, budget))
+  }
+  const tail = props.items.length > tailLimit
+    ? props.items.slice(props.items.length - tailLimit)
     : props.items
   return (
-    <Box flexDirection="column">
+    // overflow="hidden" guards against an undercount: if our row estimate is
+    // off and the rendered tail still spills past the conversation zone, the
+    // overflow is clipped instead of pushing the bottom-anchored prompt.
+    <Box flexDirection="column" flexGrow={1} overflow="hidden">
       {props.prologue && <Box>{props.prologue}</Box>}
       {tail.map((m, i) => (
         <MessageRow

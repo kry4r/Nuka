@@ -7,9 +7,29 @@
 
 import React, { useState, useRef, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
+import stringWidth from 'string-width'
 import type { AssistantMessage } from '../../core/message/types'
 import { firstLinePreview } from '../../slash/rewind'
 import { defaultPalette as P } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
+
+/** Width-aware right-truncation: keeps head, drops tail with trailing "…". */
+function truncateRight(s: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  if (stringWidth(s) <= maxWidth) return s
+  const budget = maxWidth - 1
+  const chars = Array.from(s)
+  let width = 0
+  let i = 0
+  while (i < chars.length) {
+    const ch = chars[i]!
+    const w = stringWidth(ch)
+    if (width + w > budget) break
+    width += w
+    i++
+  }
+  return chars.slice(0, i).join('') + '…'
+}
 
 export type MessageSelectorProps = {
   /** Assistant messages, newest first (already sliced to last N). */
@@ -47,12 +67,19 @@ export function MessageSelector(props: MessageSelectorProps): React.JSX.Element 
     )
   }
 
+  return <RewindList {...props} cursor={cursor} />
+}
+
+function RewindList(props: MessageSelectorProps & { cursor: number }): React.JSX.Element {
+  const { columns } = useTerminalSize()
+  // 8 cols of chrome: cursor "› " + index "NN. " + border + paddingX + safety.
+  const previewWidth = Math.max(20, columns - 8)
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Rewind — pick a message to truncate at</Text>
       {props.messages.map((m, i) => (
-        <Text key={m.id} color={i === cursor ? P.primary : P.fg}>
-          {i === cursor ? '›' : ' '} {i + 1}. {firstLinePreview(m)}
+        <Text key={m.id} color={i === props.cursor ? P.primary : P.fg}>
+          {i === props.cursor ? '›' : ' '} {i + 1}. {truncateRight(firstLinePreview(m), previewWidth)}
         </Text>
       ))}
       <Text color={P.fgMuted}>↑/↓ move  Enter pick  Esc cancel</Text>

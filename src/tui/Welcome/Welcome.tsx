@@ -111,6 +111,12 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
   // Bug fix: dropped outer-row flexGrow=1 so the row hugs its content
   // height. The inner flexGrow={2}/flexGrow={1} still govern the left/right
   // width split.
+  // Bug fix #8: cap the right rail at the same `contentHeight` the hero
+  // uses so the Updates/Recent panels can't inflate past the hero on tall
+  // terminals (200×50, 80×100). The left frame is `contentHeight + 2` rows
+  // (border adds 2); using `contentHeight` here makes the right column 2
+  // rows shorter than the left, which is intentional per spec — the right
+  // column hugs its hero-equivalent area.
   return (
     <Box flexDirection="row">
       {/* Left: framed Welcome panel, flexGrow=2 */}
@@ -123,15 +129,18 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
         {heroContent}
       </Box>
 
-      {/* Right column: Updates stacked above Recent, flexGrow=1, min 24 cols. */}
+      {/* Right column: Updates stacked above Recent, flexGrow=1, min 24 cols.
+          Hard-capped at contentHeight (no flexGrow on the inner panels) so
+          the right rail doesn't leak past the hero. flexShrink=0 keeps the
+          inner panels from collapsing below their natural content. */}
       <Box
         flexGrow={1}
+        flexShrink={0}
         minWidth={24}
+        height={contentHeight}
         flexDirection="column"
       >
-        {/* Updates panel — flexGrow=1 */}
         <UpdatesPanel updates={updates} />
-        {/* Recent panel — flexGrow=1 */}
         <RecentPanel recent={recent} />
       </Box>
     </Box>

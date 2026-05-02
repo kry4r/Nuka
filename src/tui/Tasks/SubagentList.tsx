@@ -16,6 +16,8 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import type { Message } from '../../core/message/types'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
+import { useTheme } from '../../core/theme/context'
+import { defaultPalette as P } from '../theme'
 
 export type SubagentInfo = {
   id: string
@@ -66,23 +68,29 @@ export type SubagentListProps = {
 }
 
 export function SubagentList({ messages, maxItems }: SubagentListProps): React.JSX.Element | null {
+  const { colors } = useTheme()
   const inFlight = findInFlightSubagents(messages)
   if (inFlight.length === 0) return null
 
   const visible = inFlight.slice(0, maxItems)
   const overflow = inFlight.length - visible.length
 
+  const titleColor  = colors.accentWarm ?? P.accentWarm
+  const accentColor = colors.accentCool ?? P.accentCool
+  const fgColor     = colors.fg ?? P.fg
+  const fgMuted     = colors.fgMuted ?? P.fgMuted
+
   return (
     <Box flexDirection="column">
-      <Text color="yellow" bold>Subagents</Text>
+      <Text color={titleColor} bold>Subagents</Text>
       {visible.map(agent => (
         <Box key={agent.id} flexDirection="row" gap={1}>
-          <Text color="cyan">▶</Text>
-          <Text color="white">{agent.label}</Text>
+          <Text color={accentColor}>▶</Text>
+          <Text color={fgColor}>{agent.label}</Text>
         </Box>
       ))}
       {overflow > 0 && (
-        <Text color="gray">  … +{overflow} more</Text>
+        <Text color={fgMuted}>  … +{overflow} more</Text>
       )}
     </Box>
   )

@@ -12,7 +12,10 @@ describe('AwaySummaryCard', () => {
       />
     ).lastFrame() ?? ''
     expect(out).toContain('refactoring')
-    expect(out.toLowerCase()).toContain('esc')
+    // P2 #44 — the misleading "[esc] dismiss" line was removed (no useInput
+    // handler ever fulfilled it). The header chip "While you were away" is
+    // the durable UX contract; assert against that instead.
+    expect(out.toLowerCase()).toContain('away')
   })
 
   it('renders while you were away notice', () => {

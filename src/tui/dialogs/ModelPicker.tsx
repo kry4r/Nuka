@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import type { ProviderConfig } from '../../core/config/schema'
 import { useColors } from '../../core/theme/context'
+import { useTerminalSize } from '../hooks/useTerminalSize'
+
+// Sliding window for the models list — same shape as SlashCard/CommandList.
+const MODEL_WINDOW = 12
 
 type Stage =
   | { kind: 'providers' }
@@ -28,6 +32,7 @@ type LoadState =
 
 export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
   const colors = useColors()
+  const { columns } = useTerminalSize()
   const [stage, setStage] = useState<Stage>({ kind: 'providers' })
   const [cursor, setCursor] = useState(0)
 
@@ -207,17 +212,45 @@ export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
       {load.kind === 'loaded' && load.models.length === 0 && (
         <Text color={colors.fgMuted}>No models available. Add one via /settings.</Text>
       )}
-      {load.kind === 'loaded' && load.models.map((m, i) => {
-        const inShortlist = shortlist.includes(m)
-        const isActive = m === activeMark
-        const mark = isActive && inShortlist ? '●' : inShortlist ? 'x' : ' '
-        const selected = i === cursor
+      {load.kind === 'loaded' && load.models.length > 0 && (() => {
+        const total = load.models.length
+        const sel = Math.max(0, Math.min(cursor, total - 1))
+        let start: number, end: number
+        if (total <= MODEL_WINDOW) {
+          start = 0
+          end = total
+        } else {
+          const half = Math.floor(MODEL_WINDOW / 2)
+          start = Math.max(0, sel - half)
+          end = Math.min(total, start + MODEL_WINDOW)
+          if (end - start < MODEL_WINDOW) start = Math.max(0, end - MODEL_WINDOW)
+        }
+        const showUp = start > 0
+        const showDown = end < total
+        // 8 cols of chrome: cursor "› " + "[x] " + safety. Use truncate-middle
+        // for very long ids so users still see the model family + tail.
+        const rowWidth = Math.max(20, columns - 8)
         return (
-          <Text key={m} color={selected ? colors.primary : colors.fg} bold={selected}>
-            {selected ? '›' : ' '} [{mark}] {m}
-          </Text>
+          <>
+            {showUp && <Text color={colors.fgMuted}>  ↑ more above</Text>}
+            {load.models.slice(start, end).map((m, idx) => {
+              const i = start + idx
+              const inShortlist = shortlist.includes(m)
+              const isActive = m === activeMark
+              const mark = isActive && inShortlist ? '●' : inShortlist ? 'x' : ' '
+              const selected = i === sel
+              return (
+                <Box key={m} width={rowWidth}>
+                  <Text color={selected ? colors.primary : colors.fg} bold={selected} wrap="truncate-middle">
+                    {selected ? '›' : ' '} [{mark}] {m}
+                  </Text>
+                </Box>
+              )
+            })}
+            {showDown && <Text color={colors.fgMuted}>  ↓ more below</Text>}
+          </>
         )
-      })}
+      })()}
       <Box marginTop={1}>
         <Text color={colors.fgMuted}>
           space toggle · ⏎ activate · Esc back

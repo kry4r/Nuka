@@ -13,17 +13,30 @@ import { MessageColumn } from './columns/MessageColumn'
 import type { ColumnsState } from './columnReducer'
 import type { FocusState } from './focusReducer'
 
+// Wide layout needs ~110 cols to fit five columns plus borders + indicators
+// without wrapping. Below that we collapse to a single visible column.
+const WIDE_THRESHOLD = 110
+
 export function TasksPanelNew(props: { state: ColumnsState; focus: FocusState; cols: number }): React.ReactNode {
   const focusedCol = props.focus.kind === 'tasks-column' ? props.focus.column : undefined
   const selectedIndex = props.focus.kind === 'tasks-column' ? props.focus.selectedIndex : undefined
 
-  if (props.cols < 100) {
+  if (props.cols < WIDE_THRESHOLD) {
     const order = ['plan', 'subagent', 'pipeline', 'background', 'message'] as const
     const active = focusedCol ?? 'plan'
     const idx = order.indexOf(active)
+    const counts = {
+      plan: props.state.plan.rows.length,
+      subagent: props.state.subagent.rows.length,
+      pipeline: props.state.pipeline.rows.length,
+      background: props.state.background.rows.length,
+      message: props.state.message.rows.length,
+    }
     return (
       <Box flexDirection="column">
-        <Text>[plan|sub|pipe|bg|msg] ({idx + 1}/5)</Text>
+        <Text>
+          {`[plan(${counts.plan}) sub(${counts.subagent}) pipe(${counts.pipeline}) bg(${counts.background}) msg(${counts.message})] (${idx + 1}/5)`}
+        </Text>
         {active === 'plan'       && <PlanColumn rows={props.state.plan.rows} focused selectedIndex={selectedIndex} />}
         {active === 'subagent'   && <SubagentColumn rows={props.state.subagent.rows} focused selectedIndex={selectedIndex} />}
         {active === 'pipeline'   && <PipelineColumn rows={props.state.pipeline.rows} focused selectedIndex={selectedIndex} />}

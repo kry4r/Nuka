@@ -3,9 +3,11 @@
 // Phase 10 §4.1 — bundle-size guard.
 //
 // Runs `npm run build` once and asserts that:
-//   1. `dist/cli.js`         ≤ 420 KB (raised from 400 KB to accommodate the
-//      T8 three-axis-refactor slash UI additions; plan budget is ≤460 KB
-//      total for phase14).
+//   1. `dist/cli.js`         ≤ 440 KB (raised from 420 KB to accommodate the
+//      cross-panel TUI overflow/truncation pass — width-aware truncate
+//      helpers, theme tokens, sliding-window list logic across SlashCard,
+//      submenus, dialogs, Welcome, Messages, Status, Monitor, Tasks. Plan
+//      budget remains ≤460 KB total for phase14).
 //   2. `dist/test-runner.js` exists  (so `--test-plan` can lazy-load it).
 //
 // The test-runner bundle has no size cap; it carries all of the testing
@@ -21,7 +23,7 @@ const ROOT = join(__dirname, '..', '..')
 const CLI_JS = join(ROOT, 'dist', 'cli.js')
 const TEST_RUNNER_JS = join(ROOT, 'dist', 'test-runner.js')
 
-const CLI_CEILING_BYTES = 420 * 1024
+const CLI_CEILING_BYTES = 440 * 1024
 
 describe('build: bundle split + size', () => {
   beforeAll(() => {
@@ -33,7 +35,7 @@ describe('build: bundle split + size', () => {
     }
   }, 60_000)
 
-  it('dist/cli.js stays under the 420 KB ceiling', () => {
+  it('dist/cli.js stays under the 440 KB ceiling', () => {
     const size = statSync(CLI_JS).size
     expect(size).toBeLessThanOrEqual(CLI_CEILING_BYTES)
   })

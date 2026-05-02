@@ -185,6 +185,30 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
     formSaveRef.current = fn
   }, [])
 
+  // Bug #13: subpage `fieldIdx` was unbounded above. We accept an optional
+  // form-side count via `setFormFieldCount` so subpage forms (ProvidersForm,
+  // ThemeForm, etc.) can opt-in to advertising their field count and let the
+  // shell clamp the cursor on ↓. Forms that don't wire this up (today: all
+  // of them — those files are outside this group's editable scope) get the
+  // legacy unbounded ↓ behaviour as a fallback.
+  // TODO(group-D): plumb setFormFieldCount through every *Form.tsx in
+  //   src/tui/Submenu/settings/*Form.tsx so the upper clamp is enforced.
+  const formFieldCountRef = React.useRef<number | null>(null)
+  const setFormFieldCount = useCallback((count: number | null) => {
+    formFieldCountRef.current = count
+  }, [])
+
+  // Bug #15: a form field that is in edit mode (Field.tsx) needs to claim
+  // ←/→ for cursor movement inside the value. SettingsSubmenu intercepts
+  // ← as "back to menu", which steals key events from the form. Forms can
+  // report their edit-mode flag via this setter; when set, we skip our
+  // own ← handler. Unwired forms fall back to the position-based heuristic
+  // below (only treat ← as back when fieldIdx === 0).
+  const formEditingRef = React.useRef<boolean>(false)
+  const setFormFieldEditing = useCallback((editing: boolean) => {
+    formEditingRef.current = editing
+  }, [])
+
   // Top-level (menu state) keys not already consumed by SubmenuList.
   // SubmenuList handles ↑/↓/⏎/→/Esc/←. We add 'o' for the editor escape
   // hatch, gated to menu mode.
@@ -207,7 +231,16 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
     }
     // ← pops back to menu. Esc is intercepted by App's global handler
     // (closes the entire submenu); we don't preempt it here.
+    //
+    // Bug #15: don't steal ← when a form field is mid-edit (Field.tsx
+    // needs ← to move the value-cursor). When forms haven't reported an
+    // edit flag (current state of the codebase — Field.tsx integration
+    // is owned by Group D), fall back to a position heuristic: only
+    // treat ← as "back" when the cursor is on the first field, where
+    // the user is plausibly trying to leave the subpage.
     if (key.leftArrow) {
+      if (formEditingRef.current) return
+      if (fieldIdx > 0) return
       setView({ kind: 'menu' })
       setFieldIdx(0)
       return
@@ -217,7 +250,17 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
       return
     }
     if (key.downArrow || inputKey === 'j') {
-      setFieldIdx(i => i + 1)
+      setFieldIdx(i => {
+        const cap = formFieldCountRef.current
+        const next = i + 1
+        if (typeof cap === 'number' && cap > 0) {
+          return Math.min(next, Math.max(0, cap - 1))
+        }
+        // TODO(SettingsSubmenu.tsx:~245): once forms call setFormFieldCount,
+        // remove this unbounded fallback. For now we still clamp ≥ 0
+        // implicitly via Math.max in the up handler.
+        return next
+      })
       return
     }
   }, { isActive: view.kind === 'subpage' })
@@ -270,15 +313,23 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
     erroredField,
     flashError,
     setFormSave,
+    setFormFieldCount,
+    setFormFieldEditing,
   }
 
   return (
     <Box flexDirection="column">
-      <Box marginBottom={1}>
-        <Text color={colors.primary} bold>{category}</Text>
-        <Box marginLeft={2}>
-          <Text color={colors.fgMuted}>{DESCRIPTION_BY_CATEGORY[category]}</Text>
-        </Box>
+      {/*
+        Bug #14: the parent App wraps SettingsSubmenu in a SubmenuFrame whose
+        title bar already shows the category name. Repeating the bold
+        category label here produced an awkward duplicate header. We keep
+        only the muted description line as supplementary context — the
+        frame title carries the category itself.
+        Cross-group note: if Group A ever stops wrapping the submenu in a
+        SubmenuFrame, this body should regain a standalone title row.
+      */}
+      <Box marginBottom={1} flexShrink={0}>
+        <Text color={colors.fgMuted}>{DESCRIPTION_BY_CATEGORY[category]}</Text>
       </Box>
 
       {category === 'Providers' && <ProvidersForm {...formCommon} />}
@@ -322,4 +373,16 @@ export type FormCommonProps = {
   flashError: (fieldKey: string) => void
   /** Set the active form's save-all callback so 's' can dispatch it. */
   setFormSave: (fn: (() => Promise<void>) | null) => void
+  /**
+   * Optional: report the form's total field count so the shell can clamp
+   * `fieldIdx` on ↓. Pass null on unmount. Forms that don't call this opt
+   * out of the upper-bound clamp (legacy unbounded behaviour).
+   */
+  setFormFieldCount?: (count: number | null) => void
+  /**
+   * Optional: tell the shell whether the focused field is currently in
+   * edit mode (Field.tsx). When true, the shell will not steal ← as
+   * "back to menu" — letting the field consume cursor-movement keys.
+   */
+  setFormFieldEditing?: (editing: boolean) => void
 }

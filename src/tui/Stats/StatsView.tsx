@@ -12,6 +12,7 @@ import { Box, Text, useInput } from 'ink'
 import { aggregate, type StatsResult, type StatsRange } from '../../core/stats/aggregate'
 import { chart } from '../../core/stats/chart'
 import { RangeTabs } from './RangeTabs'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 type Tab = 'overview' | 'models'
 const TABS: Tab[] = ['overview', 'models']
@@ -70,8 +71,8 @@ function OverviewTab({ stats }: { stats: StatsResult }): React.JSX.Element {
   )
 }
 
-function ModelsTab({ stats }: { stats: StatsResult }): React.JSX.Element {
-  const lines = chart(stats.byModel, 72)
+function ModelsTab({ stats, chartWidth }: { stats: StatsResult; chartWidth: number }): React.JSX.Element {
+  const lines = chart(stats.byModel, chartWidth)
   return (
     <Box flexDirection="column">
       {lines.map((line, i) => (
@@ -87,6 +88,12 @@ function ModelsTab({ stats }: { stats: StatsResult }): React.JSX.Element {
 export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('overview')
   const [range, setRange] = useState<StatsRange>('all')
+  const { columns } = useTerminalSize()
+  // Chart width: clamp to [40, 72]. Subtract 8 cols of chrome — covers
+  // SubmenuFrame border(2) + paddingX(2) + StatsView paddingX(2) + safety(2).
+  const chartWidth = Math.min(72, Math.max(40, columns - 8))
+  // Rule width: same idea but a tighter cap (was hardcoded 48).
+  const ruleWidth = Math.min(48, Math.max(8, columns - 4))
   // Phase 13 M1: initialise to EMPTY_STATS (not null) so the component never
   // renders the "Loading…" placeholder — OverviewTab shows "(no data yet)"
   // synchronously and is then replaced by real data once aggregate() resolves.
@@ -129,10 +136,10 @@ export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
         <Text bold color="cyan">Stats  </Text>
         <Text>{tabLabels}</Text>
       </Box>
-      <Text>{'─'.repeat(48)}</Text>
+      <Text>{'─'.repeat(ruleWidth)}</Text>
       <RangeTabs active={range} />
       <Text> </Text>
-      {tab === 'overview' ? <OverviewTab stats={stats} /> : <ModelsTab stats={stats} />}
+      {tab === 'overview' ? <OverviewTab stats={stats} /> : <ModelsTab stats={stats} chartWidth={chartWidth} />}
       <Text> </Text>
       <Text color="gray">Tab: switch tab · r: cycle range · Esc: close</Text>
     </Box>

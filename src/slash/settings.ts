@@ -15,7 +15,7 @@ const settingsRun: SlashCommand['run'] = async (_args, ctx) => {
 
 export const SettingsCommand: SlashCommand = {
   name: 'settings',
-  description: 'Open settings submenu (categories: Provider, Model, Theme, StatusBar, …)',
+  description: 'Open settings submenu',
   source: 'builtin',
   usage: '/settings',
   examples: ['/settings'],
@@ -25,7 +25,7 @@ export const SettingsCommand: SlashCommand = {
 // Alias: many users call this `/config` (Claude Code parity). Same dialog.
 export const ConfigCommand: SlashCommand = {
   name: 'config',
-  description: 'Alias for /settings — open the settings submenu',
+  description: 'Alias for /settings',
   source: 'builtin',
   usage: '/config',
   examples: ['/config'],

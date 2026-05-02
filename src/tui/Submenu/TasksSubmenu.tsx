@@ -14,7 +14,8 @@ import type { TodoState } from '../../core/tools/todoWrite'
 import type { Task } from '../../core/tasks/types'
 import type { Message } from '../../core/message/types'
 import { findInFlightSubagents } from '../Tasks/SubagentList'
-import { defaultPalette as P } from '../theme'
+import { useColors } from '../../core/theme/context'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 export type TasksSubmenuProps = {
   /** Index of the focused item in the flat (plan → subs → bgs) list. */
@@ -25,6 +26,21 @@ export type TasksSubmenuProps = {
 }
 
 export function TasksSubmenu({ focusItem, todoStore, messages, tasks }: TasksSubmenuProps): React.JSX.Element {
+  const colors = useColors()
+  const { columns } = useTerminalSize()
+  // Reserve enclosing frame chrome (border 2 + paddingX 2 + a little slack).
+  const innerWidth = Math.max(20, columns - 6)
+
+  // Theme-bound color maps. Plan-item / subagent / background icons use the
+  // semantic palette so themes (e.g. high-contrast / solarized) flow through
+  // instead of being pinned to hardcoded ANSI names.
+  const STATUS_ICON: Record<string, string> = { completed: '✓', in_progress: '▶', pending: '☐' }
+  const STATUS_COLOR: Record<string, string> = {
+    completed: colors.success,
+    in_progress: colors.accentCool,
+    pending: colors.fgMuted,
+  }
+
   const planItems = todoStore.items
   const subagents = findInFlightSubagents(messages)
   const bgTasks = tasks
@@ -34,7 +50,7 @@ export function TasksSubmenu({ focusItem, todoStore, messages, tasks }: TasksSub
   if (total === 0) {
     return (
       <Box paddingX={1}>
-        <Text color={P.fgMuted}>No tasks.</Text>
+        <Text color={colors.fgMuted}>No tasks.</Text>
       </Box>
     )
   }
@@ -44,23 +60,21 @@ export function TasksSubmenu({ focusItem, todoStore, messages, tasks }: TasksSub
   // Plan item
   if (idx < planItems.length) {
     const item = planItems[idx]!
-    const STATUS_ICON: Record<string, string> = { completed: '✓', in_progress: '▶', pending: '☐' }
-    const STATUS_COLOR: Record<string, string> = { completed: 'green', in_progress: 'cyan', pending: 'gray' }
     return (
-      <Box flexDirection="column" paddingX={1} gap={1}>
+      <Box flexDirection="column" paddingX={1} gap={1} width={innerWidth}>
         <Box flexDirection="row" gap={1}>
-          <Text color="yellow" bold>Plan item {idx + 1} of {planItems.length}</Text>
+          <Text color={colors.warn} bold>Plan item {idx + 1} of {planItems.length}</Text>
         </Box>
-        <Box flexDirection="row" gap={1}>
-          <Text color={STATUS_COLOR[item.status] ?? 'gray'}>{STATUS_ICON[item.status] ?? '☐'}</Text>
-          <Text color="white" bold>{item.title}</Text>
+        <Box flexDirection="row" gap={1} width={innerWidth - 2}>
+          <Text color={STATUS_COLOR[item.status] ?? colors.fgMuted}>{STATUS_ICON[item.status] ?? '☐'}</Text>
+          <Text color={colors.fg} bold wrap="truncate-end">{item.title}</Text>
         </Box>
         <Box>
-          <Text color={P.fgMuted}>Status: </Text>
-          <Text color={STATUS_COLOR[item.status] ?? 'gray'}>{item.status.replace('_', ' ')}</Text>
+          <Text color={colors.fgMuted}>Status: </Text>
+          <Text color={STATUS_COLOR[item.status] ?? colors.fgMuted}>{item.status.replace('_', ' ')}</Text>
         </Box>
         <Box>
-          <Text color={P.fgMuted} dimColor>Esc to close</Text>
+          <Text color={colors.fgMuted} dimColor>Esc to close</Text>
         </Box>
       </Box>
     )
@@ -71,20 +85,20 @@ export function TasksSubmenu({ focusItem, todoStore, messages, tasks }: TasksSub
   if (subIdx < subagents.length) {
     const sub = subagents[subIdx]!
     return (
-      <Box flexDirection="column" paddingX={1} gap={1}>
+      <Box flexDirection="column" paddingX={1} gap={1} width={innerWidth}>
         <Box>
-          <Text color="yellow" bold>In-flight subagent {subIdx + 1} of {subagents.length}</Text>
+          <Text color={colors.warn} bold>In-flight subagent {subIdx + 1} of {subagents.length}</Text>
         </Box>
-        <Box flexDirection="row" gap={1}>
-          <Text color="cyan">▶</Text>
-          <Text color="white" bold>{sub.label}</Text>
-        </Box>
-        <Box>
-          <Text color={P.fgMuted}>ID: </Text>
-          <Text color="gray">{sub.id}</Text>
+        <Box flexDirection="row" gap={1} width={innerWidth - 2}>
+          <Text color={colors.accentCool}>▶</Text>
+          <Text color={colors.fg} bold wrap="truncate-end">{sub.label}</Text>
         </Box>
         <Box>
-          <Text color={P.fgMuted} dimColor>Esc to close</Text>
+          <Text color={colors.fgMuted}>ID: </Text>
+          <Text color={colors.fgMuted} wrap="truncate-middle">{sub.id}</Text>
+        </Box>
+        <Box>
+          <Text color={colors.fgMuted} dimColor>Esc to close</Text>
         </Box>
       </Box>
     )
@@ -96,35 +110,41 @@ export function TasksSubmenu({ focusItem, todoStore, messages, tasks }: TasksSub
   if (!task) {
     return (
       <Box paddingX={1}>
-        <Text color={P.fgMuted}>Item not found.</Text>
+        <Text color={colors.fgMuted}>Item not found.</Text>
       </Box>
     )
   }
 
   const STATE_ICON: Record<string, string> = { running: '▶', completed: '✓', failed: '✗', killed: '◉', pending: '☐' }
-  const STATE_COLOR: Record<string, string> = { running: 'cyan', completed: 'green', failed: 'red', killed: 'yellow', pending: 'gray' }
+  const STATE_COLOR: Record<string, string> = {
+    running: colors.accentCool,
+    completed: colors.success,
+    failed: colors.error,
+    killed: colors.warn,
+    pending: colors.fgMuted,
+  }
 
   return (
-    <Box flexDirection="column" paddingX={1} gap={1}>
+    <Box flexDirection="column" paddingX={1} gap={1} width={innerWidth}>
       <Box>
-        <Text color="yellow" bold>Background task {bgIdx + 1} of {bgTasks.length}</Text>
+        <Text color={colors.warn} bold>Background task {bgIdx + 1} of {bgTasks.length}</Text>
       </Box>
-      <Box flexDirection="row" gap={1}>
-        <Text color={STATE_COLOR[task.state] ?? 'gray'}>{STATE_ICON[task.state] ?? '☐'}</Text>
-        <Text color="white" bold>{task.description}</Text>
+      <Box flexDirection="row" gap={1} width={innerWidth - 2}>
+        <Text color={STATE_COLOR[task.state] ?? colors.fgMuted}>{STATE_ICON[task.state] ?? '☐'}</Text>
+        <Text color={colors.fg} bold wrap="truncate-end">{task.description}</Text>
       </Box>
       <Box>
-        <Text color={P.fgMuted}>State: </Text>
-        <Text color={STATE_COLOR[task.state] ?? 'gray'}>{task.state}</Text>
+        <Text color={colors.fgMuted}>State: </Text>
+        <Text color={STATE_COLOR[task.state] ?? colors.fgMuted}>{task.state}</Text>
       </Box>
       {task.outputFile && (
-        <Box flexDirection="column">
-          <Text color={P.fgMuted}>Output file:</Text>
-          <Text color="gray">{task.outputFile}</Text>
+        <Box flexDirection="column" width={innerWidth - 2}>
+          <Text color={colors.fgMuted}>Output file:</Text>
+          <Text color={colors.fgMuted} wrap="truncate-middle">{task.outputFile}</Text>
         </Box>
       )}
       <Box>
-        <Text color={P.fgMuted} dimColor>Esc to close</Text>
+        <Text color={colors.fgMuted} dimColor>Esc to close</Text>
       </Box>
     </Box>
   )

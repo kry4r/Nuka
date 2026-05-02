@@ -17,7 +17,7 @@ export function RecentPanel({ recent }: RecentPanelProps): React.JSX.Element {
   return (
     <Box
       flexDirection="column"
-      flexGrow={1}
+      flexShrink={1}
       borderStyle="round"
       borderColor={P.fgMuted}
       paddingX={1}

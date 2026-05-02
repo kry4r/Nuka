@@ -18,7 +18,7 @@
 // back to the menu.
 
 import React, { useEffect, useState } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useInput } from 'ink'
 import { SubmenuFrame } from '../SubmenuFrame'
 import { SubmenuList, type SubmenuListItem } from '../SubmenuList'
 import { useColors } from '../../../core/theme/context'
@@ -58,6 +58,24 @@ export function HarnessSubmenu(props: HarnessSubmenuProps): React.JSX.Element {
     return () => clearTimeout(t)
   }, [view])
 
+  // Pop-back handler for views that don't render a SubmenuList (i.e. the
+  // empty-transition state and the error flash). The list views own their
+  // own onCancel via SubmenuList, so we only need this fallback when the
+  // list isn't on screen — gate via `isActive` so we don't double-handle.
+  const isFallbackView =
+    view.kind === 'error' ||
+    (view.kind === 'transition-list' &&
+      props.availableStages.filter(s => s !== props.snapshot.stage).length === 0)
+  useInput((_input, key) => {
+    if (key.escape || key.leftArrow) {
+      if (view.kind === 'error') {
+        setView({ kind: 'menu' })
+      } else if (view.kind === 'transition-list') {
+        setView({ kind: 'menu' })
+      }
+    }
+  }, { isActive: isFallbackView })
+
   // Top-level menu items.
   if (view.kind === 'menu') {
     const items: SubmenuListItem[] = [
@@ -70,15 +88,18 @@ export function HarnessSubmenu(props: HarnessSubmenuProps): React.JSX.Element {
       {
         id: 'stage',
         label: 'Stage',
-        description: 'current stage (read-only)',
-        value: props.snapshot.stage,
+        description: 'current stage',
+        value: `${props.snapshot.stage} (read-only)`,
         disabled: true,
       },
       {
+        // The Stage row above already advertises the live stage. The
+        // Transition row is an action — describe what it *does*, not the
+        // current stage value (Bug #11: avoid showing the same stage twice
+        // and confusing which row is authoritative).
         id: 'transition',
         label: 'Transition…',
         description: 'manually move to another stage',
-        value: props.snapshot.stage,
       },
       {
         id: 'retriage',
@@ -91,6 +112,7 @@ export function HarnessSubmenu(props: HarnessSubmenuProps): React.JSX.Element {
         <SubmenuList
           key="menu"
           items={items}
+          omitFooter
           onSelect={(item) => {
             if (item.id === 'mode') setView({ kind: 'mode-list' })
             else if (item.id === 'transition') setView({ kind: 'transition-list' })
@@ -116,6 +138,7 @@ export function HarnessSubmenu(props: HarnessSubmenuProps): React.JSX.Element {
         <SubmenuList
           key="mode-list"
           items={items}
+          omitFooter
           onSelect={(item) => {
             props.onSetMode(item.id as HarnessMode)
             setView({ kind: 'menu' })
@@ -130,11 +153,30 @@ export function HarnessSubmenu(props: HarnessSubmenuProps): React.JSX.Element {
     const items: SubmenuListItem[] = props.availableStages
       .filter(s => s !== props.snapshot.stage)
       .map(s => ({ id: s, label: s }))
+    // Bug #12: when no other stages are available (e.g. the current stage
+    // is the only one allowed by the active profile×difficulty cell),
+    // render an explicit empty state instead of an empty SubmenuList — an
+    // empty list with no rows is indistinguishable from a render failure.
+    if (items.length === 0) {
+      return (
+        <SubmenuFrame mode="full" title="Harness · Transition" focused footer="Esc back">
+          <Box paddingX={1} flexDirection="column">
+            <Text color={colors.fgMuted}>
+              No transitions available from "{props.snapshot.stage}".
+            </Text>
+            <Text color={colors.fgMuted} dimColor>
+              Press Esc / ← to return to the menu.
+            </Text>
+          </Box>
+        </SubmenuFrame>
+      )
+    }
     return (
       <SubmenuFrame mode="full" title="Harness · Transition" focused footer="↑↓ select · ⏎ apply · Esc back">
         <SubmenuList
           key="transition-list"
           items={items}
+          omitFooter
           onSelect={async (item) => {
             try {
               await props.onTransition(item.id as HarnessStage)

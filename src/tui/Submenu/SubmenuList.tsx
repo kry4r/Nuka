@@ -10,7 +10,7 @@
 // Sliding-window pattern (from SlashCard/CommandList) is used when the list
 // would exceed the terminal height.
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../core/theme/context'
 import { useTerminalSize } from '../hooks/useTerminalSize'
@@ -41,26 +41,55 @@ export type SubmenuListProps = {
   onCancel?: () => void
   /** Optional footer hint text. If omitted, renders default hint "↑↓ select · ⏎ open · Esc back". */
   footer?: string
+  /**
+   * Suppress the internal footer row entirely. Useful when the parent
+   * frame (e.g. SubmenuFrame) already paints a footer line — avoids
+   * duplicate hint text inside and outside the frame.
+   */
+  omitFooter?: boolean
+  /**
+   * Available rows for the list body provided by the parent. When set,
+   * SubmenuList uses this directly to size its sliding window instead of
+   * sniffing the raw terminal height. This lets parent frames whose chrome
+   * (border + title + footer) eats rows hand the list an honest budget.
+   */
+  availableRows?: number
 }
 
 const DEFAULT_FOOTER = '↑↓ select · ⏎ open · Esc back'
 
-/** Reserve rows for footer + optional windowing indicators + a little padding. */
-const ROW_OVERHEAD = 6
+/**
+ * Conservative default reservation of rows when the parent does not supply
+ * `availableRows`. Larger than the historical value (which assumed no parent
+ * frame chrome) so we err on the side of reserving extra space rather than
+ * spilling rows into the parent frame and pushing chrome offscreen.
+ */
+const DEFAULT_ROW_OVERHEAD = 8
+
+/** Hard floor for the rendered window so we always show a meaningful slice. */
+const MIN_WINDOW_SIZE = 3
 
 export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
   const colors = useColors()
   const focused = props.focused !== false
   const { rows: terminalRows } = useTerminalSize()
 
-  const initial = clamp(props.initialCursor ?? 0, 0, Math.max(0, props.items.length - 1))
+  const total = props.items.length
+  const initial = clamp(props.initialCursor ?? 0, 0, Math.max(0, total - 1))
   const [cursor, setCursor] = useState<number>(initial)
 
-  // Keep cursor inside bounds when items change length (parent-driven).
-  const safeCursor = clamp(cursor, 0, Math.max(0, props.items.length - 1))
+  // Re-clamp the cursor when the items array shrinks underneath us so we
+  // never render a phantom selection past the new last index.
+  useEffect(() => {
+    if (cursor >= total) {
+      setCursor(Math.max(0, total - 1))
+    }
+  }, [total, cursor])
+
+  // Keep cursor inside bounds for this render even before the effect fires.
+  const safeCursor = clamp(cursor, 0, Math.max(0, total - 1))
 
   useInput((input, key) => {
-    const total = props.items.length
     if (total === 0) {
       if (key.escape || key.leftArrow) props.onCancel?.()
       return
@@ -87,10 +116,15 @@ export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
     }
   }, { isActive: focused })
 
-  const total = props.items.length
-
-  // Sliding window — only narrow when the list cannot fit.
-  const windowSize = Math.max(1, terminalRows - ROW_OVERHEAD)
+  // Sliding window — only narrow when the list cannot fit. When the parent
+  // frame supplies an `availableRows` budget we trust it directly; otherwise
+  // we fall back to a conservative reservation against the raw terminal
+  // height so we don't punch through unknown enclosing chrome.
+  const rawWindow =
+    typeof props.availableRows === 'number'
+      ? props.availableRows
+      : terminalRows - DEFAULT_ROW_OVERHEAD
+  const windowSize = Math.max(MIN_WINDOW_SIZE, rawWindow)
   const useWindow = total > windowSize
   let start = 0
   let end = total
@@ -100,11 +134,24 @@ export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
     end = Math.min(total, start + windowSize)
     if (end - start < windowSize) start = Math.max(0, end - windowSize)
   }
+  // Indicators are gated purely on slice coverage so they surface whenever
+  // there is content above/below — independent of whether windowing was
+  // formally engaged on this render.
   const showUp = start > 0
   const showDown = end < total
   const slice = props.items.slice(start, end)
 
   const footer = props.footer ?? DEFAULT_FOOTER
+
+  // Width budget for each row. Parent frame chrome (border + paddingX) is
+  // approximately 4 cols; we reserve a bit more so descriptions never
+  // collide with the value column.
+  const { columns } = useTerminalSize()
+  const FRAME_CHROME_COLS = 6
+  const innerWidth = Math.max(20, columns - FRAME_CHROME_COLS)
+  const LABEL_WIDTH = 14
+  const VALUE_WIDTH = 24
+  const VALUE_MAX_CHARS = 20
 
   return (
     <Box flexDirection="column">
@@ -122,27 +169,41 @@ export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
             : colors.fg
         const descColor = item.disabled ? colors.fgFaint : colors.fgMuted
         const valueColor = item.disabled ? colors.fgFaint : colors.primary
+        const bg = selected ? colors.primaryDeep : undefined
+        const valueText =
+          item.value !== undefined ? truncateValue(item.value, VALUE_MAX_CHARS) : undefined
         return (
-          <Box key={item.id} backgroundColor={selected ? colors.primaryDeep : undefined}>
-            <Text color={labelColor} bold={selected && !item.disabled}>
-              {sigil} {item.label}
-            </Text>
-            {item.description && (
-              <Text color={descColor}>  {item.description}</Text>
-            )}
-            <Box flexGrow={1} />
-            {item.value !== undefined && (
-              <Text color={valueColor}>{item.value}</Text>
-            )}
+          <Box key={item.id} width={innerWidth} backgroundColor={bg}>
+            <Box width={LABEL_WIDTH + 2} flexShrink={0}>
+              <Text color={labelColor} bold={selected && !item.disabled} wrap="truncate-end">
+                {sigil} {item.label}
+              </Text>
+            </Box>
+            <Box flexGrow={1} flexShrink={1}>
+              {item.description ? (
+                <Text color={descColor} wrap="truncate-end">  {item.description}</Text>
+              ) : (
+                <Text> </Text>
+              )}
+            </Box>
+            <Box width={VALUE_WIDTH} flexShrink={0} justifyContent="flex-end">
+              {valueText !== undefined ? (
+                <Text color={valueColor} wrap="truncate-end">{valueText}</Text>
+              ) : (
+                <Text> </Text>
+              )}
+            </Box>
           </Box>
         )
       })}
       {showDown && (
         <Text color={colors.fgMuted}>  ↓ more below</Text>
       )}
-      <Box marginTop={1}>
-        <Text color={colors.fgMuted}>{footer}</Text>
-      </Box>
+      {!props.omitFooter && (
+        <Box marginTop={1}>
+          <Text color={colors.fgMuted}>{footer}</Text>
+        </Box>
+      )}
     </Box>
   )
 }
@@ -150,4 +211,15 @@ export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
 function clamp(n: number, lo: number, hi: number): number {
   if (hi < lo) return lo
   return Math.max(lo, Math.min(hi, n))
+}
+
+/**
+ * Cap a value summary string at `max` characters with an ellipsis suffix.
+ * Uses code-unit length only (no string-width dep); fine for ASCII / ANSI
+ * status snippets we render in the value column.
+ */
+function truncateValue(s: string, max: number): string {
+  if (s.length <= max) return s
+  if (max <= 1) return s.slice(0, max)
+  return s.slice(0, max - 1) + '…'
 }

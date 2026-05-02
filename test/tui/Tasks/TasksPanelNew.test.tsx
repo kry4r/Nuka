@@ -24,8 +24,14 @@ describe('TasksPanel layout', () => {
     expect(out.toLowerCase()).toContain('no message')
   })
 
-  it('narrow terminal collapses to single column', () => {
+  it('narrow terminal collapses to single column with row counts', () => {
     const out = render(<TasksPanelNew state={initialColumns()} focus={{ kind: 'prompt' }} cols={80} />).lastFrame() ?? ''
-    expect(out.toLowerCase()).toContain('[plan|sub|pipe|bg|msg]')
+    const lower = out.toLowerCase()
+    // Tab strip in narrow mode lists every column with a (count) suffix.
+    expect(lower).toMatch(/plan\(0\)/)
+    expect(lower).toMatch(/sub\(0\)/)
+    expect(lower).toMatch(/pipe\(0\)/)
+    expect(lower).toMatch(/bg\(0\)/)
+    expect(lower).toMatch(/msg\(0\)/)
   })
 })

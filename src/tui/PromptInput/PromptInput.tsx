@@ -1,6 +1,7 @@
 // src/tui/PromptInput/PromptInput.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import stringWidth from 'string-width'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
 import { MentionPanel } from './MentionPanel'
@@ -8,6 +9,30 @@ import { fuzzyFileSearch } from './fuzzyFileSearch'
 import { makeState, step, type State as VimState, type Key as VimKey } from '../../core/vim/controller'
 import { bufferToText } from '../../core/vim/mode'
 import type { SlashRegistry } from '../../slash/registry'
+
+/**
+ * Width-aware left-truncation: returns the tail of `s` that fits in
+ * `maxWidth` columns (using `string-width` to handle CJK/emoji).
+ * Walks codepoints from the right and accumulates display width until the
+ * next codepoint would exceed `maxWidth`. The caller is expected to prepend
+ * an ellipsis (the budget passed in should already exclude its width).
+ */
+export function truncateLeftToFit(s: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  // Array.from splits surrogate pairs into single codepoints, which is
+  // sufficient for CJK + most emoji width math.
+  const chars = Array.from(s)
+  let width = 0
+  let i = chars.length
+  while (i > 0) {
+    const ch = chars[i - 1]!
+    const w = stringWidth(ch)
+    if (width + w > maxWidth) break
+    width += w
+    i--
+  }
+  return chars.slice(i).join('')
+}
 
 export type PromptInputProps = {
   value: string
@@ -300,8 +325,12 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const columns = stdout?.columns ?? 80
   const CHROME = 8 // borders(2) + paddingX(2) + "> "(2) + cursor(1) + safety(1)
   const visibleBudget = Math.max(8, columns - CHROME)
-  const valueText = props.value.length > visibleBudget
-    ? '…' + props.value.slice(-(visibleBudget - 1))
+  // Width-aware truncation: CJK/emoji glyphs occupy 2 cols each, so a naive
+  // `value.length` slice would still wrap. Use string-width via
+  // `truncateLeftToFit` to reserve 1 col for the leading "…" indicator.
+  const valueWidth = stringWidth(props.value)
+  const valueText = valueWidth > visibleBudget
+    ? '…' + truncateLeftToFit(props.value, visibleBudget - 1)
     : props.value
 
   return (

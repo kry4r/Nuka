@@ -39,9 +39,15 @@ export function AgentCall(props: {
         <Text color={P.fgMuted}>{expanded ? props.task : shortTask}</Text>
         <Text color={iconColor}> {icon}</Text>
       </Box>
-      {props.result !== undefined && (
+      {props.result !== undefined && props.result.length > 0 && (
         <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.fgMuted}>
           <Text color={P.fgMuted}>{expanded ? props.result : (shortResult ?? '')}</Text>
+          <Text color={P.fgMuted} dimColor>(from `{props.agent}`)</Text>
+        </Box>
+      )}
+      {/* Empty result: just a faint footer, no bordered block. */}
+      {props.result !== undefined && props.result.length === 0 && (
+        <Box marginLeft={2}>
           <Text color={P.fgMuted} dimColor>(from `{props.agent}`)</Text>
         </Box>
       )}

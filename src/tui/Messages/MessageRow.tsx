@@ -205,13 +205,16 @@ export function MessageRow(props: {
     )
   }
 
-  // user message
+  // user message — the colored left bar already provides user/assistant
+  // visual distinction. Dropping the per-text backgroundColor avoids the
+  // zebra-stripe effect on multi-line pastes where trailing whitespace
+  // lines previously rendered painted-per-character.
   const text = m.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('')
   return (
     <Box flexDirection="row" marginY={1}>
       <Text color={barColor} bold>▎ </Text>
       <Box flexGrow={1}>
-        <Text color={P.fg} backgroundColor={P.bgPanel}>{text}</Text>
+        <Text color={P.fg}>{text}</Text>
       </Box>
     </Box>
   )

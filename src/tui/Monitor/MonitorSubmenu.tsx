@@ -13,7 +13,7 @@ export function MonitorSubmenuWrapper(p: { onClose: () => void }): React.ReactNo
 
   return (
     <SubmenuFrame mode="full" title="Monitor" focused>
-      <MonitorView events={events} dagNodes={[]} agentUsage={agentUsage} />
+      <MonitorView events={events} dagNodes={[]} agentUsage={agentUsage} onClose={p.onClose} />
     </SubmenuFrame>
   )
 }
