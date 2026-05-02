@@ -4,7 +4,7 @@ import { makePipelineRunTool } from '../../../../src/core/tools/builtin/pipeline
 describe('pipeline_run', () => {
   it('invokes runPipeline and returns stages', async () => {
     const tool = makePipelineRunTool({
-      runPipeline: async (input) => ({ ok: true, stages: input.nodes.map((n: { id: string; agent: string }) => ({ nodeId: n.id, agentName: n.agent, status: 'completed' as const, output: `out-${n.id}`, durationMs: 1 })) }),
+      runPipeline: async (input: { nodes: { id: string; agent: string }[] }) => ({ ok: true, stages: input.nodes.map(n => ({ nodeId: n.id, agentName: n.agent, status: 'completed' as const, output: `out-${n.id}`, durationMs: 1 })) }),
     } as never)
     const r = await tool.run({
       entry: 'a',

@@ -26,7 +26,7 @@ describe('decomposeTask', () => {
 
   it('JSON 损坏时重试', async () => {
     const fork = vi
-      .fn<[string], Promise<{ text: string }>>()
+      .fn<(prompt: string) => Promise<{ text: string }>>()
       .mockResolvedValueOnce({ text: 'garbage' })
       .mockResolvedValueOnce({ text: validJson })
     const g = await decomposeTask({

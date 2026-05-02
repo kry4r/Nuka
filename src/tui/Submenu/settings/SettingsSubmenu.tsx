@@ -1,28 +1,36 @@
 // src/tui/Submenu/settings/SettingsSubmenu.tsx
 //
-// Settings submenu shell. Left rail (18-col, fixed) of categories +
-// right pane form. j/k (or ↑/↓) cycles category; the selected category
-// renders its <CategoryForm/> on the right.
+// Issue #4 + #6 — Claude Code style settings menu.
 //
-// Top-level keys (no field focused yet):
-//   j / ↓        next category
-//   k / ↑        previous category
-//   ⏎ / →        descend into the form (focus first field)
-//   o            open ~/.nuka/config.yaml in $EDITOR (closes submenu)
-//   s            save the entire config via saveConfigPatch
-//   Esc          close submenu (handled by App)
+// Two-state machine:
+//   { kind: 'menu' }     — single-column SubmenuList of categories.
+//   { kind: 'subpage' }  — full-width form for the selected category.
 //
-// Inside a form, each field can be edit/toggled — see Field.tsx. The
-// form's own pending state lives in `pendingByCategory` here so jumping
-// across categories doesn't lose unsaved edits.
+// Model and Effort do NOT push to a subpage. Selecting them invokes
+// `onRequestExternalPicker` so the parent App opens the dedicated
+// ModelPicker / EffortPicker (long lists with proper ↑/↓ navigation).
+// All other categories ('Providers', 'Theme', 'StatusBar', 'Vim',
+// 'Plugins', 'Skills', 'Welcome', 'Compact') push to a subpage and
+// render their existing <XxxForm/> full-width.
+//
+// Top-level keys ({ kind: 'menu' }):
+//   ↑/↓ (or j/k)  cursor (handled by SubmenuList)
+//   ⏎ / →         activate category (open subpage / external picker)
+//   Esc / ←       close the entire submenu (calls onClose)
+//   o             open ~/.nuka/config.yaml in $EDITOR
+//
+// Subpage keys ({ kind: 'subpage' }):
+//   ↑/↓ (or j/k)  field navigation (Field.tsx owns edit-mode keys)
+//   ⏎             enter edit on focused field (Field.tsx)
+//   s             save the active form
+//   Esc / ←       pop back to { kind: 'menu' }
 
 import React, { useCallback, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
 import type { Config } from '../../../core/config/schema'
+import { SubmenuList, type SubmenuListItem } from '../SubmenuList'
 import { ProvidersForm } from './ProvidersForm'
-import { ModelForm } from './ModelForm'
-import { EffortForm } from './EffortForm'
 import { ThemeForm } from './ThemeForm'
 import { StatusBarForm } from './StatusBarForm'
 import { VimForm } from './VimForm'
@@ -56,6 +64,14 @@ export const CATEGORIES: readonly SettingsCategory[] = [
   'Compact',
 ] as const
 
+/** Categories whose activation hands off to an external picker submenu. */
+const EXTERNAL_PICKER_CATEGORIES: ReadonlySet<SettingsCategory> = new Set<SettingsCategory>([
+  'Model',
+  'Effort',
+])
+
+export type ExternalPickerKind = 'model-picker' | 'effort-picker'
+
 export type SettingsSubmenuProps = {
   /**
    * Live config — forms render bound values from this object. After save,
@@ -71,84 +87,96 @@ export type SettingsSubmenuProps = {
   onSave: (mutate: (obj: any) => void) => Promise<void>
   /** Open ~/.nuka/config.yaml in $EDITOR. Closes the submenu after. */
   onOpenEditor: () => void
+  /**
+   * Close the entire settings submenu. Parent (App) typically wires this
+   * to closeSubmenu(). When the user presses Esc/← from the top-level
+   * menu list, we call this rather than relying on the App's outer Esc.
+   */
+  onClose?: () => void
+  /**
+   * Hand off Model / Effort activation to an external picker submenu.
+   * Parent dispatches `open-submenu` for the corresponding picker kind.
+   */
+  onRequestExternalPicker?: (kind: ExternalPickerKind) => void
   /** Read-only list of loaded skills (PluginsForm / SkillsForm input). */
   loadedSkills?: { name: string; description?: string }[]
   /** Read-only list of loaded plugins. */
   loadedPlugins?: { name: string; description?: string }[]
 }
 
+type ViewState =
+  | { kind: 'menu' }
+  | { kind: 'subpage'; category: SettingsCategory }
+
+/** Compute a one-line summary of the current setting for the menu list. */
+function summaryFor(category: SettingsCategory, config: Config): string | undefined {
+  switch (category) {
+    case 'Providers': {
+      const list = config.providers ?? []
+      const active = list.find(p => p.id === config.active?.providerId)
+      if (active) return `${active.name} (${list.length})`
+      return `${list.length}`
+    }
+    case 'Model': {
+      const active = (config.providers ?? []).find(p => p.id === config.active?.providerId)
+      if (!active) return '—'
+      const m = active.selectedModel ?? active.models?.[0] ?? ''
+      return `${active.name} / ${m || '—'}`
+    }
+    case 'Effort':
+      return (config as { effort?: string }).effort ?? 'medium'
+    case 'Theme':
+      return config.theme?.name ?? 'default'
+    case 'StatusBar':
+      return config.statusBar?.layout ?? 'dense'
+    case 'Vim':
+      return config.vim?.enabled === true ? 'on' : 'off'
+    case 'Plugins': {
+      const enabled = config.plugins?.enabled?.length ?? 0
+      return `${enabled} enabled`
+    }
+    case 'Skills':
+      return undefined
+    case 'Welcome': {
+      const tips = config.welcome?.tips?.length ?? 0
+      return `${tips} tip${tips === 1 ? '' : 's'}`
+    }
+    case 'Compact': {
+      const c = config.compact
+      if (!c) return 'default'
+      return `keep ${c.keepTurns ?? 3}`
+    }
+  }
+}
+
+const DESCRIPTION_BY_CATEGORY: Record<SettingsCategory, string> = {
+  Providers: 'Manage API providers',
+  Model: 'Select active model',
+  Effort: 'Reasoning depth',
+  Theme: 'Color theme',
+  StatusBar: 'Status line layout',
+  Vim: 'Vim keybindings',
+  Plugins: 'Enabled plugins',
+  Skills: 'Loaded skills',
+  Welcome: 'Welcome card tips',
+  Compact: 'Auto-compact behaviour',
+}
+
 export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element {
   const colors = useColors()
-  const [cursor, setCursor] = useState(0)
-  // True when keyboard focus has descended into the right pane.
-  const [inForm, setInForm] = useState(false)
-  // Field index within the current form (parent owns cursor).
+  const [view, setView] = useState<ViewState>({ kind: 'menu' })
+  // Field index within the current subpage form (parent owns cursor).
   const [fieldIdx, setFieldIdx] = useState(0)
   // Per-field error flash; key = `${category}:${field}`.
   const [erroredField, setErroredField] = useState<string | null>(null)
-
-  const category = CATEGORIES[cursor]!
-
-  // Move cursor up/down in the rail (top level) or between fields (in form).
-  const navList = useCallback((dir: -1 | 1) => {
-    if (inForm) {
-      setFieldIdx(i => Math.max(0, i + dir))
-    } else {
-      setCursor(c => {
-        const n = c + dir
-        if (n < 0) return 0
-        if (n >= CATEGORIES.length) return CATEGORIES.length - 1
-        return n
-      })
-    }
-  }, [inForm])
+  // Remember the cursor position in the menu list so popping back keeps
+  // the user oriented on the category they just visited.
+  const [menuCursor, setMenuCursor] = useState(0)
 
   const flashError = useCallback((fieldKey: string) => {
     setErroredField(fieldKey)
     setTimeout(() => setErroredField(prev => (prev === fieldKey ? null : prev)), 1500)
   }, [])
-
-  useInput((inputKey, key) => {
-    // The Field component owns its own input handling while focused; the
-    // shell only handles category/field navigation and form-level keys.
-    // Filter: only act when no field is in edit mode. We approximate this by
-    // ignoring printable characters that aren't j/k/o/s and arrow/Enter.
-    if (key.upArrow || inputKey === 'k') {
-      navList(-1)
-      return
-    }
-    if (key.downArrow || inputKey === 'j') {
-      navList(1)
-      return
-    }
-    if (key.rightArrow && !inForm) {
-      // Descend into the form
-      setInForm(true)
-      setFieldIdx(0)
-      return
-    }
-    if (key.leftArrow && inForm) {
-      setInForm(false)
-      return
-    }
-    if (key.return && !inForm) {
-      setInForm(true)
-      setFieldIdx(0)
-      return
-    }
-    if (inputKey === 'o' && !inForm) {
-      props.onOpenEditor()
-      return
-    }
-    // 's' save is delegated to the active form via render-prop saveCallback
-    // (Forms call onSave themselves; the shell still listens for 's' as a
-    // shortcut that triggers the form's own saveAll. Each form exposes a
-    // ref-less callback through `formSaveRef.current`.)
-    if (inputKey === 's' && inForm) {
-      formSaveRef.current?.().catch(() => { /* form handles its own flash */ })
-      return
-    }
-  })
 
   // A mutable ref to the active form's save-all callback. Each form sets it
   // on mount; clears on unmount.
@@ -157,11 +185,86 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
     formSaveRef.current = fn
   }, [])
 
-  // Common props passed to every form.
-  const formCommon = {
+  // Top-level (menu state) keys not already consumed by SubmenuList.
+  // SubmenuList handles ↑/↓/⏎/→/Esc/←. We add 'o' for the editor escape
+  // hatch, gated to menu mode.
+  useInput((inputKey) => {
+    if (view.kind !== 'menu') return
+    if (inputKey === 'o') {
+      props.onOpenEditor()
+      return
+    }
+  }, { isActive: view.kind === 'menu' })
+
+  // Subpage keys: 's' triggers the active form's save-all; ←/Esc pops
+  // back to the menu. Field navigation (j/k/↑/↓) and edit-mode keys are
+  // owned by Field.tsx.
+  useInput((inputKey, key) => {
+    if (view.kind !== 'subpage') return
+    if (inputKey === 's') {
+      formSaveRef.current?.().catch(() => { /* form handles its own flash */ })
+      return
+    }
+    // ← pops back to menu. Esc is intercepted by App's global handler
+    // (closes the entire submenu); we don't preempt it here.
+    if (key.leftArrow) {
+      setView({ kind: 'menu' })
+      setFieldIdx(0)
+      return
+    }
+    if (key.upArrow || inputKey === 'k') {
+      setFieldIdx(i => Math.max(0, i - 1))
+      return
+    }
+    if (key.downArrow || inputKey === 'j') {
+      setFieldIdx(i => i + 1)
+      return
+    }
+  }, { isActive: view.kind === 'subpage' })
+
+  // ----- menu state ------------------------------------------------------
+  if (view.kind === 'menu') {
+    const items: SubmenuListItem[] = CATEGORIES.map(cat => ({
+      id: cat,
+      label: cat,
+      description: DESCRIPTION_BY_CATEGORY[cat],
+      value: summaryFor(cat, props.config),
+    }))
+
+    const handleSelect = (item: SubmenuListItem, index: number) => {
+      const cat = item.id as SettingsCategory
+      setMenuCursor(index)
+      if (EXTERNAL_PICKER_CATEGORIES.has(cat)) {
+        const kind: ExternalPickerKind = cat === 'Model' ? 'model-picker' : 'effort-picker'
+        props.onRequestExternalPicker?.(kind)
+        // Stay in menu — App will dispatch the picker submenu, replacing
+        // this view. If user re-opens /settings, we still show the menu.
+        return
+      }
+      setFieldIdx(0)
+      setView({ kind: 'subpage', category: cat })
+    }
+
+    return (
+      <Box flexDirection="column">
+        <SubmenuList
+          items={items}
+          initialCursor={menuCursor}
+          onSelect={handleSelect}
+          onCancel={() => props.onClose?.()}
+          footer="↑↓ select · ⏎ open · o external editor · Esc close"
+          focused
+        />
+      </Box>
+    )
+  }
+
+  // ----- subpage state ---------------------------------------------------
+  const category = view.category
+  const formCommon: FormCommonProps = {
     config: props.config,
     onSave: props.onSave,
-    focused: inForm,
+    focused: true,
     fieldIdx,
     setFieldIdx,
     erroredField,
@@ -170,48 +273,31 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
   }
 
   return (
-    <Box flexDirection="row">
-      {/* Left rail — fixed 18 cols. */}
-      <Box width={18} flexDirection="column" paddingRight={1}>
-        {CATEGORIES.map((c, i) => {
-          const selected = i === cursor
-          const sigil = selected ? '▸' : ' '
-          return (
-            <Text
-              key={c}
-              color={selected ? (inForm ? colors.fgMuted : colors.primary) : colors.fg}
-              bold={selected && !inForm}
-            >
-              {sigil} {c}
-            </Text>
-          )
-        })}
-        <Box marginTop={1}>
-          <Text color={colors.accentInfo}>{inForm ? '↑↓ field · ← back' : 'j/k · ⏎ open'}</Text>
+    <Box flexDirection="column">
+      <Box marginBottom={1}>
+        <Text color={colors.primary} bold>{category}</Text>
+        <Box marginLeft={2}>
+          <Text color={colors.fgMuted}>{DESCRIPTION_BY_CATEGORY[category]}</Text>
         </Box>
       </Box>
 
-      {/* Right pane. */}
-      <Box flexGrow={1} flexDirection="column" paddingLeft={1}>
-        {category === 'Providers' && <ProvidersForm {...formCommon} />}
-        {category === 'Model' && <ModelForm {...formCommon} />}
-        {category === 'Effort' && <EffortForm {...formCommon} />}
-        {category === 'Theme' && <ThemeForm {...formCommon} />}
-        {category === 'StatusBar' && <StatusBarForm {...formCommon} />}
-        {category === 'Vim' && <VimForm {...formCommon} />}
-        {category === 'Plugins' && (
-          <PluginsForm {...formCommon} loadedPlugins={props.loadedPlugins ?? []} />
-        )}
-        {category === 'Skills' && (
-          <SkillsForm {...formCommon} loadedSkills={props.loadedSkills ?? []} />
-        )}
-        {category === 'Welcome' && <WelcomeForm {...formCommon} />}
-        {category === 'Compact' && <CompactForm {...formCommon} />}
-        <Box marginTop={1}>
-          <Text color={colors.fgMuted}>
-            ⏎ 编辑   s 保存   o 外部编辑器   Esc 关闭
-          </Text>
-        </Box>
+      {category === 'Providers' && <ProvidersForm {...formCommon} />}
+      {category === 'Theme' && <ThemeForm {...formCommon} />}
+      {category === 'StatusBar' && <StatusBarForm {...formCommon} />}
+      {category === 'Vim' && <VimForm {...formCommon} />}
+      {category === 'Plugins' && (
+        <PluginsForm {...formCommon} loadedPlugins={props.loadedPlugins ?? []} />
+      )}
+      {category === 'Skills' && (
+        <SkillsForm {...formCommon} loadedSkills={props.loadedSkills ?? []} />
+      )}
+      {category === 'Welcome' && <WelcomeForm {...formCommon} />}
+      {category === 'Compact' && <CompactForm {...formCommon} />}
+
+      <Box marginTop={1}>
+        <Text color={colors.fgMuted}>
+          ← back · ⏎ edit · s save · Esc close
+        </Text>
       </Box>
     </Box>
   )

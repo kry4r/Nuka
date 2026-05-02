@@ -4,7 +4,7 @@ import { COORDINATOR_INTERNAL_TOOLS } from '../../../src/core/agent/coordinatorM
 
 const fakeTools = [
   { name: 'team_create' }, { name: 'send_message' }, { name: 'Read' }, { name: 'Edit' }, { name: 'Bash' },
-] as never
+] as { name: string }[]
 
 describe('applyCoordinatorFilter', () => {
   afterEach(() => { delete process.env.NUKA_COORDINATOR_MODE })

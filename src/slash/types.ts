@@ -14,6 +14,8 @@ export type DialogDescriptor =
   | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }
   // Phase 14b — monitor dashboard
   | { kind: 'monitor' }
+  // Phase 14d — harness control submenu (opened by /harness with no args)
+  | { kind: 'harness-submenu' }
 
 export type SessionEffect =
   | { kind: 'new-session' }

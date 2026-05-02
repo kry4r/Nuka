@@ -25,7 +25,7 @@ import { BtwCommand } from './slash/btw'
 import { CostCommand } from './slash/cost'
 import { ModelCommand } from './slash/model'
 import { EffortCommand } from './slash/effort'
-import { SettingsCommand } from './slash/settings'
+import { SettingsCommand, ConfigCommand } from './slash/settings'
 import { CompactCommand } from './slash/compact'
 import { ResumeCommand } from './slash/resume'
 import { MemdirCommand, setMemdirSynthCallable } from './slash/memdir'
@@ -409,7 +409,7 @@ async function runInteractive(): Promise<void> {
   const slash = new SlashRegistry()
   ;[
     ExitCommand, HelpCommand, ClearCommand, NewCommand, ForkCommand, BtwCommand,
-    CostCommand, ModelCommand, EffortCommand, SettingsCommand, CompactCommand, ResumeCommand,
+    CostCommand, ModelCommand, EffortCommand, SettingsCommand, ConfigCommand, CompactCommand, ResumeCommand,
     MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
     StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
@@ -748,6 +748,7 @@ async function runInteractive(): Promise<void> {
       loadedSkills={skills.map(s => ({ name: s.name, description: s.description }))}
       updates={welcomeUpdates}
       recent={welcomeRecent}
+      harness={harness}
     />,
   )
 

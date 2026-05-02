@@ -289,15 +289,15 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
       return (
         <Box flexDirection="column" paddingX={1}>
           <Box flexDirection="row">
-            <Box flexDirection="column" flexGrow={1}>
+            <Box flexDirection="column" flexBasis="50%" flexShrink={1}>
               {leftCol.map(s => (
                 <Box key={s.id}>{s.render()}</Box>
               ))}
             </Box>
-            <Box>
+            <Box flexShrink={0}>
               <Text color={muted}> │ </Text>
             </Box>
-            <Box flexDirection="column" flexGrow={1}>
+            <Box flexDirection="column" flexBasis="50%" flexShrink={1}>
               {rightCol.map(s => (
                 <Box key={s.id}>{s.render()}</Box>
               ))}
@@ -327,7 +327,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     return (
       <Box flexDirection="column" paddingX={1}>
         {row1.length > 0 && (
-          <Box>
+          <Box flexWrap="wrap" width="100%">
             {row1.map((s, i) => (
               <React.Fragment key={s.id}>
                 {i > 0 && sep}
@@ -337,7 +337,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
           </Box>
         )}
         {row2.length > 0 && (
-          <Box>
+          <Box flexWrap="wrap" width="100%">
             {row2.map((s, i) => (
               <React.Fragment key={s.id}>
                 {i > 0 && sep}
@@ -354,7 +354,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   // oneline
   const sep = <Text color={muted}> · </Text>
   return (
-    <Box paddingX={1}>
+    <Box paddingX={1} flexWrap="wrap" width="100%">
       {visible.map((s, i) => (
         <React.Fragment key={s.id}>
           {i > 0 && sep}

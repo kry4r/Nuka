@@ -21,7 +21,7 @@ describe('triage', () => {
 
   it('JSON 损坏时重试一次', async () => {
     const fork = vi
-      .fn<[string], Promise<{ text: string }>>()
+      .fn<(prompt: string) => Promise<{ text: string }>>()
       .mockResolvedValueOnce({ text: 'garbage' })
       .mockResolvedValueOnce({ text: validJson })
     const t = await triageMessage({ userMessage: 'x', repoSummary: '', runFork: fork })
@@ -47,7 +47,7 @@ describe('triage', () => {
   it('拒绝枚举之外的值，触发重试', async () => {
     const bad = JSON.stringify({ profile: 'unknown', difficulty: 'medium', testStrategy: 'tdd', reasoning: 'r' })
     const fork = vi
-      .fn<[string], Promise<{ text: string }>>()
+      .fn<(prompt: string) => Promise<{ text: string }>>()
       .mockResolvedValueOnce({ text: bad })
       .mockResolvedValueOnce({ text: validJson })
     const t = await triageMessage({ userMessage: 'x', repoSummary: '', runFork: fork })

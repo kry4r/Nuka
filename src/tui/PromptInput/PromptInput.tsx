@@ -1,6 +1,6 @@
 // src/tui/PromptInput/PromptInput.tsx
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
 import { MentionPanel } from './MentionPanel'
@@ -285,9 +285,24 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   }, { isActive: !props.disabled })
 
   const showCursor = !props.disabled && (!props.vim || vimMode === 'insert')
-  const valueText = props.value
   const placeholder = props.placeholder ?? ''
-  const isEmpty = valueText.length === 0
+  const isEmpty = props.value.length === 0
+
+  // Bug B — terminal-column truncation.
+  // The outer Box uses paddingX=1 + a single-char border on each side, plus
+  // the "> " marker (2 chars) and the trailing inverse-space cursor (1 char).
+  // When the value exceeds (columns - chrome) Ink wraps the <Text>, which
+  // pushes content over the bottom border and looks like overlap. We truncate
+  // the *display* (not props.value) keeping the tail visible so the user
+  // still sees what they're typing. Kept conservative: only kicks in when the
+  // tty is narrow enough to actually wrap.
+  const { stdout } = useStdout()
+  const columns = stdout?.columns ?? 80
+  const CHROME = 8 // borders(2) + paddingX(2) + "> "(2) + cursor(1) + safety(1)
+  const visibleBudget = Math.max(8, columns - CHROME)
+  const valueText = props.value.length > visibleBudget
+    ? '…' + props.value.slice(-(visibleBudget - 1))
+    : props.value
 
   return (
     <Box flexDirection="column">
@@ -310,6 +325,7 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         borderStyle="round"
         borderColor={(props.focused ?? !props.disabled) ? P.primary : P.fgMuted}
         paddingX={1}
+        flexShrink={0}
       >
         {props.vim && (
           <Text color={vimMode === 'insert' ? P.fgMuted : P.warn} bold>

@@ -13,6 +13,12 @@ import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
 import type { SlashCommand } from '../../slash/types'
 
+// Default visible window. The fix for the "missing /fork" bug is the
+// short-circuit below: when the rendered row count (heading + commands)
+// is at most this value we skip the sliding window entirely, so users
+// browsing a filtered short list never lose a candidate to pagination
+// chrome. The window itself stays at 10 — empirically stable in the
+// existing harness tests.
 const WINDOW_SIZE = 10
 
 type Group = {
@@ -63,11 +69,21 @@ export function CommandList(props: {
   const selectedRowPos = rows.findIndex(r => r.kind === 'command' && r.globalIdx === sel)
 
   // Compute sliding window centred on selected row.
+  // Short-circuit when the entire list fits in the window: we render every
+  // row so the user can never "scroll past" a command by accident (Bug A:
+  // /fork vanished once the cursor moved past the top window).
   const total = rows.length
-  const half = Math.floor(WINDOW_SIZE / 2)
-  let start = Math.max(0, selectedRowPos - half)
-  let end = Math.min(total, start + WINDOW_SIZE)
-  if (end - start < WINDOW_SIZE) start = Math.max(0, end - WINDOW_SIZE)
+  let start: number
+  let end: number
+  if (total <= WINDOW_SIZE) {
+    start = 0
+    end = total
+  } else {
+    const half = Math.floor(WINDOW_SIZE / 2)
+    start = Math.max(0, selectedRowPos - half)
+    end = Math.min(total, start + WINDOW_SIZE)
+    if (end - start < WINDOW_SIZE) start = Math.max(0, end - WINDOW_SIZE)
+  }
   const slice = rows.slice(start, end)
   const showUp = start > 0
   const showDown = end < total

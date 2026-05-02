@@ -49,6 +49,7 @@ import { TasksPanel, flattenedTasksLength } from './Tasks/TasksPanel'
 import { TasksSubmenu } from './Submenu/TasksSubmenu'
 import { findInFlightSubagents } from './Tasks/SubagentList'
 import { MonitorSubmenuWrapper } from './Monitor/MonitorSubmenu'
+import { HarnessSubmenu } from './Submenu/harness/HarnessSubmenu'
 // Phase 14b — new 5-column Tasks panel
 import { TasksPanelNew } from './Tasks/TasksPanelNew'
 import { useTasksColumns } from './Tasks/useTasksColumns'
@@ -109,6 +110,8 @@ export type SubmenuDescriptor =
   | { kind: 'tasks'; focusItem: number }
   // Phase 14b — monitor dashboard
   | { kind: 'monitor' }
+  // Phase 14d — harness control submenu (opened by /harness with no args)
+  | { kind: 'harness-submenu' }
 
 const INLINE_SUBMENU_KINDS = new Set<SubmenuDescriptor['kind']>([
   'permission',
@@ -227,6 +230,8 @@ export type AppProps = {
   updates?: import('../core/updates/load').UpdateEntry[]
   /** Phase 13 M2 — recent sessions from ~/.nuka/sessions/ */
   recent?: import('../core/session/recent').RecentEntry[]
+  /** Phase 14d — harness state machine (so /harness submenu can read/mutate it). */
+  harness?: import('../core/harness/state').HarnessStateMachine
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -798,6 +803,8 @@ export function App(props: AppProps): React.JSX.Element {
               }
             }}
             onOpenEditor={() => { props.onOpenEditor(); closeSubmenu() }}
+            onClose={closeSubmenu}
+            onRequestExternalPicker={(kind) => dispatchUI({ type: 'open-submenu', submenu: { kind } })}
             loadedPlugins={props.loadedPlugins}
             loadedSkills={props.loadedSkills}
           />
@@ -876,6 +883,51 @@ export function App(props: AppProps): React.JSX.Element {
       {/* Phase 14b — Monitor dashboard submenu */}
       {submenuFull && submenu?.kind === 'monitor' && (
         <MonitorSubmenuWrapper onClose={closeSubmenu} />
+      )}
+
+      {/* Phase 14d — Harness control submenu (opened by `/harness` with no args).
+          The component owns its own SubmenuFrame chrome, so we render it bare here. */}
+      {submenuFull && submenu?.kind === 'harness-submenu' && props.harness && (
+        <HarnessSubmenu
+          snapshot={(() => {
+            const snap = props.harness!.snapshot()
+            return {
+              mode: snap.mode,
+              // Stage may be null before triage runs; default to 'brainstorm' so
+              // the read-only Stage row always has a label. Real refusals on
+              // a manual transition will surface via the error flash.
+              stage: snap.currentStage ?? 'brainstorm',
+              sessionId: snap.sessionId,
+            }
+          })()}
+          availableStages={['brainstorm', 'spec', 'plan', 'search', 'implement', 'review', 'recap']}
+          onSetMode={(mode) => {
+            props.harness!.setMode(mode)
+            // Force re-render so the submenu (which reads via snapshot prop)
+            // reflects the new mode immediately.
+            bumpMessages()
+          }}
+          onTransition={async (to) => {
+            await props.harness!.transition(to, 'manual')
+            bumpMessages()
+          }}
+          onRetriage={() => {
+            // Simpler path per spec: append a hint asking the user to invoke
+            // `/triage <hint>` themselves. Routing into the existing triage
+            // flow would require additional plumbing not in scope.
+            appendMessage(session, {
+              role: 'assistant',
+              content: [{
+                type: 'text',
+                text: '[/harness] To re-classify the task, run `/triage <hint describing the task>`.',
+              }],
+              id: `harness-retriage-hint-${Date.now()}`,
+              ts: Date.now(),
+            })
+            bumpMessages()
+          }}
+          onClose={closeSubmenu}
+        />
       )}
 
       {/* Status zone */}

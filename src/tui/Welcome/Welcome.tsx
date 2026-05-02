@@ -29,6 +29,9 @@ import type { RecentEntry } from '../../core/session/recent'
 
 // ≈ rows consumed by Tasks + Prompt + Status zones
 const RESERVED_ROWS = 18
+// Hero never grows beyond this — keeps the avocado from floating in
+// a cavernous empty box on tall terminals.
+const HERO_MAX_HEIGHT = 12
 const NARROW_THRESHOLD = 100
 
 export type WelcomeProps = {
@@ -53,8 +56,10 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
 
   const narrow = columns < NARROW_THRESHOLD
 
-  // Vertical centering: total rows minus reserved bottom zones, floor at 5
-  const contentHeight = Math.max(5, rows - RESERVED_ROWS)
+  // Hero takes (rows − reserved-bottom-zones) but never grows past a hard
+  // ceiling — so a tall terminal doesn't produce a giant empty frame around
+  // the icon. Floor stays at 5 to match the original short-terminal layout.
+  const contentHeight = Math.min(HERO_MAX_HEIGHT, Math.max(5, rows - RESERVED_ROWS))
 
   // Branch display
   const git = gitBranch
@@ -114,11 +119,10 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
         {heroContent}
       </Box>
 
-      {/* Right column: Updates stacked above Recent, flexGrow=1, min 24 max 32 */}
+      {/* Right column: Updates stacked above Recent, flexGrow=1, min 24 cols. */}
       <Box
         flexGrow={1}
         minWidth={24}
-        maxWidth={32}
         flexDirection="column"
       >
         {/* Updates panel — flexGrow=1 */}

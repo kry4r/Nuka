@@ -27,7 +27,13 @@ export function makeHarnessCommand(
     description: 'Control the workflow harness',
     usage: '/harness [deep|fast|off|reset|status|retriage <hint>|transition <stage>]',
     async run(args: string, _ctx): Promise<SlashResult> {
-      const tokens = args.trim().split(/\s+/).filter(Boolean)
+      const trimmed = args.trim()
+      // No args → open the interactive Harness submenu (Phase 14d).
+      // The legacy text path is still available via `/harness status`.
+      if (trimmed === '') {
+        return { type: 'dialog', dialog: { kind: 'harness-submenu' } }
+      }
+      const tokens = trimmed.split(/\s+/).filter(Boolean)
       const sub = tokens[0] ?? 'status'
 
       if (sub === 'deep' || sub === 'fast' || sub === 'off') {

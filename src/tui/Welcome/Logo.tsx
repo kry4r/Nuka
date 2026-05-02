@@ -15,12 +15,15 @@ const RAW_LINES: ReadonlyArray<string> = [
   '  ⠈⠙⠽⢧⡹⠾⡿⠻⠓⠁',
 ]
 
-// Compact 3-row variant — keeps the avocado silhouette but trims top/bottom
-// rows so the Welcome hero block fits roughly half a 30-row terminal.
+// Compact 5-row variant — keeps a coherent avocado silhouette by retaining
+// top tip, upper curve, body, closing curve, and base. Drops only the dense
+// duplicate upper row and one near-identical middle row from RAW_LINES.
 const COMPACT_LINES: ReadonlyArray<string> = [
+  '⣶⣄⡀          ⢀⣴',
   '⣿⣾ ⠙⢾⣿⡄    ⣿⣷',
-  '⣿⣾   ⢸⣷⡇    ⣿⣻',
+  '⣿⣿   ⢸⣷⡇    ⣿⣽',
   '⠘⣿⣵⣄⠸⣷⣇⢀⣠⣾⣿⠋',
+  '  ⠈⠙⠽⢧⡹⠾⡿⠻⠓⠁',
 ]
 
 export const LOGO_WIDTH = RAW_LINES.reduce((m, l) => Math.max(m, l.length), 0)

@@ -36,7 +36,7 @@ const ARG_HINT_ANCHOR = /Usage/               // ArgHint card
 // The SettingsSubmenu footer renders the unique hint string "j/k · ⏎ open"
 // while the rail is in nav mode. No slash description contains this, so
 // it disambiguates "settings menu open" from "command list shows /settings".
-const FULL_SUB_ANCHOR = /j\/k · ⏎ open/
+const FULL_SUB_ANCHOR = /↑↓ select · ⏎ open/
 const PERMISSION_ANCHOR = /Yes, once|No$/m     // PermissionDialog options
 
 const wait = (ms = 60) => new Promise(r => setTimeout(r, ms))
@@ -89,7 +89,8 @@ describe('Phase 12 M6 — UIState e2e harness', () => {
       // SlashRegistry parses by name, ignoring trailing args), which dispatches
       // a `dialog: { kind: 'settings' }` SlashResult and opens the SettingsSubmenu.
       h.stdin.write('\r')                         // submit
-      await h.waitFor({ contains: 'j/k · ⏎ open' }, 1000)
+      // SettingsSubmenu menu state — footer hint anchors the open state.
+      await h.waitFor({ contains: '↑↓ select' }, 1000)
       const f3 = h.frames().pop() ?? ''
       expect(f3).toMatch(FULL_SUB_ANCHOR)          // SettingsSubmenu visible
       expect(f3).not.toMatch(STATUS_ANCHOR)         // Status hidden

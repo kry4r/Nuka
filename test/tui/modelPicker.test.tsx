@@ -89,7 +89,7 @@ describe('ModelPicker — models stage', () => {
 
   it('space toggles shortlist and persists', async () => {
     const onFetchRemote = vi.fn(async () => ['claude-opus-4-7', 'claude-sonnet-4-6'])
-    const onSave = vi.fn(async () => {})
+    const onSave = vi.fn<(mutate: (obj: any) => void) => Promise<void>>(async () => {})
     const { stdin } = render(<ModelPicker {...makeProps({ onFetchRemote, onSave })} />)
     stdin.write('\r')
     await flushAll()
@@ -98,7 +98,7 @@ describe('ModelPicker — models stage', () => {
     await flush()
     expect(onSave).toHaveBeenCalled()
     // Replay the mutator to check the patch
-    const mutator = onSave.mock.calls[0][0] as (obj: any) => void
+    const mutator = onSave.mock.calls[0]![0]
     const obj: any = { providers: [{ id: 'p1', models: ['claude-sonnet-4-6'] }] }
     mutator(obj)
     expect(obj.providers[0].models).toContain('claude-opus-4-7')
