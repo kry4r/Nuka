@@ -682,7 +682,11 @@ export function App(props: AppProps): React.JSX.Element {
           Bug fix #9: overflow="hidden" so children that overflow the flex
           region are clipped, never pushing the bottom-anchored Prompt zone
           off-screen. Messages clamps its tail length via availableRows. */}
-      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+      {/* TOP slot — conversation absorbs leftover height and clips overflow.
+          minHeight={0} is required so Yoga lets this Box shrink below its
+          children's intrinsic content size; without it, a long message list
+          can push the BOTTOM slot off-screen. */}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" minHeight={0}>
         {justCompacted && (
           <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
         )}
@@ -698,6 +702,12 @@ export function App(props: AppProps): React.JSX.Element {
         />
       </Box>
 
+      {/* BOTTOM slot — Tasks + inline submenus + slash card + prompt + status
+          group, all wrapped in flexShrink={0} so a long conversation never
+          pushes them off-screen. When a full-screen submenu is active it
+          replaces this group entirely (rendered as a sibling below). */}
+      {!submenuFull && (
+      <Box flexDirection="column" flexShrink={0}>
       {/* Tasks zone — M3: full TasksPanel when expanded, summary row when collapsed.
           Phase 13 M4: tasks-focused state passes focused/cursor to TasksPanel.
           Phase 14b review fix: hidden when new panel has data (mutually exclusive). */}
@@ -779,6 +789,34 @@ export function App(props: AppProps): React.JSX.Element {
           onSlashActiveChange={handleSlashActiveChange}
           onSlashCursorChange={setSlashCursor}
         />
+      )}
+
+      {/* Status zone — last child of the BOTTOM slot. */}
+      {statusVisible && (
+        <StatusPanel
+          mode={hintMode}
+          model={session.model}
+          providerId={session.providerId || '—'}
+          effort={props.config.effort}
+          cwd={props.cwd}
+          gitBranch={props.gitBranch}
+          contextUsed={contextUsed}
+          contextMax={contextMax}
+          inputTokens={session.totalUsage.inputTokens}
+          outputTokens={session.totalUsage.outputTokens}
+          cost={cost}
+          pluginCount={props.pluginCount ?? 0}
+          sessionPluginCount={props.sessionPluginCount ?? 0}
+          agentInFlight={props.agentInFlight ?? 0}
+          taskManager={props.taskManager}
+          hiddenSegments={props.config.statusBar?.hidden ?? []}
+          layout={props.config.statusBar?.layout ?? 'dense'}
+          iconMode={props.config.statusBar?.iconMode ?? 'icon'}
+          statusLineConfig={props.config.statusLine}
+          startedAt={session.createdAt}
+        />
+      )}
+      </Box>
       )}
 
       {/* Full submenus — replace Tasks/Prompt/Status entirely. */}
@@ -1006,32 +1044,6 @@ export function App(props: AppProps): React.JSX.Element {
             bumpMessages()
           }}
           onClose={closeSubmenu}
-        />
-      )}
-
-      {/* Status zone */}
-      {statusVisible && (
-        <StatusPanel
-          mode={hintMode}
-          model={session.model}
-          providerId={session.providerId || '—'}
-          effort={props.config.effort}
-          cwd={props.cwd}
-          gitBranch={props.gitBranch}
-          contextUsed={contextUsed}
-          contextMax={contextMax}
-          inputTokens={session.totalUsage.inputTokens}
-          outputTokens={session.totalUsage.outputTokens}
-          cost={cost}
-          pluginCount={props.pluginCount ?? 0}
-          sessionPluginCount={props.sessionPluginCount ?? 0}
-          agentInFlight={props.agentInFlight ?? 0}
-          taskManager={props.taskManager}
-          hiddenSegments={props.config.statusBar?.hidden ?? []}
-          layout={props.config.statusBar?.layout ?? 'dense'}
-          iconMode={props.config.statusBar?.iconMode ?? 'icon'}
-          statusLineConfig={props.config.statusLine}
-          startedAt={session.createdAt}
         />
       )}
     </Box>

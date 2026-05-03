@@ -18,7 +18,8 @@ describe('Phase 12 layout', () => {
       await wait()
       const frame = h.frames().pop() ?? ''
       // Welcome renders raw (no Conversation chrome) when no messages exist.
-      expect(frame).toContain('NUKA')
+      // 3D NUKA logo replaces literal "NUKA" wordmark — assert hero hint instead.
+      expect(frame).toContain('/ for commands')
       expect(frame).not.toContain('Conversation')
       // PromptInput visible (the bordered prompt box is part of the
       // chrome — assert presence of the input frame rather than a free-

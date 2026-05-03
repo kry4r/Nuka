@@ -31,7 +31,8 @@ describe('App', () => {
       />,
     )
     const f = lastFrame() ?? ''
-    expect(f).toContain('NUKA')
+    // 3D NUKA logo replaces literal text wordmark — cwd remains a stable marker.
     expect(f).toContain('/root/codes/Nuka')
+    expect(f).toContain('/ for commands')
   })
 })

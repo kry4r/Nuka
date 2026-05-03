@@ -321,7 +321,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     // If both columns have content, render them side by side.
     if (leftCol.length > 0 && rightCol.length > 0) {
       return (
-        <Box flexDirection="column" paddingX={1}>
+        <Box flexDirection="column" paddingX={1} flexShrink={0}>
           <Box flexDirection="row">
             <Box flexDirection="column" flexBasis="50%" flexShrink={1}>
               {leftCol.map(s => (
@@ -343,7 +343,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     }
     // Degenerate: only one side has visible segments — fall back to single column.
     return (
-      <Box flexDirection="column" paddingX={1}>
+      <Box flexDirection="column" paddingX={1} flexShrink={0}>
         {visible.map(s => (
           <Box key={s.id}>{s.render()}</Box>
         ))}
@@ -359,7 +359,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     const row2 = visible.filter(s => !row1Ids.has(s.id))
     const sep = <Text color={muted}> · </Text>
     return (
-      <Box flexDirection="column" paddingX={1}>
+      <Box flexDirection="column" paddingX={1} flexShrink={0}>
         {row1.length > 0 && (
           <Box flexWrap="wrap" width="100%">
             {row1.map((s, i) => (
@@ -388,7 +388,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   // oneline
   const sep = <Text color={muted}> · </Text>
   return (
-    <Box paddingX={1} flexWrap="wrap" width="100%">
+    <Box paddingX={1} flexWrap="wrap" width="100%" flexShrink={0}>
       {visible.map((s, i) => (
         <React.Fragment key={s.id}>
           {i > 0 && sep}

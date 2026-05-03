@@ -2,28 +2,27 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette } from '../theme'
 
-// Original braille avocado mark. Each line is right-padded to the longest
-// line so the figure has a consistent rectangular bounding box and adjacent
-// columns don't shift between rows.
+// 3D ANSI Shadow style "NUKA" — 6 rows × 35 columns.
+// Built from FULL BLOCK (█) plus double-line box drawing (╗ ║ ╝ ═ ╚ ╔)
+// to evoke a pseudo-3D extrusion (right/bottom shadow). Each row is exactly
+// 35 display columns wide so the figure has a clean rectangular bounding box.
 const RAW_LINES: ReadonlyArray<string> = [
-  '⣶⣄⡀          ⢀⣴',
-  '⣿⣿⣻⣷⣦⡀      ⣾⣿',
-  '⣿⣾ ⠙⢾⣿⡄    ⣿⣷',
-  '⣿⣿   ⢸⣷⡇    ⣿⣽',
-  '⣿⣾   ⢸⣷⡇    ⣿⣻',
-  '⠘⣿⣵⣄⠸⣷⣇⢀⣠⣾⣿⠋',
-  '  ⠈⠙⠽⢧⡹⠾⡿⠻⠓⠁',
+  '███╗   ██╗██╗   ██╗██╗  ██╗ █████╗ ',
+  '████╗  ██║██║   ██║██║ ██╔╝██╔══██╗',
+  '██╔██╗ ██║██║   ██║█████╔╝ ███████║',
+  '██║╚██╗██║██║   ██║██╔═██╗ ██╔══██║',
+  '██║ ╚████║╚██████╔╝██║  ██╗██║  ██║',
+  '╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝',
 ]
 
-// Compact 5-row variant — keeps a coherent avocado silhouette by retaining
-// top tip, upper curve, body, closing curve, and base. Drops only the dense
-// duplicate upper row and one near-identical middle row from RAW_LINES.
+// Compact 4-row variant for short terminals — keeps the wordmark legible by
+// retaining the top "tip" row, one mid-body row, the closing-curve row, and
+// the bottom shadow row. Same 35-column width as the full version.
 const COMPACT_LINES: ReadonlyArray<string> = [
-  '⣶⣄⡀          ⢀⣴',
-  '⣿⣾ ⠙⢾⣿⡄    ⣿⣷',
-  '⣿⣿   ⢸⣷⡇    ⣿⣽',
-  '⠘⣿⣵⣄⠸⣷⣇⢀⣠⣾⣿⠋',
-  '  ⠈⠙⠽⢧⡹⠾⡿⠻⠓⠁',
+  '███╗   ██╗██╗   ██╗██╗  ██╗ █████╗ ',
+  '██╔██╗ ██║██║   ██║█████╔╝ ███████║',
+  '██║ ╚████║╚██████╔╝██║  ██╗██║  ██║',
+  '╚═╝  ╚═══╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝',
 ]
 
 export const LOGO_WIDTH = RAW_LINES.reduce((m, l) => Math.max(m, l.length), 0)

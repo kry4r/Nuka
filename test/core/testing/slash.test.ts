@@ -23,7 +23,7 @@ setup:
 steps:
   - render: app
   - assert:
-      contains: "NUKA"
+      contains: "/ for commands"
   - slash: "stats"
   - wait:
       until:

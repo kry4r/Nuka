@@ -323,18 +323,26 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   // tty is narrow enough to actually wrap.
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 80
-  const CHROME = 8 // borders(2) + paddingX(2) + "> "(2) + cursor(1) + safety(1)
+  // borders(2) + paddingX(2) + "> "(2) + cursor(1) + safety(1) = 8.
+  // When vim mode is on, the "[I] " / "[N] " badge adds 4 more visible cols,
+  // so reserve those too — otherwise the truncation budget is too generous
+  // and the rendered value wraps past the bottom border.
+  const CHROME = props.vim ? 12 : 8
   const visibleBudget = Math.max(8, columns - CHROME)
   // Width-aware truncation: CJK/emoji glyphs occupy 2 cols each, so a naive
   // `value.length` slice would still wrap. Use string-width via
   // `truncateLeftToFit` to reserve 1 col for the leading "…" indicator.
-  const valueWidth = stringWidth(props.value)
+  // Strip CR/LF from the rendered value so a pasted multi-line string can't
+  // wrap past the bottom border. props.value is unchanged (still submitted
+  // as-is on Enter); only the *display* is single-lined.
+  const sanitizedValue = props.value.replace(/[\r\n]+/g, ' ')
+  const valueWidth = stringWidth(sanitizedValue)
   const valueText = valueWidth > visibleBudget
-    ? '…' + truncateLeftToFit(props.value, visibleBudget - 1)
-    : props.value
+    ? '…' + truncateLeftToFit(sanitizedValue, visibleBudget - 1)
+    : sanitizedValue
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" flexShrink={0}>
       {mentionActive && (
         <MentionPanel
           query={mentionQuery}
@@ -369,7 +377,7 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
           </>
         ) : (
           <>
-            <Text color={P.fg}>{valueText}</Text>
+            <Text color={P.fg} wrap="truncate-end">{valueText}</Text>
             {showCursor && <Text color={P.fg} inverse> </Text>}
           </>
         )}

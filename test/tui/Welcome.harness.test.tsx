@@ -35,8 +35,7 @@ describe('Welcome harness — 2:1 split layout', () => {
       />,
     )
     const frame = lastFrame() ?? ''
-    // Left panel
-    expect(frame).toContain('NUKA')
+    // Left panel — 3D logo replaces literal "NUKA" wordmark; assert hero meta line.
     expect(frame).toContain('claude-sonnet-4-6')
     expect(frame).toContain('feature/x')
     expect(frame).toContain('Type')
@@ -66,8 +65,8 @@ describe('Welcome harness — 2:1 split layout', () => {
       />,
     )
     const frame = lastFrame() ?? ''
-    // Left panel still present
-    expect(frame).toContain('NUKA')
+    // Left panel still present — assert hero hint instead of removed "NUKA" text.
+    expect(frame).toContain('/ for commands')
     // Empty state strings — right column still rendered
     expect(frame).toContain('(no updates)')
     expect(frame).toContain('(no recent sessions)')
@@ -91,8 +90,8 @@ describe('Welcome harness — 2:1 split layout', () => {
       />,
     )
     const frame = lastFrame() ?? ''
-    // Welcome still occupies the full width
-    expect(frame).toContain('NUKA')
+    // Welcome still occupies the full width — hero hint is the stable marker.
+    expect(frame).toContain('/ for commands')
     // Right column panels must not appear
     expect(frame).not.toContain('Updates')
     expect(frame).not.toContain('Recent')
@@ -144,7 +143,8 @@ describe('Welcome harness — via mountApp', () => {
     try {
       await wait()
       const frame = h.frames().pop() ?? ''
-      expect(frame).toContain('NUKA')
+      // Hero hint is the stable string in the welcome panel.
+      expect(frame).toContain('/ for commands')
     } finally {
       h.unmount()
     }

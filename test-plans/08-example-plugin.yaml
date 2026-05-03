@@ -31,7 +31,7 @@ description: >
 steps:
   - render: app
   - assert:
-      contains: "NUKA"
+      contains: "/ for commands"
 
 cleanup:
   unmount: true

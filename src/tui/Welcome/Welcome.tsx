@@ -14,7 +14,7 @@
 // Narrow terminals (<100 cols): right column hidden, Welcome takes 100%.
 //
 // Render order inside left frame (§4.1 spec):
-//   Logo → blank → NUKA wordmark → blank → <model> · <cwd> <branch>
+//   Logo (3D NUKA wordmark) → blank → <model> · <cwd> <branch>
 //   (no labels) → blank → "Type / for commands"
 
 import React from 'react'
@@ -73,9 +73,6 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
     <Box flexDirection="column" alignItems="center" justifyContent="center" height={contentHeight}>
       <Box justifyContent="center">
         <Logo compact />
-      </Box>
-      <Box justifyContent="center">
-        <Text color={P.primary} bold>NUKA</Text>
       </Box>
       <Box justifyContent="center">
         <Text color={P.fgMuted}>

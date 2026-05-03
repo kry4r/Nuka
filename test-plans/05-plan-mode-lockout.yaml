@@ -31,7 +31,7 @@ setup:
 steps:
   - render: app
   - assert:
-      contains: "NUKA"
+      contains: "/ for commands"
   - slash: "plan on"
   # After Enter the prompt clears because the slash was dispatched.
   - wait:

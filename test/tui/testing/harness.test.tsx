@@ -51,7 +51,8 @@ describe('mountApp({ target: "app" })', () => {
     try {
       await wait()
       const f = h.frames().pop() ?? ''
-      expect(f).toContain('NUKA')
+      // 3D NUKA logo replaces literal "NUKA" wordmark — assert hero hint instead.
+      expect(f).toContain('/ for commands')
     } finally {
       h.unmount()
     }

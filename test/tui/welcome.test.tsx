@@ -22,7 +22,9 @@ describe('Welcome', () => {
       />,
     )
     const frame = lastFrame() ?? ''
-    expect(frame).toContain('NUKA')
+    // 3D NUKA logo replaces the prior text wordmark — assert hero meta line
+    // and the "Type / for commands" hint instead of literal "NUKA" text.
+    expect(frame).toContain('/ for commands')
     expect(frame).toContain('/workspace/proj')
     expect(frame).toContain('main')
     expect(frame).toContain('claude-sonnet-4-6')
@@ -83,8 +85,8 @@ describe('Welcome', () => {
       />,
     )
     const frame = lastFrame() ?? ''
-    // NUKA still shown (left panel)
-    expect(frame).toContain('NUKA')
+    // Hero (left panel) still shown — assert hint text instead of removed "NUKA" wordmark.
+    expect(frame).toContain('/ for commands')
     // Right column panels hidden
     expect(frame).not.toContain('Updates')
     expect(frame).not.toContain('Recent')
