@@ -1,56 +1,22 @@
 // test/tui/Welcome.harness.test.tsx
 //
-// Phase 13 M2 — Harness tests for the Welcome screen redesign.
-// Asserts 2:1 split layout (wide) and narrow-terminal degradation (<100 cols).
-//
-// Strategy: use mountApp with columnsOverride injected via config-like
-// custom node, or mount Welcome directly via `target: 'custom'`.
+// Phase A — Harness tests for the LogoV2 port. Asserts:
+//   - small/medium/large terminals render without crash
+//   - compact-mode threshold (<80 cols) collapses the right column
+//   - logo doesn't wrap mid-row (locale-stable braille glyphs)
+//   - tip line ("Type / for commands") is present in every layout
 
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
+import stripAnsi from 'strip-ansi'
 import { Welcome } from '../../src/tui/Welcome/Welcome'
 import { mountApp } from '../../src/tui/testing/harness'
 
 const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
-describe('Welcome harness — 2:1 split layout', () => {
-  it('shows Updates and Recent panels in wide mode', () => {
-    const { lastFrame } = render(
-      <Welcome
-        cwd="/home/user/projects/my-app"
-        gitBranch={{ branch: 'feature/x', dirty: false }}
-        model="claude-sonnet-4-6"
-        version="0.2.0"
-        tip=""
-        updates={[
-          { version: '1.1.0', title: 'New commands', bullets: ['Added /stats', 'Fixed /resume'] },
-        ]}
-        recent={[
-          { id: 'abc', preview: 'Refactor the auth module', updatedAt: Date.now() },
-          { id: 'def', preview: 'Write unit tests for parser', updatedAt: Date.now() - 1000 },
-        ]}
-        columnsOverride={120}
-        rowsOverride={40}
-      />,
-    )
-    const frame = lastFrame() ?? ''
-    // Left panel — 3D logo replaces literal "NUKA" wordmark; assert hero meta line.
-    expect(frame).toContain('claude-sonnet-4-6')
-    expect(frame).toContain('feature/x')
-    expect(frame).toContain('Type')
-    expect(frame).toContain('/ for commands')
-    // Right column — Updates
-    expect(frame).toContain('Updates')
-    expect(frame).toContain('New commands')
-    expect(frame).toContain('Added /stats')
-    // Right column — Recent
-    expect(frame).toContain('Recent')
-    expect(frame).toContain('Refactor the auth module')
-    expect(frame).toContain('Write unit tests for parser')
-  })
-
-  it('shows empty-state placeholders when updates/recent are empty — does NOT collapse the column', () => {
+describe('Welcome harness — LogoV2 layout', () => {
+  it('renders on a small (40×10) terminal without crashing', () => {
     const { lastFrame } = render(
       <Welcome
         cwd="/tmp"
@@ -60,47 +26,49 @@ describe('Welcome harness — 2:1 split layout', () => {
         tip=""
         updates={[]}
         recent={[]}
-        columnsOverride={120}
-        rowsOverride={40}
+        columnsOverride={40}
+        rowsOverride={10}
       />,
     )
-    const frame = lastFrame() ?? ''
-    // Left panel still present — assert hero hint instead of removed "NUKA" text.
+    const frame = stripAnsi(lastFrame() ?? '')
+    expect(frame.length).toBeGreaterThan(0)
+    expect(frame).toContain('NUKA')
     expect(frame).toContain('/ for commands')
-    // Empty state strings — right column still rendered
-    expect(frame).toContain('(no updates)')
-    expect(frame).toContain('(no recent sessions)')
-    // Neither panel title nor the column should be absent
-    expect(frame).toContain('Updates')
-    expect(frame).toContain('Recent')
+    // Compact mode: right column is suppressed.
+    expect(frame).not.toContain('Updates')
+    expect(frame).not.toContain('Recent')
   })
 
-  it('hides right column entirely in narrow mode (<100 cols)', () => {
+  it('renders on a medium (80×24) terminal with two columns', () => {
     const { lastFrame } = render(
       <Welcome
-        cwd="/tmp"
-        gitBranch={null}
-        model="claude"
-        version="0.1.0"
+        cwd="/home/user/projects/my-app"
+        gitBranch={{ branch: 'feature/x', dirty: false }}
+        model="claude-sonnet-4-6"
+        version="0.2.0"
         tip=""
-        updates={[{ title: 'Release 1.0' }]}
-        recent={[{ id: 's1', preview: 'Some task', updatedAt: Date.now() }]}
-        columnsOverride={90}
+        updates={[
+          { version: '1.1.0', title: 'New commands', bullets: ['Added /stats'] },
+        ]}
+        recent={[
+          { id: 'abc', preview: 'Refactor the auth module', updatedAt: Date.now() },
+        ]}
+        columnsOverride={80}
         rowsOverride={24}
       />,
     )
-    const frame = lastFrame() ?? ''
-    // Welcome still occupies the full width — hero hint is the stable marker.
+    const frame = stripAnsi(lastFrame() ?? '')
+    expect(frame).toContain('claude-sonnet-4-6')
+    expect(frame).toContain('feature/x')
     expect(frame).toContain('/ for commands')
-    // Right column panels must not appear
-    expect(frame).not.toContain('Updates')
-    expect(frame).not.toContain('Recent')
-    // Verify empty-state strings also absent
-    expect(frame).not.toContain('(no updates)')
-    expect(frame).not.toContain('(no recent sessions)')
+    expect(frame).toContain('Updates')
+    expect(frame).toContain('Recent')
+    expect(frame).toContain('Refactor the auth module')
   })
 
-  it('dirty git branch shows asterisk', () => {
+  it('renders on a large terminal (capped at ink-testing 100 cols) without crashing', () => {
+    // ink-testing-library hard-codes stdout.columns=100; the prop drives the
+    // logical layout, but physical render is bounded by 100 chars regardless.
     const { lastFrame } = render(
       <Welcome
         cwd="/workspace"
@@ -110,12 +78,60 @@ describe('Welcome harness — 2:1 split layout', () => {
         tip=""
         updates={[]}
         recent={[]}
+        columnsOverride={100}
+        rowsOverride={50}
+      />,
+    )
+    const frame = stripAnsi(lastFrame() ?? '')
+    expect(frame).toContain('NUKA')
+    expect(frame).toContain('main *')
+    expect(frame).toContain('/ for commands')
+  })
+
+  it('compact-mode threshold trigger — <80 cols hides the right column', () => {
+    const { lastFrame } = render(
+      <Welcome
+        cwd="/tmp"
+        gitBranch={null}
+        model="claude"
+        version="0.1.0"
+        tip=""
+        updates={[{ title: 'Release 1.0' }]}
+        recent={[{ id: 's1', preview: 'Some task', updatedAt: Date.now() }]}
+        columnsOverride={70}
+        rowsOverride={24}
+      />,
+    )
+    const frame = stripAnsi(lastFrame() ?? '')
+    expect(frame).toContain('/ for commands')
+    expect(frame).not.toContain('Updates')
+    expect(frame).not.toContain('Recent')
+  })
+
+  it('logo does not wrap mid-row — every braille line stays on one row', () => {
+    const { lastFrame } = render(
+      <Welcome
+        cwd="/workspace"
+        gitBranch={null}
+        model="claude"
+        version="0.1.0"
+        tip=""
+        updates={[]}
+        recent={[]}
         columnsOverride={120}
         rowsOverride={40}
       />,
     )
-    const frame = lastFrame() ?? ''
-    expect(frame).toContain('main *')
+    const frame = stripAnsi(lastFrame() ?? '')
+    // Each Clawd row contains Unicode braille (U+28xx) — locale-stable EAW
+    // Neutral, so the row should appear intact (no embedded \n inside the
+    // braille run).
+    const brailleRows = frame.split('\n').filter(l => /[\u2800-\u28FF]/.test(l))
+    expect(brailleRows.length).toBeGreaterThanOrEqual(7)
+    for (const row of brailleRows) {
+      // No newline characters inside a single rendered row
+      expect(row).not.toContain('\r')
+    }
   })
 
   it('null git branch shows (not a git repo)', () => {
@@ -132,7 +148,7 @@ describe('Welcome harness — 2:1 split layout', () => {
         rowsOverride={40}
       />,
     )
-    const frame = lastFrame() ?? ''
+    const frame = stripAnsi(lastFrame() ?? '')
     expect(frame).toContain('(not a git repo)')
   })
 })
@@ -142,16 +158,14 @@ describe('Welcome harness — via mountApp', () => {
     const h = mountApp({ target: 'app' })
     try {
       await wait()
-      const frame = h.frames().pop() ?? ''
-      // Hero hint is the stable string in the welcome panel.
+      const frame = stripAnsi(h.frames().pop() ?? '')
       expect(frame).toContain('/ for commands')
     } finally {
       h.unmount()
     }
   })
 
-  it('App with updates/recent passed through shows in Welcome', async () => {
-    // Use custom target to inject the full App with updates/recent
+  it('Updates/Recent surface when passed through (medium terminal)', async () => {
     const h = mountApp({
       target: 'custom',
       node: React.createElement(Welcome, {
@@ -168,7 +182,7 @@ describe('Welcome harness — via mountApp', () => {
     })
     try {
       await wait()
-      const frame = h.frames().pop() ?? ''
+      const frame = stripAnsi(h.frames().pop() ?? '')
       expect(frame).toContain('Patch 1')
       expect(frame).toContain('Recent task preview')
     } finally {

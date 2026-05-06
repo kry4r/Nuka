@@ -1,38 +1,38 @@
 // src/tui/Welcome/Welcome.tsx
 //
-// Phase 13 M2 — Welcome screen redesign with 2:1 left/right split.
+// Phase A — port of Nuka-Code's LogoV2:
+//   compact (cols < 80): centered single-column bordered box "NUKA",
+//     welcome line + Clawd avocado + model/cwd/branch lines.
+//   normal/wide (cols ≥ 80): bordered outer box with title "NUKA v<x>".
+//     Left column: welcome (top), Clawd (middle), model/cwd lines (bottom),
+//     space-between. Right column: Updates + Recent panels (Phase B will
+//     migrate these to FeedColumn).
 //
-// Layout (wide terminals, ≥100 cols):
-//   ┌─────────────────────────┐  ┌───────────┐
-//   │  Logo + hero (left)     │  │  Updates  │
-//   │  flexGrow=2             │  │           │
-//   │                         │  ├───────────┤
-//   │                         │  │  Recent   │
-//   │                         │  │           │
-//   └─────────────────────────┘  └───────────┘
-//
-// Narrow terminals (<100 cols): right column hidden, Welcome takes 100%.
-//
-// Render order inside left frame (§4.1 spec):
-//   Logo (3D NUKA wordmark) → blank → <model> · <cwd> <branch>
-//   (no labels) → blank → "Type / for commands"
+// Bug fixes vs. prior 3D ANSI Shadow logo:
+//   - Locale-stable glyphs: braille (U+28xx) is EAW Neutral, not Ambiguous,
+//     so CJK terminals can't double-render it into the wrap zone.
+//   - Vertical floor sized to CLAWD_HEIGHT + 4 so the avocado isn't clipped.
 
 import React from 'react'
 import { Box, Text } from 'ink'
-import { Logo } from './Logo'
-import { UpdatesPanel } from './UpdatesPanel'
-import { RecentPanel } from './RecentPanel'
+import stringWidth from 'string-width'
 import { useTerminalSize } from '../hooks/useTerminalSize'
 import { defaultPalette as P } from '../theme'
+import { Clawd, CLAWD_HEIGHT, CLAWD_WIDTH } from './Clawd'
+import { BorderedBox } from './BorderedBox'
+import {
+  calculateLayoutDimensions,
+  calculateOptimalLeftWidth,
+  formatWelcomeMessage,
+  getLayoutMode,
+  truncatePath,
+} from './layout'
+import { UpdatesPanel } from './UpdatesPanel'
+import { RecentPanel } from './RecentPanel'
 import type { UpdateEntry } from '../../core/updates/load'
 import type { RecentEntry } from '../../core/session/recent'
 
-// ≈ rows consumed by Tasks + Prompt + Status zones
-const RESERVED_ROWS = 18
-// Hero never grows beyond this — keeps the avocado from floating in
-// a cavernous empty box on tall terminals.
-const HERO_MAX_HEIGHT = 12
-const NARROW_THRESHOLD = 100
+const LEFT_PANEL_MAX_WIDTH = 50
 
 export type WelcomeProps = {
   cwd: string
@@ -46,100 +46,125 @@ export type WelcomeProps = {
   columnsOverride?: number
   /** Override terminal rows (for tests). */
   rowsOverride?: number
+  /** Override username (otherwise omitted; Phase B may resolve this from settings). */
+  username?: string
 }
 
 export function Welcome(props: WelcomeProps): React.JSX.Element {
-  const { cwd, gitBranch, model, updates = [], recent = [] } = props
-  const { columns: termCols, rows: termRows } = useTerminalSize()
+  const { cwd, gitBranch, model, version, updates = [], recent = [], username } = props
+  const { columns: termCols } = useTerminalSize()
   const columns = props.columnsOverride ?? termCols
-  const rows = props.rowsOverride ?? termRows
 
-  const narrow = columns < NARROW_THRESHOLD
-
-  // Hero takes (rows − reserved-bottom-zones) but never grows past a hard
-  // ceiling — so a tall terminal doesn't produce a giant empty frame around
-  // the icon. Floor stays at 5 to match the original short-terminal layout.
-  const contentHeight = Math.min(HERO_MAX_HEIGHT, Math.max(5, rows - RESERVED_ROWS))
-
-  // Branch display
-  const git = gitBranch
+  const layoutMode = getLayoutMode(columns)
+  const branchSegment = gitBranch
     ? `${gitBranch.branch}${gitBranch.dirty ? ' *' : ''}`
     : '(not a git repo)'
-
-  // Truncate cwd from the left so the leaf stays visible
-  const cwdDisplay = cwd.length > 40 ? '\u2026' + cwd.slice(cwd.length - 39) : cwd
-
-  const heroContent = (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={contentHeight}>
-      <Box justifyContent="center">
-        <Logo compact />
-      </Box>
-      <Box justifyContent="center">
-        <Text color={P.fgMuted}>
-          {model}
-          {' · '}
-          {cwdDisplay}
-          {' '}
-          {git}
-        </Text>
-      </Box>
-      <Box justifyContent="center">
-        <Text color={P.accentInfo}>Type <Text color={P.primary}>/</Text> for commands</Text>
-      </Box>
-    </Box>
+  const modelLine = model
+  const tipNode = (
+    <Text color={P.accentInfo}>
+      Type <Text color={P.primary}>/</Text> for commands
+    </Text>
   )
 
-  if (narrow) {
-    // Narrow: welcome takes 100% width, no right column.
-    // Bug fix: dropped outer flexGrow=1 so the frame hugs its content
-    // instead of inflating to fill the whole conversation zone.
+  if (layoutMode === 'compact') {
+    let welcomeMessage = formatWelcomeMessage(username ?? null)
+    if (stringWidth(welcomeMessage) > columns - 4) {
+      welcomeMessage = formatWelcomeMessage(null)
+    }
+    const cwdAvailableWidth = Math.max(columns - 4, 10)
+    const truncatedCwd = truncatePath(cwd, cwdAvailableWidth)
+    const compactWidth = Math.min(columns, Math.max(CLAWD_WIDTH + 4, 28))
+
     return (
-      <Box
-        borderStyle="round"
-        borderColor={P.fgMuted}
-        flexDirection="column"
+      <BorderedBox
+        title=" NUKA "
+        titleColor={P.primary}
+        align="start"
+        offset={1}
+        borderColor={P.primary}
+        width={compactWidth}
       >
-        {heroContent}
-      </Box>
+        <Box flexDirection="column" alignItems="center" paddingX={1} paddingY={1}>
+          <Text bold>{welcomeMessage}</Text>
+          <Box marginY={1}>
+            <Clawd />
+          </Box>
+          <Text color={P.fgMuted}>{modelLine}</Text>
+          <Text color={P.fgMuted}>{truncatedCwd}</Text>
+          <Text color={P.fgMuted}>{branchSegment}</Text>
+          <Box marginTop={1}>{tipNode}</Box>
+        </Box>
+      </BorderedBox>
     )
   }
 
-  // Wide: 2:1 split.
-  // Bug fix: dropped outer-row flexGrow=1 so the row hugs its content
-  // height. The inner flexGrow={2}/flexGrow={1} still govern the left/right
-  // width split.
-  // Bug fix #8: cap the right rail at the same `contentHeight` the hero
-  // uses so the Updates/Recent panels can't inflate past the hero on tall
-  // terminals (200×50, 80×100). The left frame is `contentHeight + 2` rows
-  // (border adds 2); using `contentHeight` here makes the right column 2
-  // rows shorter than the left, which is intentional per spec — the right
-  // column hugs its hero-equivalent area.
-  return (
-    <Box flexDirection="row">
-      {/* Left: framed Welcome panel, flexGrow=2 */}
-      <Box
-        flexGrow={2}
-        borderStyle="round"
-        borderColor={P.fgMuted}
-        flexDirection="column"
-      >
-        {heroContent}
-      </Box>
+  // normal / wide: two-column bordered outer box.
+  const welcomeMessage = formatWelcomeMessage(username ?? null)
+  const cwdLine = truncatePath(cwd, LEFT_PANEL_MAX_WIDTH)
+  const optimalLeftWidth = Math.max(
+    calculateOptimalLeftWidth(welcomeMessage, cwdLine, modelLine),
+    CLAWD_WIDTH + 4,
+  )
+  const { leftWidth, rightWidth, totalWidth } = calculateLayoutDimensions(
+    columns,
+    layoutMode,
+    optimalLeftWidth,
+  )
 
-      {/* Right column: Updates stacked above Recent, flexGrow=1, min 24 cols.
-          Hard-capped at contentHeight (no flexGrow on the inner panels) so
-          the right rail doesn't leak past the hero. flexShrink=0 keeps the
-          inner panels from collapsing below their natural content. */}
-      <Box
-        flexGrow={1}
-        flexShrink={0}
-        minWidth={24}
-        height={contentHeight}
-        flexDirection="column"
-      >
-        <UpdatesPanel updates={updates} />
-        <RecentPanel recent={recent} />
+  const titleNode = (
+    <Text>
+      <Text color={P.primary} bold>NUKA</Text>
+      <Text color={P.fgMuted}> v{version}</Text>
+    </Text>
+  )
+
+  const heroMinHeight = Math.max(CLAWD_HEIGHT + 4, 11)
+
+  return (
+    <BorderedBox
+      titleNode={titleNode}
+      align="start"
+      offset={3}
+      borderColor={P.primary}
+      width={totalWidth}
+    >
+      <Box flexDirection="row" paddingX={1} width={totalWidth - 2}>
+        {/* Left: welcome (top) → Clawd (mid) → model/cwd (bottom). */}
+        <Box
+          flexDirection="column"
+          width={leftWidth}
+          flexShrink={0}
+          justifyContent="space-between"
+          alignItems="center"
+          minHeight={heroMinHeight}
+        >
+          <Box marginTop={1}>
+            <Text bold>{welcomeMessage}</Text>
+          </Box>
+          <Clawd />
+          <Box flexDirection="column" alignItems="center">
+            <Text color={P.fgMuted}>{modelLine}</Text>
+            <Text color={P.fgMuted}>{cwdLine}</Text>
+            <Text color={P.fgMuted}>{branchSegment}</Text>
+            <Box marginTop={1}>{tipNode}</Box>
+          </Box>
+        </Box>
+        {/* Vertical divider — borderRight only, no top/bottom/left edges. */}
+        <Box
+          borderStyle="single"
+          borderColor={P.fgMuted}
+          borderDimColor
+          borderTop={false}
+          borderBottom={false}
+          borderLeft={false}
+          marginX={1}
+        />
+        {/* Right column: legacy Updates/Recent (Phase B → FeedColumn). */}
+        <Box flexDirection="column" width={rightWidth} flexShrink={1}>
+          <UpdatesPanel updates={updates} />
+          <RecentPanel recent={recent} />
+        </Box>
       </Box>
-    </Box>
+    </BorderedBox>
   )
 }
