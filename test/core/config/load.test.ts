@@ -83,7 +83,6 @@ recap:
     // to invent provider fixtures per key.
     const sentinels: Record<string, string> = {
       theme: 'theme:\n  name: default-dark\n',
-      welcome: 'welcome:\n  tips: ["sentinel"]\n',
       compact: 'compact:\n  keepTurns: 7\n',
       search: 'search:\n  endpoint: https://example.com/search\n',
       plugins: 'plugins:\n  enabled: ["sentinel"]\n',

@@ -3,6 +3,8 @@ import { Box, Text, useInput } from 'ink'
 import type { ProviderConfig } from '../../core/config/schema'
 import { useColors } from '../../core/theme/context'
 import { useTerminalSize } from '../hooks/useTerminalSize'
+import { LoadingState } from '../design-system/LoadingState'
+import { Ratchet } from '../design-system/Ratchet'
 
 // Sliding window for the models list — same shape as SlashCard/CommandList.
 const MODEL_WINDOW = 12
@@ -203,8 +205,9 @@ export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Text color={colors.fg}>{provider.name} <Text color={colors.fgMuted}>· {provider.baseUrl}</Text></Text>
+      <Ratchet>
       {load.kind === 'loading' && (
-        <Text color={colors.fgMuted}>Loading models from /v1/models…</Text>
+        <LoadingState message="Loading models from /v1/models…" dimColor />
       )}
       {load.kind === 'loaded' && load.error && (
         <Text color={colors.error}>fetch failed: {load.error} (fallback to local shortlist)</Text>
@@ -251,6 +254,7 @@ export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
           </>
         )
       })()}
+      </Ratchet>
       <Box marginTop={1}>
         <Text color={colors.fgMuted}>
           space toggle · ⏎ activate · Esc back

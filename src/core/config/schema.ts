@@ -40,12 +40,6 @@ export const ThemeSchema = z
   })
   .optional()
 
-export const WelcomeSchema = z
-  .object({
-    tips: z.array(z.string()).optional(),
-  })
-  .optional()
-
 export const CompactSchema = z
   .object({
     keepTurns: z.number().int().positive().default(3),
@@ -187,7 +181,6 @@ export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema.default({ providerId: '' }),
   theme: ThemeSchema,
-  welcome: WelcomeSchema,
   compact: CompactSchema,
   search: SearchSchema,
   plugins: PluginsConfigSchema,

@@ -10,7 +10,7 @@
 // `onRequestExternalPicker` so the parent App opens the dedicated
 // ModelPicker / EffortPicker (long lists with proper ↑/↓ navigation).
 // All other categories ('Providers', 'Theme', 'StatusBar', 'Vim',
-// 'Plugins', 'Skills', 'Welcome', 'Compact') push to a subpage and
+// 'Plugins', 'Skills', 'Compact') push to a subpage and
 // render their existing <XxxForm/> full-width.
 //
 // Top-level keys ({ kind: 'menu' }):
@@ -36,7 +36,6 @@ import { StatusBarForm } from './StatusBarForm'
 import { VimForm } from './VimForm'
 import { PluginsForm } from './PluginsForm'
 import { SkillsForm } from './SkillsForm'
-import { WelcomeForm } from './WelcomeForm'
 import { CompactForm } from './CompactForm'
 
 export type SettingsCategory =
@@ -48,7 +47,6 @@ export type SettingsCategory =
   | 'Vim'
   | 'Plugins'
   | 'Skills'
-  | 'Welcome'
   | 'Compact'
 
 export const CATEGORIES: readonly SettingsCategory[] = [
@@ -60,7 +58,6 @@ export const CATEGORIES: readonly SettingsCategory[] = [
   'Vim',
   'Plugins',
   'Skills',
-  'Welcome',
   'Compact',
 ] as const
 
@@ -137,10 +134,6 @@ function summaryFor(category: SettingsCategory, config: Config): string | undefi
     }
     case 'Skills':
       return undefined
-    case 'Welcome': {
-      const tips = config.welcome?.tips?.length ?? 0
-      return `${tips} tip${tips === 1 ? '' : 's'}`
-    }
     case 'Compact': {
       const c = config.compact
       if (!c) return 'default'
@@ -158,7 +151,6 @@ const DESCRIPTION_BY_CATEGORY: Record<SettingsCategory, string> = {
   Vim: 'Vim keybindings',
   Plugins: 'Enabled plugins',
   Skills: 'Loaded skills',
-  Welcome: 'Welcome card tips',
   Compact: 'Auto-compact behaviour',
 }
 
@@ -342,7 +334,6 @@ export function SettingsSubmenu(props: SettingsSubmenuProps): React.JSX.Element 
       {category === 'Skills' && (
         <SkillsForm {...formCommon} loadedSkills={props.loadedSkills ?? []} />
       )}
-      {category === 'Welcome' && <WelcomeForm {...formCommon} />}
       {category === 'Compact' && <CompactForm {...formCommon} />}
 
       <Box marginTop={1}>

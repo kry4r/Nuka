@@ -215,7 +215,6 @@ export async function loadConfig(opts: {
       ? projectCfg.active
       : globalCfg.active,
     theme: projectCfg.theme ?? globalCfg.theme,
-    welcome: projectCfg.welcome ?? globalCfg.welcome,
     compact: projectCfg.compact ?? globalCfg.compact,
     search: projectCfg.search ?? globalCfg.search,
     plugins: projectCfg.plugins ?? globalCfg.plugins,

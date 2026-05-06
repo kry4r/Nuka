@@ -2,7 +2,7 @@
 //
 // Issue #4 + #6 — Claude Code style settings menu.
 //
-// First paint shows a single-column list of all ten categories with a
+// First paint shows a single-column list of all nine categories with a
 // per-row summary. Activating Theme (a regular form category) pushes
 // into a subpage; Esc/← pops back. Activating Model or Effort hands off
 // to an external picker via `onRequestExternalPicker` and STAYS on the
@@ -34,7 +34,7 @@ const baseConfig: Config = {
 const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
 describe('SettingsSubmenu harness', () => {
-  it('renders all ten categories on first paint as a single-column menu', () => {
+  it('renders all nine categories on first paint as a single-column menu', () => {
     installRawShim()
     const { lastFrame, unmount } = render(
       <SettingsSubmenu
@@ -52,7 +52,6 @@ describe('SettingsSubmenu harness', () => {
     expect(f).toContain('Vim')
     expect(f).toContain('Plugins')
     expect(f).toContain('Skills')
-    expect(f).toContain('Welcome')
     expect(f).toContain('Compact')
     // Menu shows the per-row summary value (e.g. Vim 'on').
     expect(f).toContain('on')
