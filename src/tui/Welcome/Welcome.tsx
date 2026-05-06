@@ -29,6 +29,7 @@ import {
 } from './layout'
 import { FeedColumn } from './FeedColumn'
 import { createRecentFeed, createUpdatesFeed } from './feedConfigs'
+import { EmergencyTip } from './notices/EmergencyTip'
 import type { UpdateEntry } from '../../core/updates/load'
 import type { RecentEntry } from '../../core/session/recent'
 
@@ -76,25 +77,28 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
     const compactWidth = Math.min(columns, Math.max(CLAWD_WIDTH + 4, 28))
 
     return (
-      <BorderedBox
-        title=" NUKA "
-        titleColor={P.primary}
-        align="start"
-        offset={1}
-        borderColor={P.primary}
-        width={compactWidth}
-      >
-        <Box flexDirection="column" alignItems="center" paddingX={1} paddingY={1}>
-          <Text bold>{welcomeMessage}</Text>
-          <Box marginY={1}>
-            <Clawd />
+      <Box flexDirection="column">
+        <BorderedBox
+          title=" NUKA "
+          titleColor={P.primary}
+          align="start"
+          offset={1}
+          borderColor={P.primary}
+          width={compactWidth}
+        >
+          <Box flexDirection="column" alignItems="center" paddingX={1} paddingY={1}>
+            <Text bold>{welcomeMessage}</Text>
+            <Box marginY={1}>
+              <Clawd />
+            </Box>
+            <Text color={P.fgMuted}>{modelLine}</Text>
+            <Text color={P.fgMuted}>{truncatedCwd}</Text>
+            <Text color={P.fgMuted}>{branchSegment}</Text>
+            <Box marginTop={1}>{tipNode}</Box>
           </Box>
-          <Text color={P.fgMuted}>{modelLine}</Text>
-          <Text color={P.fgMuted}>{truncatedCwd}</Text>
-          <Text color={P.fgMuted}>{branchSegment}</Text>
-          <Box marginTop={1}>{tipNode}</Box>
-        </Box>
-      </BorderedBox>
+        </BorderedBox>
+        <EmergencyTip />
+      </Box>
     )
   }
 
@@ -121,52 +125,55 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
   const heroMinHeight = Math.max(CLAWD_HEIGHT + 4, 11)
 
   return (
-    <BorderedBox
-      titleNode={titleNode}
-      align="start"
-      offset={3}
-      borderColor={P.primary}
-      width={totalWidth}
-    >
-      <Box flexDirection="row" paddingX={1} width={totalWidth - 2}>
-        {/* Left: welcome (top) → Clawd (mid) → model/cwd (bottom). */}
-        <Box
-          flexDirection="column"
-          width={leftWidth}
-          flexShrink={0}
-          justifyContent="space-between"
-          alignItems="center"
-          minHeight={heroMinHeight}
-        >
-          <Box marginTop={1}>
-            <Text bold>{welcomeMessage}</Text>
+    <Box flexDirection="column">
+      <BorderedBox
+        titleNode={titleNode}
+        align="start"
+        offset={3}
+        borderColor={P.primary}
+        width={totalWidth}
+      >
+        <Box flexDirection="row" paddingX={1} width={totalWidth - 2}>
+          {/* Left: welcome (top) → Clawd (mid) → model/cwd (bottom). */}
+          <Box
+            flexDirection="column"
+            width={leftWidth}
+            flexShrink={0}
+            justifyContent="space-between"
+            alignItems="center"
+            minHeight={heroMinHeight}
+          >
+            <Box marginTop={1}>
+              <Text bold>{welcomeMessage}</Text>
+            </Box>
+            <Clawd />
+            <Box flexDirection="column" alignItems="center">
+              <Text color={P.fgMuted}>{modelLine}</Text>
+              <Text color={P.fgMuted}>{cwdLine}</Text>
+              <Text color={P.fgMuted}>{branchSegment}</Text>
+              <Box marginTop={1}>{tipNode}</Box>
+            </Box>
           </Box>
-          <Clawd />
-          <Box flexDirection="column" alignItems="center">
-            <Text color={P.fgMuted}>{modelLine}</Text>
-            <Text color={P.fgMuted}>{cwdLine}</Text>
-            <Text color={P.fgMuted}>{branchSegment}</Text>
-            <Box marginTop={1}>{tipNode}</Box>
-          </Box>
-        </Box>
-        {/* Vertical divider — borderRight only, no top/bottom/left edges. */}
-        <Box
-          borderStyle="single"
-          borderColor={P.fgMuted}
-          borderDimColor
-          borderTop={false}
-          borderBottom={false}
-          borderLeft={false}
-          marginX={1}
-        />
-        {/* Right column — FeedColumn (Phase B): Updates + Recent + future feeds. */}
-        <Box flexDirection="column" width={rightWidth} flexShrink={1}>
-          <FeedColumn
-            feeds={[createUpdatesFeed(updates), createRecentFeed(recent)]}
-            maxWidth={rightWidth}
+          {/* Vertical divider — borderRight only, no top/bottom/left edges. */}
+          <Box
+            borderStyle="single"
+            borderColor={P.fgMuted}
+            borderDimColor
+            borderTop={false}
+            borderBottom={false}
+            borderLeft={false}
+            marginX={1}
           />
+          {/* Right column — FeedColumn (Phase B): Updates + Recent + future feeds. */}
+          <Box flexDirection="column" width={rightWidth} flexShrink={1}>
+            <FeedColumn
+              feeds={[createUpdatesFeed(updates), createRecentFeed(recent)]}
+              maxWidth={rightWidth}
+            />
+          </Box>
         </Box>
-      </Box>
-    </BorderedBox>
+      </BorderedBox>
+      <EmergencyTip />
+    </Box>
   )
 }

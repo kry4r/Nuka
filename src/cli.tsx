@@ -110,19 +110,20 @@ import { runRoundtable } from './core/swarm/roundtable'
 
 
 
-// Non-TTY safety shim: in a pipe / redirect (`node dist/cli.js | head`),
-// Ink's `<App>` calls `stdin.setRawMode(true)` and `stdin.ref()` on the raw
-// non-TTY stdin (which lacks both methods) once any consumer hook (e.g.
-// PromptInput's `useInput`) mounts.  The throw is caught by Ink's own
-// ErrorBoundary, which renders ErrorOverview — and ErrorOverview itself keys
-// stack-frame strings as React keys, which collide on repeated frames and
-// surface as a "two children with the same key" warning at startup.
-// Pretending stdin is a TTY and stubbing both methods lets the welcome
-// render cleanly under a redirect; production users with a real TTY are
-// unaffected either way.
+// Non-TTY safety shim: stub setRawMode/ref/unref so Ink's reconciler can
+// at least mount under a pipe.  isTTY stays truthful so headless callers
+// branching on `process.stdin.isTTY` aren't misled.
+//
+// Caveat (Phase C followup): Ink 6.8.0's `App.handleSetRawMode`
+// (node_modules/ink/build/components/App.js) gates on
+// `isRawModeSupported = stdin.isTTY` and throws when false — regardless of
+// whether the methods exist — once `useInput` mounts.  Under a pipe the
+// resulting ErrorOverview surfaces a React duplicate-key warning.  The
+// architecturally clean fix (Phase D) is to pass an `{ stdin }` proxy with
+// `isTTY=true` to `render()` so only Ink sees a fake-TTY, leaving the real
+// `process.stdin.isTTY` untouched.
 if (!process.stdin.isTTY) {
   const s = process.stdin as unknown as Record<string, unknown>
-  s['isTTY'] = true
   if (typeof s['setRawMode'] !== 'function') s['setRawMode'] = () => process.stdin
   if (typeof s['ref'] !== 'function') s['ref'] = () => process.stdin
   if (typeof s['unref'] !== 'function') s['unref'] = () => process.stdin

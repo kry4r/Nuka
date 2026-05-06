@@ -7,7 +7,7 @@
 import React from 'react'
 import { Box } from 'ink'
 import { defaultPalette as P } from '../theme'
-import { Divider } from './Divider'
+import { Divider } from '../design-system/Divider'
 import type { FeedConfig } from './Feed'
 import { calculateFeedWidth, Feed } from './Feed'
 

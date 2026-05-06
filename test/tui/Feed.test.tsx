@@ -9,7 +9,7 @@ import stripAnsi from 'strip-ansi'
 import { Box, Text } from 'ink'
 import { Feed, calculateFeedWidth, type FeedConfig } from '../../src/tui/Welcome/Feed'
 import { FeedColumn } from '../../src/tui/Welcome/FeedColumn'
-import { Divider } from '../../src/tui/Welcome/Divider'
+import { Divider } from '../../src/tui/design-system/Divider'
 import {
   createUpdatesFeed,
   createRecentFeed,
