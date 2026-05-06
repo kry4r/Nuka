@@ -19,7 +19,7 @@ import stringWidth from 'string-width'
 import { useTerminalSize } from '../hooks/useTerminalSize'
 import { defaultPalette as P } from '../theme'
 import { Clawd, CLAWD_HEIGHT, CLAWD_WIDTH } from './Clawd'
-import { BorderedBox } from './BorderedBox'
+import { BorderedBox } from '../design-system/BorderedBox'
 import {
   calculateLayoutDimensions,
   calculateOptimalLeftWidth,
