@@ -107,27 +107,8 @@ import { InProcessBackend } from './core/messaging/inProcessBackend'
 import { ROLE_AGENTS } from './core/agents/builtin/roles'
 import { runPipeline } from './core/swarm/pipeline'
 import { runRoundtable } from './core/swarm/roundtable'
-
-
-
-// Non-TTY safety shim: stub setRawMode/ref/unref so Ink's reconciler can
-// at least mount under a pipe.  isTTY stays truthful so headless callers
-// branching on `process.stdin.isTTY` aren't misled.
-//
-// Caveat (Phase C followup): Ink 6.8.0's `App.handleSetRawMode`
-// (node_modules/ink/build/components/App.js) gates on
-// `isRawModeSupported = stdin.isTTY` and throws when false — regardless of
-// whether the methods exist — once `useInput` mounts.  Under a pipe the
-// resulting ErrorOverview surfaces a React duplicate-key warning.  The
-// architecturally clean fix (Phase D) is to pass an `{ stdin }` proxy with
-// `isTTY=true` to `render()` so only Ink sees a fake-TTY, leaving the real
-// `process.stdin.isTTY` untouched.
-if (!process.stdin.isTTY) {
-  const s = process.stdin as unknown as Record<string, unknown>
-  if (typeof s['setRawMode'] !== 'function') s['setRawMode'] = () => process.stdin
-  if (typeof s['ref'] !== 'function') s['ref'] = () => process.stdin
-  if (typeof s['unref'] !== 'function') s['unref'] = () => process.stdin
-}
+import { makeInkStdin } from './tui/inkStdin'
+import { getEmergencyTipFromConfig } from './core/notices/emergencyTip'
 
 const argv = process.argv.slice(2)
 
@@ -221,6 +202,7 @@ if (testPlanIdx !== -1) {
             process.exit(2)
           }}
         />,
+        { stdin: makeInkStdin() },
       )
       await waitUntilExit()
     } catch (err) {
@@ -770,7 +752,9 @@ async function runInteractive(): Promise<void> {
       updates={welcomeUpdates}
       recent={welcomeRecent}
       harness={harness}
+      emergencyTip={getEmergencyTipFromConfig(config)}
     />,
+    { stdin: makeInkStdin() },
   )
 
   // After render, process plugins that need user config input.

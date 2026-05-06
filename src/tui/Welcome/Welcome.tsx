@@ -30,6 +30,7 @@ import {
 import { FeedColumn } from './FeedColumn'
 import { createRecentFeed, createUpdatesFeed } from './feedConfigs'
 import { EmergencyTip } from './notices/EmergencyTip'
+import type { EmergencyTip as EmergencyTipData } from '../../core/notices/emergencyTip'
 import type { UpdateEntry } from '../../core/updates/load'
 import type { RecentEntry } from '../../core/session/recent'
 
@@ -49,10 +50,12 @@ export type WelcomeProps = {
   rowsOverride?: number
   /** Override username (otherwise omitted; Phase B may resolve this from settings). */
   username?: string
+  /** Phase D2 — pre-resolved EmergencyTip data from config.notices.emergency. */
+  emergencyTip?: EmergencyTipData | null
 }
 
 export function Welcome(props: WelcomeProps): React.JSX.Element {
-  const { cwd, gitBranch, model, version, updates = [], recent = [], username } = props
+  const { cwd, gitBranch, model, version, updates = [], recent = [], username, emergencyTip = null } = props
   const { columns: termCols } = useTerminalSize()
   const columns = props.columnsOverride ?? termCols
 
@@ -97,7 +100,7 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
             <Box marginTop={1}>{tipNode}</Box>
           </Box>
         </BorderedBox>
-        <EmergencyTip />
+        <EmergencyTip tip={emergencyTip} />
       </Box>
     )
   }
@@ -173,7 +176,7 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
           </Box>
         </Box>
       </BorderedBox>
-      <EmergencyTip />
+      <EmergencyTip tip={emergencyTip} />
     </Box>
   )
 }

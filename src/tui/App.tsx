@@ -245,6 +245,8 @@ export type AppProps = {
   recent?: import('../core/session/recent').RecentEntry[]
   /** Phase 14d — harness state machine (so /harness submenu can read/mutate it). */
   harness?: import('../core/harness/state').HarnessStateMachine
+  /** Phase D2 — pre-resolved emergency tip from config.notices.emergency. */
+  emergencyTip?: import('../core/notices/emergencyTip').EmergencyTip | null
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -644,6 +646,7 @@ export function App(props: AppProps): React.JSX.Element {
   // because it's an object whose identity may change per render.
   const branchName = props.gitBranch?.branch
   const branchDirty = props.gitBranch?.dirty
+  const emergencyTip = props.emergencyTip ?? null
   const prologueNode = useMemo(
     () => (
       <Welcome
@@ -654,10 +657,11 @@ export function App(props: AppProps): React.JSX.Element {
         tip={tip}
         updates={props.updates}
         recent={props.recent}
+        emergencyTip={emergencyTip}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.cwd, branchName, branchDirty, session.model, props.version, tip, props.updates, props.recent],
+    [props.cwd, branchName, branchDirty, session.model, props.version, tip, props.updates, props.recent, emergencyTip],
   )
 
   // Bug fix #9: compute a row budget so Messages can clamp its own height

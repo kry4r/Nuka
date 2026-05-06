@@ -214,6 +214,8 @@ export async function loadConfig(opts: {
     compact: projectCfg.compact ?? globalCfg.compact,
     statusBar: projectCfg.statusBar ?? globalCfg.statusBar,
     statusLine: projectCfg.statusLine ?? globalCfg.statusLine,
+    // Phase D2 — emergency tip + future notice slots.
+    notices: projectCfg.notices ?? globalCfg.notices,
   }
 
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID

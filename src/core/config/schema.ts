@@ -165,6 +165,24 @@ export type RecapConfig = z.infer<typeof RecapConfigSchema>
 export const EffortSchema = z.enum(['low', 'medium', 'high']).optional()
 export type Effort = z.infer<typeof EffortSchema>
 
+/**
+ * Phase D2 — notice slots driven by config.  `emergency.tip` populates the
+ * one-line message under the welcome box; `color` selects palette (defaults
+ * to dim).  Unset → no tip.  A future remote-fetch source can layer onto
+ * this without touching the EmergencyTip component.
+ */
+export const NoticesConfigSchema = z
+  .object({
+    emergency: z
+      .object({
+        tip: z.string().min(1),
+        color: z.enum(['dim', 'warning', 'error']).optional(),
+      })
+      .optional(),
+  })
+  .optional()
+export type NoticesConfig = z.infer<typeof NoticesConfigSchema>
+
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema.default({ providerId: '' }),
@@ -180,6 +198,8 @@ export const ConfigSchema = z.object({
   harness: HarnessConfigSchema,
   /** Phase 14c — /recap and autoDream settings. */
   recap: RecapConfigSchema,
+  /** Phase D2 — notice slots (emergency tip etc.) driven by config. */
+  notices: NoticesConfigSchema,
   /** Reasoning effort for thinking-capable models (low/medium/high). */
   effort: EffortSchema,
   /**
