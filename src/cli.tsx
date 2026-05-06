@@ -108,6 +108,26 @@ import { ROLE_AGENTS } from './core/agents/builtin/roles'
 import { runPipeline } from './core/swarm/pipeline'
 import { runRoundtable } from './core/swarm/roundtable'
 
+
+
+// Non-TTY safety shim: in a pipe / redirect (`node dist/cli.js | head`),
+// Ink's `<App>` calls `stdin.setRawMode(true)` and `stdin.ref()` on the raw
+// non-TTY stdin (which lacks both methods) once any consumer hook (e.g.
+// PromptInput's `useInput`) mounts.  The throw is caught by Ink's own
+// ErrorBoundary, which renders ErrorOverview — and ErrorOverview itself keys
+// stack-frame strings as React keys, which collide on repeated frames and
+// surface as a "two children with the same key" warning at startup.
+// Pretending stdin is a TTY and stubbing both methods lets the welcome
+// render cleanly under a redirect; production users with a real TTY are
+// unaffected either way.
+if (!process.stdin.isTTY) {
+  const s = process.stdin as unknown as Record<string, unknown>
+  s['isTTY'] = true
+  if (typeof s['setRawMode'] !== 'function') s['setRawMode'] = () => process.stdin
+  if (typeof s['ref'] !== 'function') s['ref'] = () => process.stdin
+  if (typeof s['unref'] !== 'function') s['unref'] = () => process.stdin
+}
+
 const argv = process.argv.slice(2)
 
 // ---------------------------------------------------------------------------

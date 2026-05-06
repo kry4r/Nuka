@@ -27,8 +27,8 @@ import {
   getLayoutMode,
   truncatePath,
 } from './layout'
-import { UpdatesPanel } from './UpdatesPanel'
-import { RecentPanel } from './RecentPanel'
+import { FeedColumn } from './FeedColumn'
+import { createRecentFeed, createUpdatesFeed } from './feedConfigs'
 import type { UpdateEntry } from '../../core/updates/load'
 import type { RecentEntry } from '../../core/session/recent'
 
@@ -159,10 +159,12 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
           borderLeft={false}
           marginX={1}
         />
-        {/* Right column: legacy Updates/Recent (Phase B → FeedColumn). */}
+        {/* Right column — FeedColumn (Phase B): Updates + Recent + future feeds. */}
         <Box flexDirection="column" width={rightWidth} flexShrink={1}>
-          <UpdatesPanel updates={updates} />
-          <RecentPanel recent={recent} />
+          <FeedColumn
+            feeds={[createUpdatesFeed(updates), createRecentFeed(recent)]}
+            maxWidth={rightWidth}
+          />
         </Box>
       </Box>
     </BorderedBox>
