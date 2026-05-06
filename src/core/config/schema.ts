@@ -24,7 +24,7 @@ export const ProviderConfigSchema = z.object({
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 
 export const ActiveSelectionSchema = z.object({
-  providerId: z.string().min(1),
+  providerId: z.string(),
 })
 
 export const ThemeSchema = z
@@ -167,7 +167,7 @@ export type Effort = z.infer<typeof EffortSchema>
 
 export const ConfigSchema = z.object({
   providers: z.array(ProviderConfigSchema).default([]),
-  active: ActiveSelectionSchema,
+  active: ActiveSelectionSchema.default({ providerId: '' }),
   theme: ThemeSchema,
   welcome: WelcomeSchema,
   compact: CompactSchema,
