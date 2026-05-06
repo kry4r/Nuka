@@ -260,8 +260,8 @@ export function Field(props: FieldProps): React.JSX.Element {
           {props.focused ? '▸ ' : '  '}{props.label}
         </Text>
       </Box>
-      <Box flexGrow={1}>
-        <Text color={editing ? colors.primary : valueColor}>{displayValue}</Text>
+      <Box flexGrow={1} flexShrink={1}>
+        <Text color={editing ? colors.primary : valueColor} wrap="truncate-end">{displayValue}</Text>
       </Box>
       {editing && (
         <Box>

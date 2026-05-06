@@ -2,6 +2,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
+import stripAnsi from 'strip-ansi'
 import { AgentCall } from '../../src/tui/Messages/AgentCall'
 import { MessageRow } from '../../src/tui/Messages/MessageRow'
 import type { AssistantMessage, Message, ToolMessage } from '../../src/core/message/types'
@@ -54,6 +55,42 @@ describe('AgentCall', () => {
     // collapsed one (ink may wrap long lines across rows).
     const countA = (s: string) => (s.match(/a/g) ?? []).length
     expect(countA(fExp)).toBeGreaterThan(countA(fCollapsed))
+  })
+
+  it('contains expanded result lines within column-aware box width (no border bleed)', () => {
+    // Simulate a narrow terminal so the column-aware width is exercised.
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const big = 'foo bar baz '.repeat(500) // ~6KB with whitespace
+      const { lastFrame } = render(
+        <AgentCall agent="core:r" task="t" status="ok" result={big} expanded={true} />,
+      )
+      const f = stripAnsi(lastFrame() ?? '')
+      // No rendered line should exceed the host width budget. Box is
+      // marginLeft=2, width=columns-4=56, so total visible columns = 58.
+      // Allow +2 slack for trailing spaces in ink layout.
+      const maxLine = Math.max(...f.split('\n').map(s => s.length))
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
+  })
+
+  it('hard-cuts unbreakable URL-style result lines within the box (defensive slice)', () => {
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const url = 'https://example.com/' + 'x'.repeat(300) // no whitespace
+      const { lastFrame } = render(
+        <AgentCall agent="core:r" task="t" status="ok" result={url} expanded={true} />,
+      )
+      const f = stripAnsi(lastFrame() ?? '')
+      const maxLine = Math.max(...f.split('\n').map(s => s.length))
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
   })
 })
 

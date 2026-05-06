@@ -2,6 +2,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 /**
  * Render a `dispatch_agent` tool call as a distinctive indented block
@@ -22,6 +23,7 @@ export function AgentCall(props: {
   /** When true, show full task + result; when false, show collapsed summary. */
   expanded?: boolean
 }): React.JSX.Element {
+  const { columns } = useTerminalSize()
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
   const iconColor = props.status === 'error' ? P.error : P.success
   const expanded = props.expanded ?? false
@@ -30,6 +32,19 @@ export function AgentCall(props: {
   const shortResult = props.result && props.result.length > 120
     ? props.result.slice(0, 120) + '…'
     : props.result
+
+  // marginLeft=2 + 2 border chars = 4 chrome columns reserved.
+  const boxWidth = Math.max(20, columns - 4)
+  const innerCap = Math.max(1, boxWidth - 2)
+  const rawResult = expanded ? (props.result ?? '') : (shortResult ?? '')
+  // Defensive hard-cut only for unbreakable lines (e.g. URLs without
+  // spaces) so ink's word-wrap can't push glyphs through the right border.
+  // Lines that already contain whitespace are left alone — wrap="wrap"
+  // handles them safely within the bounded box width.
+  const safeResult = rawResult
+    .split('\n')
+    .map(line => (line.length > innerCap && !/\s/.test(line)) ? line.slice(0, innerCap) : line)
+    .join('\n')
 
   return (
     <Box flexDirection="column" marginLeft={2}>
@@ -40,8 +55,8 @@ export function AgentCall(props: {
         <Text color={iconColor}> {icon}</Text>
       </Box>
       {props.result !== undefined && props.result.length > 0 && (
-        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.fgMuted}>
-          <Text color={P.fgMuted}>{expanded ? props.result : (shortResult ?? '')}</Text>
+        <Box flexDirection="column" marginLeft={2} width={boxWidth} borderStyle="round" borderColor={P.fgMuted}>
+          <Text color={P.fgMuted} wrap="wrap">{safeResult}</Text>
           <Text color={P.fgMuted} dimColor>(from `{props.agent}`)</Text>
         </Box>
       )}

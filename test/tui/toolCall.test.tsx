@@ -2,6 +2,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
+import stripAnsi from 'strip-ansi'
 import { ToolCall } from '../../src/tui/Messages/ToolCall'
 
 describe('ToolCall', () => {
@@ -113,5 +114,23 @@ describe('ToolCall', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).not.toContain('(network)')
+  })
+
+  it('contains long progress lines within column-aware box width (no border bleed)', () => {
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const progressLines = Array.from({ length: 12 }, () => 'x'.repeat(180))
+      const { lastFrame } = render(
+        <ToolCall name="Bash" argSummary="cmd" status="running" progressLines={progressLines} />,
+      )
+      const f = stripAnsi(lastFrame() ?? '')
+      const maxLine = Math.max(...f.split('\n').map(s => s.length))
+      // boxWidth = columns-4 = 56, total visible = 56 (no marginLeft on outer Box).
+      // Allow slack for trailing whitespace.
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
   })
 })

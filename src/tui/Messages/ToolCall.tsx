@@ -2,6 +2,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 export function ToolCall(props: {
   name: string
@@ -12,6 +13,7 @@ export function ToolCall(props: {
   source?: 'builtin' | 'skill' | 'plugin'
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
 }): React.JSX.Element {
+  const { columns } = useTerminalSize()
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
   const iconColor = props.status === 'error' ? P.error : P.success
 
@@ -21,6 +23,10 @@ export function ToolCall(props: {
     : lines.slice(-5)
 
   const displayName = props.name
+
+  // marginLeft=2 + 2 border chars = 4 chrome columns reserved.
+  const boxWidth = Math.max(20, columns - 4)
+  const innerCap = Math.max(1, boxWidth - 2)
 
   return (
     <Box flexDirection="column">
@@ -40,9 +46,9 @@ export function ToolCall(props: {
         <Text color={iconColor}> {icon}</Text>
       </Box>
       {displayLines.length > 0 && (
-        <Box flexDirection="column" marginLeft={2} borderStyle="round" borderColor={P.fgMuted}>
+        <Box flexDirection="column" marginLeft={2} width={boxWidth} borderStyle="round" borderColor={P.fgMuted}>
           {displayLines.map((line, i) => (
-            <Text key={i} color={P.fgMuted}>{line.slice(0, 120)}</Text>
+            <Text key={i} color={P.fgMuted}>{line.slice(0, innerCap)}</Text>
           ))}
         </Box>
       )}
