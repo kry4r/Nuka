@@ -19,7 +19,6 @@ import { appendMessage } from '../core/session/session'
 import { SessionPicker } from './dialogs/SessionPicker'
 import type { SessionMeta } from '../core/session/store'
 import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
-import { pickTip } from './Welcome/tips'
 import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
@@ -261,7 +260,6 @@ export function App(props: AppProps): React.JSX.Element {
   const handleSlashActiveChange = useCallback((active: boolean) => {
     dispatchUI({ type: 'slash-set', active })
   }, [])
-  const [tip] = useState(() => pickTip(props.config.welcome?.tips))
   // Timestamp of the most-recent Esc that landed in normal+idle state. A
   // second Esc within 2s opens the rewind submenu (#8). Replaces the old
   // double-Esc-quits gesture; explicit exit still works via Q / :q / /exit.
@@ -654,14 +652,13 @@ export function App(props: AppProps): React.JSX.Element {
         gitBranch={props.gitBranch}
         model={session.model}
         version={props.version}
-        tip={tip}
         updates={props.updates}
         recent={props.recent}
         emergencyTip={emergencyTip}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.cwd, branchName, branchDirty, session.model, props.version, tip, props.updates, props.recent, emergencyTip],
+    [props.cwd, branchName, branchDirty, session.model, props.version, props.updates, props.recent, emergencyTip],
   )
 
   // Bug fix #9: compute a row budget so Messages can clamp its own height

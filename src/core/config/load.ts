@@ -204,6 +204,11 @@ export async function loadConfig(opts: {
   const globalCfg = globalRaw ? ConfigSchema.parse(walkEnv(globalRaw)) : EMPTY
   const projectCfg = projectRaw ? ConfigSchema.parse(walkEnv(projectRaw)) : EMPTY
 
+  // NOTE: this enumerates every top-level field of ConfigSchema. When adding
+  // a new field to ConfigSchema, also add it here, otherwise legacy
+  // `loadConfig` will silently drop it from project-scope config.yaml.
+  // The shape-walk regression test in test/core/config/load.test.ts asserts
+  // every ConfigSchema key is reachable through this output.
   const merged: Config = {
     providers: mergeProviders(globalCfg.providers, projectCfg.providers),
     active: projectCfg.active.providerId
@@ -212,10 +217,18 @@ export async function loadConfig(opts: {
     theme: projectCfg.theme ?? globalCfg.theme,
     welcome: projectCfg.welcome ?? globalCfg.welcome,
     compact: projectCfg.compact ?? globalCfg.compact,
-    statusBar: projectCfg.statusBar ?? globalCfg.statusBar,
+    search: projectCfg.search ?? globalCfg.search,
+    plugins: projectCfg.plugins ?? globalCfg.plugins,
+    vim: projectCfg.vim ?? globalCfg.vim,
+    rewind: projectCfg.rewind ?? globalCfg.rewind,
     statusLine: projectCfg.statusLine ?? globalCfg.statusLine,
+    statusBar: projectCfg.statusBar ?? globalCfg.statusBar,
+    harness: projectCfg.harness ?? globalCfg.harness,
+    recap: projectCfg.recap ?? globalCfg.recap,
     // Phase D2 — emergency tip + future notice slots.
     notices: projectCfg.notices ?? globalCfg.notices,
+    effort: projectCfg.effort ?? globalCfg.effort,
+    locked: projectCfg.locked ?? globalCfg.locked,
   }
 
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID

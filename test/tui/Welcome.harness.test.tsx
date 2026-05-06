@@ -23,7 +23,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={null}
         model="claude"
         version="0.1.0"
-        tip=""
         updates={[]}
         recent={[]}
         columnsOverride={40}
@@ -46,7 +45,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={{ branch: 'feature/x', dirty: false }}
         model="claude-sonnet-4-6"
         version="0.2.0"
-        tip=""
         updates={[
           { version: '1.1.0', title: 'New commands', bullets: ['Added /stats'] },
         ]}
@@ -75,7 +73,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={{ branch: 'main', dirty: true }}
         model="claude"
         version="0.1.0"
-        tip=""
         updates={[]}
         recent={[]}
         columnsOverride={100}
@@ -95,7 +92,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={null}
         model="claude"
         version="0.1.0"
-        tip=""
         updates={[{ title: 'Release 1.0' }]}
         recent={[{ id: 's1', preview: 'Some task', updatedAt: Date.now() }]}
         columnsOverride={70}
@@ -115,7 +111,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={null}
         model="claude"
         version="0.1.0"
-        tip=""
         updates={[]}
         recent={[]}
         columnsOverride={120}
@@ -141,7 +136,6 @@ describe('Welcome harness — LogoV2 layout', () => {
         gitBranch={null}
         model="claude"
         version="0.1.0"
-        tip=""
         updates={[]}
         recent={[]}
         columnsOverride={120}
@@ -173,7 +167,6 @@ describe('Welcome harness — via mountApp', () => {
         gitBranch: { branch: 'test-branch', dirty: false },
         model: 'test-model',
         version: '0.0.1',
-        tip: '',
         updates: [{ title: 'Patch 1', bullets: ['Fix crash'] }],
         recent: [{ id: 'r1', preview: 'Recent task preview', updatedAt: Date.now() }],
         columnsOverride: 120,

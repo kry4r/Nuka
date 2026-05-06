@@ -41,7 +41,6 @@ export type WelcomeProps = {
   gitBranch: { branch: string; dirty: boolean } | null
   model: string
   version: string
-  tip: string
   updates?: UpdateEntry[]
   recent?: RecentEntry[]
   /** Override terminal columns (for tests). */
