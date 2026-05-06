@@ -59,7 +59,7 @@ export function Welcome(props: WelcomeProps): React.JSX.Element {
   const branchSegment = gitBranch
     ? `${gitBranch.branch}${gitBranch.dirty ? ' *' : ''}`
     : '(not a git repo)'
-  const modelLine = model
+  const modelLine = model.trim() ? model : '<no provider>'
   const tipNode = (
     <Text color={P.accentInfo}>
       Type <Text color={P.primary}>/</Text> for commands
