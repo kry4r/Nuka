@@ -24,6 +24,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useColors } from '../../../core/theme/context'
+import { useTerminalSize } from '../../hooks/useTerminalSize'
 
 export type FieldType = 'text' | 'password' | 'select' | 'toggle' | 'list'
 
@@ -69,6 +70,7 @@ function maskValue(v: string): string {
 
 export function Field(props: FieldProps): React.JSX.Element {
   const colors = useColors()
+  const { columns } = useTerminalSize()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<string>(typeof props.value === 'string' ? props.value : '')
   // Internal cursor for `list` field type, indexes into props.choices.
@@ -196,15 +198,19 @@ export function Field(props: FieldProps): React.JSX.Element {
   if (props.type === 'list') {
     const choices = props.choices ?? []
     const value = Array.isArray(props.value) ? props.value : []
+    // Outer chrome: border (2) + paddingX (2) = 4 cols.
+    const boxWidth = Math.max(20, columns - 4)
+    // Per row chrome inside box: subtract border (2) + paddingX (2) from outer.
+    const rowWidth = Math.max(1, boxWidth - 4)
     return (
-      <Box flexDirection="column" borderStyle="single" borderColor={borderColor} paddingX={1}>
-        <Box>
-          <Text color={labelColor} bold={props.focused}>
+      <Box flexDirection="column" borderStyle="single" borderColor={borderColor} paddingX={1} width={boxWidth}>
+        <Box width={rowWidth}>
+          <Text color={labelColor} bold={props.focused} wrap="truncate-end">
             {props.focused ? '▸ ' : '  '}{props.label}
           </Text>
           {editing && (
-            <Box marginLeft={2}>
-              <Text color={colors.fgMuted}>edit · space toggle · ⏎ done</Text>
+            <Box marginLeft={2} flexShrink={1}>
+              <Text color={colors.fgMuted} wrap="truncate-end">edit · space toggle · ⏎ done</Text>
             </Box>
           )}
         </Box>
@@ -218,12 +224,17 @@ export function Field(props: FieldProps): React.JSX.Element {
           const sigil = cursored ? '▸ ' : '  '
           const box = checked ? '[x]' : '[ ]'
           const lineColor = cursored ? colors.primary : valueColor
+          // Reserve enough space on the choice cell for sigil(2) + box(3) +
+          // space(1) + the choice text itself (truncate if absurdly long).
+          const choiceCellMax = Math.max(8, Math.floor(rowWidth / 2))
           return (
-            <Box key={choice + i}>
-              <Text color={lineColor}>{sigil}{box} {choice}</Text>
+            <Box key={choice + i} width={rowWidth}>
+              <Box flexShrink={0}>
+                <Text color={lineColor} wrap="truncate-end">{sigil}{box} {choice.length > choiceCellMax ? choice.slice(0, choiceCellMax) : choice}</Text>
+              </Box>
               {desc && (
-                <Box marginLeft={1}>
-                  <Text color={colors.fgMuted}>{desc}</Text>
+                <Box marginLeft={1} flexShrink={1}>
+                  <Text color={colors.fgMuted} wrap="truncate-end">{desc}</Text>
                 </Box>
               )}
             </Box>

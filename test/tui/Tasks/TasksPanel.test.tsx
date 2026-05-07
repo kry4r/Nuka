@@ -7,6 +7,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
+import stripAnsi from 'strip-ansi'
 import { TasksPanel } from '../../../src/tui/Tasks/TasksPanel'
 import type { TodoState } from '../../../src/core/tools/todoWrite'
 import type { Task } from '../../../src/core/tasks/types'
@@ -127,5 +128,55 @@ describe('TasksPanel', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('Tasks')
     expect(f).toContain('Ctrl+T')
+  })
+
+  it('contains pathological plan / subagent / background labels within column-aware width (no border bleed)', () => {
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const huge = 'a'.repeat(5000)            // 5KB no-space title
+      const url = 'https://example.com/' + 'x'.repeat(300)
+      const store: TodoState = {
+        items: [
+          { title: huge, status: 'in_progress' },
+          { title: url, status: 'pending' },
+        ],
+      }
+      const messages = [
+        {
+          role: 'assistant' as const,
+          content: [{
+            type: 'tool_use' as const,
+            id: 'da-1',
+            name: DISPATCH_AGENT_TOOL_NAME,
+            input: { agent: 'team:role', task: huge },
+          }],
+          id: 'msg-1',
+          ts: Date.now(),
+        },
+      ]
+      const task: Task = {
+        id: 't1',
+        kind: 'local_bash',
+        description: url,
+        state: 'running',
+        outputFile: '/tmp/t1.log',
+        spec: { kind: 'local_bash', description: url, command: 'sleep 5' },
+      }
+      const { lastFrame } = render(
+        React.createElement(TasksPanel, {
+          todoStore: store,
+          messages,
+          tasks: [task],
+          tick: 0,
+          collapsed: false,
+        })
+      )
+      const f = stripAnsi(lastFrame() ?? '')
+      const maxLine = Math.max(...f.split('\n').map(s => s.length))
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
   })
 })

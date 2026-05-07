@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
 import type { LoadedPlugin, PluginUserConfigField } from '../../core/plugin/manifest'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 export function PluginConfigDialog(props: {
   plugin: LoadedPlugin
@@ -82,11 +83,23 @@ export function PluginConfigDialog(props: {
 
   const pluginLabel = `${plugin.manifest.name}${plugin.manifest.version ? `@${plugin.manifest.version}` : ''}`
 
+  const { columns } = useTerminalSize()
+  // Outer chrome: border (2) + paddingX (2) = 4 cols.
+  const boxWidth = Math.max(20, columns - 4)
+  // Inside: subtract chrome (4) from outer width to get the content cap.
+  const innerCap = Math.max(1, boxWidth - 4)
+  // Per-row value cell: subtract leading "  " (2) used as a visual indent.
+  const valueCap = Math.max(1, innerCap - 2)
+
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
-      <Text color={P.primary} bold>Plugin configuration: {pluginLabel}</Text>
+    <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1} width={boxWidth}>
+      <Box width={innerCap}>
+        <Text color={P.primary} bold wrap="truncate-end">Plugin configuration: {pluginLabel}</Text>
+      </Box>
       {plugin.manifest.description && (
-        <Text color={P.fgMuted}>{plugin.manifest.description}</Text>
+        <Box width={innerCap}>
+          <Text color={P.fgMuted} wrap="truncate-end">{plugin.manifest.description}</Text>
+        </Box>
       )}
       <Box height={1} />
       {fields.length === 0 ? (
@@ -97,24 +110,30 @@ export function PluginConfigDialog(props: {
           const label = f.name + (f.required ? ' *' : '')
           return (
             <Box key={f.name} flexDirection="column">
-              <Text color={active ? P.primary : P.fg}>
-                {active ? '›' : ' '} {label}
-                {f.description ? ` — ${f.description}` : ''}
-                <Text color={P.fgMuted}> ({f.type})</Text>
-              </Text>
-              <Text color={active ? P.primary : P.fgMuted}>
-                {'  '}{values[f.name] ?? ''}{active ? '▌' : ''}
-              </Text>
+              <Box width={innerCap}>
+                <Text color={active ? P.primary : P.fg} wrap="truncate-end">
+                  {active ? '›' : ' '} {label}
+                  {f.description ? ` — ${f.description}` : ''}
+                  <Text color={P.fgMuted}> ({f.type})</Text>
+                </Text>
+              </Box>
+              <Box width={innerCap}>
+                <Text color={active ? P.primary : P.fgMuted} wrap="truncate-end">
+                  {'  '}{(values[f.name] ?? '').slice(0, valueCap)}{active ? '▌' : ''}
+                </Text>
+              </Box>
             </Box>
           )
         })
       )}
       <Box height={1} />
-      <Text color={P.fgMuted}>
-        {fields.length === 0
-          ? '⏎ continue · Esc cancel'
-          : 'tab/↑↓ field · ⏎ save · esc skip plugin this session'}
-      </Text>
+      <Box width={innerCap}>
+        <Text color={P.fgMuted} wrap="truncate-end">
+          {fields.length === 0
+            ? '⏎ continue · Esc cancel'
+            : 'tab/↑↓ field · ⏎ save · esc skip plugin this session'}
+        </Text>
+      </Box>
     </Box>
   )
 }

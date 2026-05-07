@@ -26,6 +26,7 @@ import { BackgroundList } from './BackgroundList'
 import { findInFlightSubagents } from './SubagentList'
 import { defaultPalette as P } from '../theme'
 import { useTheme } from '../../core/theme/context'
+import { useTerminalSize } from '../hooks/useTerminalSize'
 
 // 12 visible item rows total. Distribute by section count.
 const TOTAL_CAP = 12
@@ -114,9 +115,18 @@ export function TasksPanel({
   cursor,
 }: TasksPanelProps): React.JSX.Element | null {
   const theme = useTheme()
+  const { columns } = useTerminalSize()
   const planItems = todoStore.items
   const subagents = findInFlightSubagents(messages)
   const bgTasks = tasks
+
+  // Outer box width: pin to terminal columns minus a small chrome budget
+  // (border+padding+1-col safety) so flexShrink children have a bound.
+  const boxWidth = Math.max(20, columns - 4)
+  // Inside the bordered Box: border (2) + paddingX (2) = 4 cols of chrome.
+  // Each row also reserves an icon (1) + gap (1) before the text Box.
+  // Per-row text width budget = boxWidth - 4 (chrome) - 2 (icon+gap).
+  const rowTextCap = Math.max(1, boxWidth - 6)
 
   const hasplan = planItems.length > 0
   const hasSubs = subagents.length > 0
@@ -171,7 +181,9 @@ export function TasksPanel({
     return (
       <Box key={idx} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
         <Text color={PLAN_STATUS_COLOR[item.status] ?? fgMutedColor}>{STATUS_ICON[item.status] ?? '☐'}</Text>
-        <Text color={item.status === 'completed' ? fgMutedColor : fgColor} inverse={isCursor}>{item.title}</Text>
+        <Box flexShrink={1} width={rowTextCap}>
+          <Text color={item.status === 'completed' ? fgMutedColor : fgColor} inverse={isCursor} wrap="truncate-end">{item.title}</Text>
+        </Box>
       </Box>
     )
   }
@@ -182,7 +194,9 @@ export function TasksPanel({
     return (
       <Box key={sub.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
         <Text color={subAccent}>▶</Text>
-        <Text color={fgColor} inverse={isCursor}>{sub.label}</Text>
+        <Box flexShrink={1} width={rowTextCap}>
+          <Text color={fgColor} inverse={isCursor} wrap="truncate-end">{sub.label}</Text>
+        </Box>
       </Box>
     )
   }
@@ -195,7 +209,9 @@ export function TasksPanel({
     return (
       <Box key={task.id} flexDirection="row" gap={1} backgroundColor={isCursor ? theme.colors.primaryDeep : undefined}>
         <Text color={BG_STATE_COLOR[task.state] ?? fgMutedColor}>{STATE_ICON[task.state] ?? '☐'}</Text>
-        <Text color={dimmed ? fgMutedColor : fgColor} inverse={isCursor}>{task.description}</Text>
+        <Box flexShrink={1} width={rowTextCap}>
+          <Text color={dimmed ? fgMutedColor : fgColor} inverse={isCursor} wrap="truncate-end">{task.description}</Text>
+        </Box>
       </Box>
     )
   }
@@ -206,6 +222,7 @@ export function TasksPanel({
       borderStyle="round"
       borderColor={borderColor}
       paddingX={1}
+      width={boxWidth}
     >
       <Text color={titleColor} bold>Tasks  <Text color={fgMutedColor} dimColor>{focused ? '(↑↓/jk: move  ⏎: detail  Tab: exit)' : '(Ctrl+T to collapse)'}</Text></Text>
       {hasplan && (

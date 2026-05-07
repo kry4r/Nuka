@@ -43,4 +43,30 @@ describe('Field — text overflow discipline', () => {
     expect(lines.length).toBe(3)
     expect(f).toContain('Nuka')
   })
+
+  it('keeps list-type choice + description rows within column-aware width', () => {
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const huge = 'a'.repeat(5000)
+      const url = 'https://example.com/' + 'x'.repeat(300)
+      const choices = ['choice-A', 'choice-B', huge.slice(0, 200)]
+      const descriptions = [huge, url, undefined]
+      const { lastFrame } = render(
+        <Field
+          type="list"
+          label="Many things"
+          value={['choice-A']}
+          choices={choices}
+          descriptions={descriptions}
+          focused={false}
+        />,
+      )
+      const f = stripAnsi(lastFrame() ?? '')
+      const maxLine = Math.max(...f.split('\n').map(s => s.length))
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
+  })
 })

@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 import * as React from 'react'
+import stripAnsi from 'strip-ansi'
 import { SubagentDetail } from '../../../src/tui/Tasks/SubagentDetail'
 
 // Strip ANSI escape codes for reliable string matching
@@ -35,5 +36,32 @@ describe('SubagentDetail', () => {
     />).lastFrame() ?? '')
     expect(out.toLowerCase()).toContain('approve')
     expect(out.toLowerCase()).toContain('do a then b')
+  })
+
+  it('contains long conversation/activity/plan content within column-aware width', () => {
+    const orig = process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', { value: 60, configurable: true })
+    try {
+      const huge = 'x'.repeat(5000)
+      const url = 'https://example.com/' + 'a'.repeat(300)
+      const out = stripAnsi(render(<SubagentDetail
+        taskId="t1" agentName="alice-with-a-very-long-name" teamName={huge.slice(0, 200)} status="running"
+        conversation={[
+          { role: 'user', content: huge },
+          { role: 'assistant', content: url },
+        ]}
+        activities={[
+          { toolName: 'Read', input: {}, activityDescription: huge },
+          { toolName: 'Bash', input: {}, activityDescription: url },
+        ]}
+        planAwaitingApproval={{ plan: url + '\n' + huge, requestId: 'r1' }}
+        onInjectMessage={vi.fn()} onPause={vi.fn()} onKill={vi.fn()} onShutdown={vi.fn()}
+        onApprovePlan={vi.fn()} onRejectPlan={vi.fn()}
+      />).lastFrame() ?? '')
+      const maxLine = Math.max(...out.split('\n').map(s => s.length))
+      expect(maxLine).toBeLessThanOrEqual(60)
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: orig, configurable: true })
+    }
   })
 })
