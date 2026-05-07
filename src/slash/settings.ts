@@ -1,15 +1,10 @@
 // src/slash/settings.ts
 import type { SlashCommand } from './types'
 
-const settingsRun: SlashCommand['run'] = async (_args, ctx) => {
-  if (ctx.config.providers.length === 0) {
-    return {
-      type: 'text',
-      text:
-        'No providers configured yet. Run `nuka init` from a fresh shell to launch the onboarding wizard, ' +
-        'or open the config file directly with /model.',
-    }
-  }
+// Open the settings dialog unconditionally — even with zero providers
+// configured. The dialog itself surfaces an "add provider" affordance,
+// so we no longer block first-run users behind `nuka init`.
+const settingsRun: SlashCommand['run'] = async () => {
   return { type: 'dialog', dialog: { kind: 'settings' } }
 }
 

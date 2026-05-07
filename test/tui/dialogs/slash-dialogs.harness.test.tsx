@@ -12,7 +12,10 @@ describe('dialog-returning slashes', () => {
     // StatsView always shows the tab labels (Overview / Models) regardless
     // of whether the cost-tracker has data; assert on the structural label.
     ['stats', StatsCommand, 'overview'],
-    ['settings', SettingsCommand, 'no providers configured'],
+    // /settings now opens the dialog directly (no `nuka init` gate); the
+    // menu lists settings categories — 'providers' is the first/most-stable
+    // label even when no providers are configured.
+    ['settings', SettingsCommand, 'providers'],
     ['doctor', DoctorCommand, 'doctor'],
   ] as const) {
     it(`/${name} renders its dialog`, async () => {

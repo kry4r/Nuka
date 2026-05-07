@@ -17,7 +17,7 @@ export async function configCheck(deps: DoctorDeps): Promise<Check> {
       name: 'config',
       status: 'fail',
       detail: `Config error: ${(err as Error).message}`,
-      remedy: 'Edit ~/.nuka/config.yaml or run `nuka init` to recreate it.',
+      remedy: 'Edit ~/.nuka/config.yaml to fix the error.',
     }
   }
 }

@@ -1,6 +1,6 @@
 // test/slash/settings.test.ts
 import { describe, it, expect } from 'vitest'
-import { SettingsCommand } from '../../src/slash/settings'
+import { SettingsCommand, ConfigCommand } from '../../src/slash/settings'
 
 describe('/settings', () => {
   it('opens the config submenu when at least one provider exists', async () => {
@@ -11,12 +11,19 @@ describe('/settings', () => {
     })
   })
 
-  it('returns an onboarding hint when no providers are configured (offline boot)', async () => {
+  it('opens the dialog even with zero providers (no `nuka init` gate)', async () => {
     const ctx = { config: { providers: [] } } as any
-    const res = await SettingsCommand.run('', ctx)
-    expect(res.type).toBe('text')
-    if (res.type === 'text') {
-      expect(res.text).toMatch(/nuka init/i)
-    }
+    expect(await SettingsCommand.run('', ctx)).toEqual({
+      type: 'dialog',
+      dialog: { kind: 'settings' },
+    })
+  })
+
+  it('/config alias also opens the dialog with zero providers', async () => {
+    const ctx = { config: { providers: [] } } as any
+    expect(await ConfigCommand.run('', ctx)).toEqual({
+      type: 'dialog',
+      dialog: { kind: 'settings' },
+    })
   })
 })

@@ -25,7 +25,7 @@ export async function providersCheck(deps: DoctorDeps): Promise<Check[]> {
         name: 'providers',
         status: 'warn',
         detail: 'No providers configured',
-        remedy: 'Run `nuka init` or edit ~/.nuka/config.yaml to add a provider.',
+        remedy: 'Edit ~/.nuka/config.yaml or use /settings to add a provider.',
       },
     ]
   }
