@@ -677,41 +677,18 @@ export function App(props: AppProps): React.JSX.Element {
         absorbs the leftover space via flexGrow=1, and every other zone
         keeps its natural height (flexShrink=0). */}
     <Box flexDirection="column" height={terminalRows}>
-      {/* Conversation zone — soft layout region (no frame).
-          Bug fix #9: overflow="hidden" so children that overflow the
-          flex region are clipped, never pushing the bottom-anchored
-          Prompt zone off-screen. Messages clamps its tail via
-          availableRows. minHeight={0} is required so Yoga lets this
-          Box shrink below its children's intrinsic content size;
-          without it, a long message list can push the BOTTOM slot off-
-          screen.
-
-          When there are no messages yet, the Welcome prologue is a
-          rigid block (flexShrink=0) anchored to the BOTTOM of the
-          zone via `justifyContent="flex-end"`. flexShrink=0 keeps the
-          BorderedBox top row + content + bottom border moving as a
-          single unit, fixing the prior bug where the title row stayed
-          pinned at the top while the bottom border crept upward under
-          shrink pressure. When the welcome is taller than the
-          available conversation rows (small terminal / tall prompt),
-          its top rows overflow past the top edge and `overflow:hidden`
-          clips them — so the WHOLE welcome scrolls up off-screen
-          rather than getting deformed. Once messages exist we revert
-          to `flex-start` so the message list flows top-down as
-          before. */}
-      <Box
-        flexDirection="column"
-        flexGrow={1}
-        flexShrink={1}
-        overflow="hidden"
-        minHeight={0}
-        justifyContent={session.messages.length === 0 ? 'flex-end' : 'flex-start'}
-      >
+      {/* Conversation zone — soft layout region (no frame). Welcome rides
+          inside the <Static> stream (managed by Messages) as the first item
+          the moment any message lands, so it scrolls off-screen into the
+          terminal's native scrollback as the conversation accumulates rather
+          than competing with messages for vertical space.
+          Bug fix #9: overflow="hidden" so children that overflow the flex
+          region are clipped, never pushing the bottom-anchored Prompt zone
+          off-screen. Messages clamps the LIVE area's tail via availableRows;
+          Static items are unbounded (terminal owns their scrollback). */}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" minHeight={0}>
         {justCompacted && (
           <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
-        )}
-        {session.messages.length === 0 && (
-          <Box flexShrink={0}>{prologueNode}</Box>
         )}
         <Messages
           items={session.messages}
@@ -720,7 +697,7 @@ export function App(props: AppProps): React.JSX.Element {
           resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
           resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
           availableRows={conversationAvailableRows}
-          prologue={session.messages.length > 0 ? prologueNode : null}
+          prologue={prologueNode}
         />
       </Box>
 
