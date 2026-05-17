@@ -6,6 +6,9 @@ import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
 import { PromptInput } from './PromptInput/PromptInput'
+import { useIdlePoke } from './hooks/useIdlePoke'
+import { useAwayRecap } from './hooks/useAwayRecap'
+import { AwaySummaryCard } from './Recap/AwaySummaryCard'
 import { StatusPanel } from './Status/StatusPanel'
 import { SubmenuFrame } from './Submenu/SubmenuFrame'
 import { PermissionDialog } from './dialogs/PermissionDialog'
@@ -38,6 +41,7 @@ import { SlashCard } from './SlashCard/SlashCard'
 import type { PermissionBridge } from '../core/permission/bridge'
 import type { ToolRegistry } from '../core/tools/registry'
 import type { TaskManager } from '../core/tasks/manager'
+import type { PlanModeState } from '../core/planMode/planModeState'
 import { computeCost } from '../core/session/telemetry'
 import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
@@ -246,12 +250,53 @@ export type AppProps = {
   harness?: import('../core/harness/state').HarnessStateMachine
   /** Phase D2 — pre-resolved emergency tip from config.notices.emergency. */
   emergencyTip?: import('../core/notices/emergencyTip').EmergencyTip | null
+  /**
+   * Iter DDDD — shared PlanModeState constructed in cli.tsx. When
+   * provided, the StatusPanel subscribes via App and shows a
+   * `[PLAN MODE]` badge while the agent is in plan mode. The prop is
+   * optional so tests that render `<App>` without the state still work
+   * (the badge simply never appears).
+   */
+  planModeState?: PlanModeState
+  /**
+   * Iter MMMM — production-side `IdleAwaySummaryHook` constructed in
+   * cli.tsx (only when a provider is configured). When provided, every
+   * keystroke / submit in PromptInput pulses `idleHook.poke()` so the
+   * awaySummary watcher correctly detects "user returned" after the
+   * configured threshold. Optional — tests pass nothing and the
+   * useIdlePoke hook degrades to a no-op.
+   *
+   * Iter NNNN — also subscribes a TUI banner to the recap event stream.
+   * When the model returns a recap on `onReturn`, the banner renders
+   * above the prompt and auto-dismisses on the next user input.
+   */
+  idleHook?: {
+    poke: () => void
+    onRecapResult?: (
+      listener: (event: import('../core/awaySummary/idleHook').AwayRecapEvent) => void,
+    ) => () => void
+  }
 }
 
 export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp()
   const [session, setSession] = useState<Session>(() => props.sessions.active()!)
   const [input, setInput] = useState('')
+  // Iter MMMM — stable poke callback wired into PromptInput.onUserInput.
+  // When props.idleHook is undefined (no provider configured, or under
+  // test) `pokeIdle` is a no-op, so PromptInput needs no special-casing.
+  const pokeIdle = useIdlePoke(props.idleHook)
+  // Iter NNNN — subscribe to typed recap events from the idle hook. When
+  // a recap arrives (model finished summarizing the away window), the
+  // banner renders above the prompt. Dismissal is wired into the same
+  // keystroke pulse that pokes the watcher: as soon as the user hits a
+  // key, the banner clears AND the idle-away window resets, so the
+  // user gets a clean prompt on first input.
+  const { recap: awayRecap, dismiss: dismissAwayRecap } = useAwayRecap(props.idleHook ?? null)
+  const handleUserInput = useCallback(() => {
+    pokeIdle()
+    dismissAwayRecap()
+  }, [pokeIdle, dismissAwayRecap])
   // Phase 12 §4.2 — single discriminated UIState replaces the prior
   // dialog + slash-active flags.
   const [uiState, dispatchUI] = useReducer(uiReducer, { kind: 'normal' } as UIState)
@@ -282,6 +327,19 @@ export function App(props: AppProps): React.JSX.Element {
     if (!props.taskManager) return
     return props.taskManager.on('change', bumpTasksTick)
   }, [props.taskManager, bumpTasksTick])
+
+  // Iter DDDD — re-render whenever PlanModeState flips so the
+  // `[PLAN MODE]` badge in StatusPanel reacts to enter/exit/reset.
+  // We don't track a local `mode` state because cli.tsx's listener
+  // already mutates `session.mode` in place; we only need a tick to
+  // make React notice the mutation. Reusing `setMessageTick` keeps the
+  // wiring minimal (one extra bump per plan-mode event is cheap).
+  const [, setPlanModeTick] = useState(0)
+  useEffect(() => {
+    const state = props.planModeState
+    if (!state) return
+    return state.subscribe(() => setPlanModeTick(t => t + 1))
+  }, [props.planModeState])
 
   // Phase 14b — 5-column tasks panel state driven by eventBus
   const columnsState = useTasksColumns(eventBus)
@@ -763,6 +821,19 @@ export function App(props: AppProps): React.JSX.Element {
           />
         </SubmenuFrame>
       )}
+      {/* Iter NNNN — Away-summary recap banner. Renders above the slash
+          card + prompt input whenever the idleHook has surfaced a recap
+          and no inline submenu is in the way (the permission / plugin
+          config dialogs own the inline slot and shouldn't be preempted).
+          Auto-dismisses on the first user keystroke via `handleUserInput`
+          (see useAwayRecap.dismiss + onUserInput plumbing). */}
+      {awayRecap !== null && !submenuInline && promptVisible && (
+        <AwaySummaryCard
+          text={awayRecap.text}
+          idleMs={awayRecap.idleMs}
+          onDismiss={dismissAwayRecap}
+        />
+      )}
       {/* SlashCard expands UPWARD above the prompt — it sits BEFORE PromptInput
           in source order so the suggestion list stacks above the input box. */}
       {slashActive && props.slash && promptVisible && (
@@ -787,6 +858,7 @@ export function App(props: AppProps): React.JSX.Element {
           slash={props.slash}
           onSlashActiveChange={handleSlashActiveChange}
           onSlashCursorChange={setSlashCursor}
+          onUserInput={handleUserInput}
         />
       )}
 
@@ -813,6 +885,7 @@ export function App(props: AppProps): React.JSX.Element {
           iconMode={props.config.statusBar?.iconMode ?? 'icon'}
           statusLineConfig={props.config.statusLine}
           startedAt={session.createdAt}
+          planMode={session.mode === 'plan'}
         />
       )}
       </Box>

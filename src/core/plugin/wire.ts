@@ -10,6 +10,8 @@ import type { Skill } from '../skill/types'
 import { parseSkill } from '../skill/loader'
 import { loadHooks } from '../hooks/loader'
 import type { HookEntry } from '../hooks/types'
+import { loadHookConfigFile } from '../hooks/configLoader'
+import type { HookRegistry } from '../hooks/registry'
 import type { AgentRegistry } from '../agents/registry'
 import { resolveAgentDef } from '../agents/loader'
 import { registerOutputStyle } from './outputStyles'
@@ -64,6 +66,12 @@ export async function wirePlugin(
     pluginConfig?: Record<string, unknown>
     /** LspManager instance for registering plugin-declared LSP servers. */
     lsp?: LspManager
+    /**
+     * In-process HookRegistry. When provided, the manifest's
+     * `inProcessHooks` module is loaded and each entry is registered with
+     * an ID prefixed by the plugin name (`plugin:<name>:<entry-id>`).
+     */
+    hookRegistry?: HookRegistry
   },
 ): Promise<{
   toolsAdded: number
@@ -72,6 +80,7 @@ export async function wirePlugin(
   hooksAdded: number
   agentsAdded: number
   lspAdded: number
+  inProcessHooksAdded: number
   errors: string[]
 }> {
   let toolsAdded = 0
@@ -80,6 +89,7 @@ export async function wirePlugin(
   let hooksAdded = 0
   let agentsAdded = 0
   let lspAdded = 0
+  let inProcessHooksAdded = 0
   const errors: string[] = []
 
   // Tools
@@ -210,5 +220,38 @@ export async function wirePlugin(
     }
   }
 
-  return { toolsAdded, slashAdded, skillsAdded, hooksAdded, agentsAdded, lspAdded, errors }
+  // In-process hooks — load a JS/MJS module declared by the plugin manifest
+  // and register each entry on the shared HookRegistry. IDs are prefixed
+  // with `plugin:<name>:` so they can be inspected and cleared without
+  // affecting handlers contributed by other plugins or user config.
+  //
+  // The manifest itself is YAML/JSON so functions can't be inlined; the
+  // plugin ships a sibling module exporting `HookConfigEntry[]` (same shape
+  // consumed by `applyHookConfig` for ~/.nuka/hooks.config.js).
+  if (plugin.manifest.inProcessHooks !== undefined && deps.hookRegistry !== undefined) {
+    const hookPath = resolve(plugin.rootDir, plugin.manifest.inProcessHooks)
+    let entries: import('../hooks/configLoader').HookConfigEntry[] = []
+    try {
+      entries = await loadHookConfigFile(hookPath)
+    } catch (err) {
+      errors.push(`inProcessHooks '${plugin.manifest.inProcessHooks}': ${(err as Error).message}`)
+      entries = []
+    }
+    let entryCounter = 0
+    for (const entry of entries) {
+      entryCounter++
+      const baseId = entry.id ?? `auto-${entryCounter}`
+      const namespacedId = `plugin:${plugin.manifest.name}:${baseId}`
+      try {
+        const opts: { id: string; priority?: number } = { id: namespacedId }
+        if (entry.priority !== undefined) opts.priority = entry.priority
+        deps.hookRegistry.register(entry.event, entry.handler, opts)
+        inProcessHooksAdded++
+      } catch (err) {
+        errors.push(`inProcessHooks entry '${baseId}': ${(err as Error).message}`)
+      }
+    }
+  }
+
+  return { toolsAdded, slashAdded, skillsAdded, hooksAdded, agentsAdded, lspAdded, inProcessHooksAdded, errors }
 }

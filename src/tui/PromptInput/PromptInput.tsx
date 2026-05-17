@@ -53,6 +53,15 @@ export type PromptInputProps = {
   onSlashActiveChange?: (active: boolean) => void
   /** Notified whenever the slash cursor index changes; lets parent render SlashCard. */
   onSlashCursorChange?: (cursor: number) => void
+  /**
+   * Iter MMMM — pulse on every user input edge (keypress / submit).
+   * Wired in cli.tsx to `IdleAwaySummaryHook.poke()` so the away-summary
+   * watcher can detect "user returned" after the threshold elapses.
+   * Optional; absent in tests and when no awaySummary runner is bound.
+   * Called from inside the `useInput` handler so it fires on every
+   * recognized keystroke (typing, arrows, Enter, Esc, Tab, backspace).
+   */
+  onUserInput?: () => void
 }
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
@@ -119,6 +128,13 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
 
   useInput((input, key) => {
     if (props.disabled) return
+
+    // Iter MMMM — every user input edge resets the awaySummary idle
+    // watcher. Called *before* mode-specific branches so vim, mention,
+    // slash and normal-mode keystrokes all pulse the watcher uniformly.
+    // The callback is `useIdlePoke`-stable in production (no-op when
+    // the watcher is absent) so this is safe to call on every key.
+    props.onUserInput?.()
 
     // Vim mode: in normal/visual we route through the controller. In insert
     // we let the existing behavior fall through (typing/backspace/enter all

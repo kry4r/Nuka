@@ -1,0 +1,58 @@
+/**
+ * Image-format sniffing for `@image:` mentions.
+ *
+ * Ported verbatim from Nuka-Code's `detectImageFormatFromBuffer`.
+ * Used by the default image loader in `deps.ts` to set the mime type
+ * on resolved image artifacts.
+ */
+
+export type ImageMediaType =
+  | 'image/png'
+  | 'image/jpeg'
+  | 'image/gif'
+  | 'image/webp'
+
+/**
+ * Detect image format from a buffer using magic bytes.
+ * Falls back to `image/png` for short / unknown buffers.
+ */
+export function detectImageFormatFromBuffer(buffer: Buffer): ImageMediaType {
+  if (buffer.length < 4) return 'image/png'
+
+  // PNG: 89 50 4E 47
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return 'image/png'
+  }
+
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg'
+  }
+
+  // GIF: 47 49 46 ("GIF")
+  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
+    return 'image/gif'
+  }
+
+  // WebP: RIFF....WEBP
+  if (
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer.length >= 12 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return 'image/webp'
+  }
+
+  return 'image/png'
+}

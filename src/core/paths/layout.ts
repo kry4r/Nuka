@@ -1,8 +1,8 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-export { tasksDir } from './tasks/persist'
-import { tasksDir } from './tasks/persist'
+export { tasksDir } from '../tasks/persist'
+import { tasksDir } from '../tasks/persist'
 
 export function nukaHome(home: string): string { return path.join(home, '.nuka') }
 export function teamsDir(home: string): string { return path.join(nukaHome(home), 'teams') }

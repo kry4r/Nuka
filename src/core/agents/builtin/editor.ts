@@ -39,6 +39,12 @@ TEST-STRATEGY GATE
   • The 'investigate' profile is the only red line — its implement stage is forbidden
     regardless of difficulty.
 
+CODE-INTELLIGENCE PREFERENCE
+  • Prefer LSPQuery over grep/find for symbol-level questions when available:
+      definition, references, hover, workspaceSymbol, implementation,
+      callHierarchy, documentSymbols.
+  • If LSPQuery returns {notConfigured: true}, fall back to Grep/Glob for that op.
+
 NEVER
   • Run Edit / Write / Bash tools yourself.
   • Skip stage gates without harness approval.

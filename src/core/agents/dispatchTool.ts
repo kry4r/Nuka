@@ -3,6 +3,7 @@ import type { Tool, ToolResult, ToolContext } from '../tools/types'
 import type { ToolRegistry } from '../tools/registry'
 import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
+import type { HookRegistry } from '../hooks/registry'
 import type { AgentRegistry } from './registry'
 import { dispatchAgent } from './dispatch'
 import { defineTool } from '../tools/define'
@@ -23,12 +24,20 @@ export type DispatchAgentInput = {
  * Recursion guard: when invoked from a dispatched sub-session (detected
  * via `ctx.session.allowedAgentDispatch === false`), the tool refuses
  * immediately with a structured error (no throw, no provider call).
+ *
+ * Iter RRR: optional `hookRegistry` is threaded into the inner
+ * `dispatchAgent` call so that lifecycle events (sessionStart /
+ * promptSubmit / afterTurn / sessionEnd) fire inside the sub-session
+ * with `context: 'subagent'`. The parent registry is reused, matching
+ * Option A from the iter spec — one hook config sees everything.
  */
 export function makeDispatchAgentTool(deps: {
   agents: AgentRegistry
   registry: ToolRegistry
   providerResolver: ProviderResolver
   permission: PermissionChecker
+  /** Optional — when omitted, sub-agents simply skip lifecycle fires. */
+  hookRegistry?: HookRegistry
 }): Tool<DispatchAgentInput> {
   const listed = deps.agents.list()
   const summary = listed.length === 0
@@ -100,6 +109,7 @@ export function makeDispatchAgentTool(deps: {
         permission: deps.permission,
         signal: ctx.signal,
         ...(parentSession ? { parentSession } : {}),
+        ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
       })
       return { output: result.output, isError: result.isError }
     },

@@ -17,6 +17,13 @@ import {
 import { addUsage } from '../session/telemetry'
 import { validateWithJsonSchema } from '../tools/validate'
 import { serializeContentBlocks } from '../tools/content'
+import type { HookRegistry } from '../hooks/registry'
+import {
+  fireSessionStart,
+  fireSessionEnd,
+  firePromptSubmit,
+  fireAfterTurn,
+} from '../hooks/lifecycle'
 
 export type DispatchAgentOpts = {
   agent: ResolvedAgentDef
@@ -30,6 +37,26 @@ export type DispatchAgentOpts = {
   parentSession?: { providerId: string; model: string }
   /** Override agent.maxTurns (falls back to agent.maxTurns which defaults to 20). */
   maxTurns?: number
+  /**
+   * Iter RRR — in-process HookRegistry threaded through from the parent
+   * session. When provided, dispatchAgent fires the four lifecycle events
+   * that make sense inside an isolated sub-session:
+   *
+   *   - `sessionStart` once the sub-session is created (before the seed
+   *     user message is appended).
+   *   - `promptSubmit` once, with the composed task+context text used as
+   *     the first user message.
+   *   - `afterTurn` at the end of every turn where the model chose not to
+   *     call any tools (mirrors the main loop's behaviour, including the
+   *     terminal turn that returns the final output).
+   *   - `sessionEnd` once on any exit path (success / maxTurns / abort /
+   *     thrown provider error).
+   *
+   * Each payload carries `context: 'subagent'` and `agentName` so handlers
+   * can filter on origin. Errors inside the registry are swallowed by the
+   * fire helpers — they NEVER affect dispatch outcome.
+   */
+  hookRegistry?: HookRegistry
 }
 
 export type DispatchAgentResult = {
@@ -62,6 +89,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     permission,
     signal,
     parentSession,
+    hookRegistry,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
 
@@ -80,15 +108,69 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   session.allowedAgentDispatch = false
   session.allowedTeamCreate = false
 
+  // Iter RRR — fire sessionStart before the seed user message lands so
+  // handlers observe an empty transcript (mirrors the main loop, which
+  // fires sessionStart at boot, before any user input).
+  if (hookRegistry) {
+    await fireSessionStart(
+      hookRegistry,
+      {
+        sessionId: session.id,
+        providerId,
+        model,
+        cwd: process.cwd(),
+        resumed: false,
+        context: 'subagent',
+        agentName: agent.name,
+      },
+      { signal },
+    )
+  }
+
   // Seed with the first user message; include optional context.
   const firstText = context !== undefined && context.length > 0
     ? `${task}\n\n--- context ---\n${context}`
     : task
+  // Iter RRR — fire promptSubmit BEFORE the message lands so handlers see
+  // the same pre-append snapshot the main loop offers them.
+  if (hookRegistry) {
+    await firePromptSubmit(
+      hookRegistry,
+      {
+        sessionId: session.id,
+        text: firstText,
+        context: 'subagent',
+        agentName: agent.name,
+      },
+      { signal },
+    )
+  }
   appendMessage(session, makeUserMessage({ text: firstText }))
 
   let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
   let turns = 0
   let lastAssistant: AssistantMessage | undefined
+  // Iter RRR — fire sessionEnd exactly once on any exit path. Tracked via
+  // a closure flag so the `try/return/catch` branches all converge here.
+  // The fire intentionally does NOT forward the parent `signal`: if the
+  // caller aborted, the registry would mark every sessionEnd handler as
+  // `aborted` and they'd never run. The 5s lifecycle timeout still
+  // applies (added internally by the fire helper).
+  let endFired = false
+  const fireEnd = async (reason: 'completed' | 'aborted'): Promise<void> => {
+    if (endFired || !hookRegistry) return
+    endFired = true
+    await fireSessionEnd(
+      hookRegistry,
+      {
+        sessionId: session.id,
+        reason,
+        context: 'subagent',
+        agentName: agent.name,
+      },
+      // Deliberately no `signal` — see comment above.
+    )
+  }
 
   try {
     while (!signal.aborted && turns < maxTurns) {
@@ -142,7 +224,25 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         b.type === 'tool_use' ? [{ id: b.id, name: b.name, input: b.input }] : [],
       )
       if (calls.length === 0) {
+        // Iter RRR — afterTurn fires for every model turn that ends without
+        // tool calls (mirrors the main loop). Sub-agents do not run the
+        // beforeAutoCompact veto because they never compact (fresh session,
+        // bounded turns).
+        if (hookRegistry) {
+          await fireAfterTurn(
+            hookRegistry,
+            {
+              sessionId: session.id,
+              stopReason: assistant.stopReason ?? 'end_turn',
+              toolCalls: 0,
+              context: 'subagent',
+              agentName: agent.name,
+            },
+            { signal },
+          )
+        }
         // Turn ended naturally — extract final text.
+        await fireEnd('completed')
         return {
           output: finalOutput(assistant),
           isError: false,
@@ -196,6 +296,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
 
     // Exited loop: either aborted or maxTurns reached.
     if (turns >= maxTurns) {
+      await fireEnd('completed')
       return {
         output: lastAssistant ? finalOutput(lastAssistant) : `Sub-agent reached maxTurns=${maxTurns} with no response`,
         isError: true,
@@ -203,6 +304,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         usage: totalUsage,
       }
     }
+    await fireEnd('aborted')
     return {
       output: 'Sub-agent aborted',
       isError: true,
@@ -210,6 +312,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       usage: totalUsage,
     }
   } catch (err) {
+    await fireEnd('aborted')
     return {
       output: `Sub-agent error: ${(err as Error).message}`,
       isError: true,

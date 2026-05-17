@@ -6,7 +6,21 @@ import type { Session } from '../session/types'
 
 export type { ContentBlock } from './content'
 
-export type PermissionHint = 'none' | 'write' | 'exec' | 'network'
+/**
+ * What kind of permission gate a tool requires.
+ *
+ * - `'none'`    — no gate; auto-allow (cache/checker short-circuit).
+ * - `'write'`   — touches the filesystem (path-shaped subject).
+ * - `'exec'`    — runs an external command (command-shaped subject).
+ * - `'network'` — reaches across the wire (URL-shaped subject).
+ * - `'ask'`     — pure confirmation gate (no implicit access category).
+ *   Iter LLLL — used by tools like `EnterPlanMode` that need explicit
+ *   user consent regardless of session mode, but don't otherwise touch
+ *   files/processes/network. The plan-mode gate does NOT block `'ask'`
+ *   (plan-mode is about side effects, not consent). `'bypass'` mode
+ *   skips the prompt for full-trust sessions.
+ */
+export type PermissionHint = 'none' | 'write' | 'exec' | 'network' | 'ask'
 
 export type ToolResult = { output: string | ContentBlock[]; isError: boolean }
 

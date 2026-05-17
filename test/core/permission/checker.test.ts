@@ -202,4 +202,120 @@ describe('PermissionChecker', () => {
       expect(ask).toHaveBeenCalledOnce()
     })
   })
+
+  // ── Iter LLLL — `'ask'` hint (confirmation-only gate) ────────────────
+  describe("'ask' hint", () => {
+    it('routes to askUser regardless of session.mode (normal)', async () => {
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+        mode: 'normal',
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).toHaveBeenCalledOnce()
+    })
+
+    it('routes to askUser when mode is undefined (default path)', async () => {
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).toHaveBeenCalledOnce()
+    })
+
+    it('is NOT blocked by plan-mode (plan-mode is about side effects, not consent)', async () => {
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(true)
+      expect(d.reason).toBeUndefined()
+      // The user is still prompted in plan mode — the confirmation gate
+      // is orthogonal to the plan-mode block list.
+      expect(ask).toHaveBeenCalledOnce()
+    })
+
+    it('IS blocked by plan-mode when annotated destructive (annotation wins)', async () => {
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'mcp__danger__confirm',
+        hint: 'ask',
+        input: {},
+        annotations: { destructive: true },
+        mode: 'plan',
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe(PLAN_BLOCKED_REASON)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('auto-allows in bypass mode without prompting', async () => {
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+        mode: 'bypass',
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('propagates rejection just like other hints', async () => {
+      const ask = vi
+        .fn()
+        .mockResolvedValue({ allowed: false, reason: 'user said no' })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toBe('user said no')
+    })
+
+    it('a remembered "always for ask" session rule short-circuits the prompt', async () => {
+      const cache = new PermissionCache()
+      cache.add({ scope: 'session', hint: 'ask' })
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => cache, ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('stores the remember rule when askUser includes one', async () => {
+      const cache = new PermissionCache()
+      const ask = vi.fn().mockResolvedValue({
+        allowed: true,
+        remember: { scope: 'session' as const, hint: 'ask' as const },
+      })
+      const checker = new PermissionChecker(() => cache, ask)
+      await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(cache.list()).toHaveLength(1)
+      expect(cache.list()[0]).toEqual({ scope: 'session', hint: 'ask' })
+    })
+  })
 })

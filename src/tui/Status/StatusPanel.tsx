@@ -88,6 +88,14 @@ export type StatusPanelProps = {
    * in Phase 13 M3).
    */
   startedAt?: number
+  /**
+   * Iter DDDD — true when the active session is in plan mode
+   * (`session.mode === 'plan'`). Renders the `[PLAN MODE]` badge
+   * segment so the user has a visible cue that Write/Edit/Bash are
+   * gated by PermissionChecker until ExitPlanMode is called. The badge
+   * is hidden when false/undefined (idle path stays clean).
+   */
+  planMode?: boolean
 }
 
 const NARROW_THRESHOLD = 80
@@ -242,6 +250,22 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
       id: 'mode',
       render: () => <Text color={accent} bold>{modeBadge(props.mode, iconMode)}</Text>,
     },
+  ]
+
+  // Iter DDDD — plan-mode badge. Only injected when `planMode === true`
+  // so the segment list (and column/row layout maths) stays untouched
+  // for the common "normal mode" path. Coloured with `warn` to match
+  // the existing dirty-git marker (visually loud, semantically a hint
+  // that an enforcement gate is active). Inserted right after `mode`
+  // so it appears next to the existing status badge in every layout.
+  if (props.planMode) {
+    segments.push({
+      id: 'plan',
+      render: () => <Text color={warn} bold>[PLAN MODE]</Text>,
+    })
+  }
+
+  segments.push(
     {
       id: 'model',
       render: () => (
@@ -278,7 +302,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
         <Text color={muted}>{renderCountsText()}</Text>
       ),
     },
-  ]
+  )
 
   // Also accept 'cost-time' in hidden set for backward compat (maps to 'cost').
   const effectiveHidden = new Set<string>()
@@ -312,8 +336,10 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   // ---- Render by layout ----
 
   if (layout === 'dense') {
-    // Two-column layout: left=[mode,model,cwd], right=[context,cost,counts]
-    const leftIds = new Set(['mode', 'model', 'cwd'])
+    // Two-column layout: left=[mode,plan,model,cwd], right=[context,cost,counts]
+    // Iter DDDD — `plan` slots into the left column right after `mode`
+    // so the badge is visually adjacent to the existing status badge.
+    const leftIds = new Set(['mode', 'plan', 'model', 'cwd'])
     const rightIds = new Set(['context', 'cost', 'counts'])
     const leftCol = visible.filter(s => leftIds.has(s.id))
     const rightCol = visible.filter(s => rightIds.has(s.id))
@@ -353,8 +379,10 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   }
 
   if (layout === 'compact') {
-    // Fold: row1 = mode/model/cwd/context, row2 = cost/counts
-    const row1Ids = new Set(['mode', 'model', 'cwd', 'context'])
+    // Fold: row1 = mode/plan/model/cwd/context, row2 = cost/counts
+    // Iter DDDD — `plan` rides with the mode/model row so a narrow
+    // terminal still surfaces the badge above the fold.
+    const row1Ids = new Set(['mode', 'plan', 'model', 'cwd', 'context'])
     const row1 = visible.filter(s => row1Ids.has(s.id))
     const row2 = visible.filter(s => !row1Ids.has(s.id))
     const sep = <Text color={muted}> · </Text>

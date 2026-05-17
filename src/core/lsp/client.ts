@@ -131,6 +131,17 @@ export class LspClient {
               publishDiagnostics: { relatedInformation: false },
               definition: { dynamicRegistration: false },
               references: { dynamicRegistration: false },
+              // Phase-6 workspace navigation (Iter CCCC).
+              // Most modern servers (tsserver/rust-analyzer/gopls) answer these
+              // regardless of declared client support, but declaring them
+              // makes the contract explicit and lets stricter servers (e.g.
+              // pyright) opt-in to the responses. Backward compat preserved —
+              // additive only.
+              implementation: { dynamicRegistration: false },
+              callHierarchy: { dynamicRegistration: false },
+            },
+            workspace: {
+              symbol: { dynamicRegistration: false },
             },
           },
         },

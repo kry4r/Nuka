@@ -12,6 +12,7 @@ import { SCOPE_ORDER } from './core/config/scopeMerge'
 import { ProviderResolver } from './core/provider/resolver'
 import { SessionManager } from './core/session/manager'
 import { ToolRegistry } from './core/tools/registry'
+import { createHookRegistry, wrapWithHooks, applyHookConfig, defaultHookConfigPaths, makeHookListTool, fireSessionStart, fireSessionEnd } from './core/hooks'
 import { PermissionChecker } from './core/permission/checker'
 import { PermissionBridge } from './core/permission/bridge'
 import { suggestPattern } from './core/permission/suggest'
@@ -52,6 +53,51 @@ import { GrepTool } from './core/tools/grep'
 import { WebFetchTool } from './core/tools/webFetch'
 import { createTodoStore, makeTodoWriteTool } from './core/tools/todoWrite'
 import { makeWebSearchTool } from './core/tools/webSearch'
+import { getCronStore } from './core/cron/store'
+import { makeCronTools } from './core/cron/tools'
+import { bootRehydrate as bootCronRehydrate, defaultCronPath } from './core/cron/persist'
+import { CronScheduler } from './core/cron/scheduler'
+import { CronPromptQueue } from './core/session/cronPromptQueue'
+import { EstimateTokensTool } from './core/tokens/tools'
+import { TokenCountTool } from './core/tokens/tokenCountTool'
+import { getWorktreeStore } from './core/worktree/store'
+import { makeWorktreeTools } from './core/worktree/tools'
+import { createStructuredOutputTool } from './core/structuredOutput/tool'
+import { SleepTool } from './core/sleep/tool'
+import { FormatDurationTool } from './core/duration/durationTool'
+import { JsonFormatTool } from './core/jsonFormat/jsonFormatTool'
+import { ShellQuoteTool } from './core/jsonEscape/shellQuoteTool'
+import { CodeBlocksTool } from './core/codeBlocks/codeBlocksTool'
+import { WrapTextTool } from './core/wordWrap/wrapTextTool'
+import { SlugTool } from './core/slug/slugTool'
+import { TruncateTool } from './core/truncate/truncateTool'
+import { TextStatsTool } from './core/textStats/textStatsTool'
+import { WhitespaceTool } from './core/whitespace/whitespaceTool'
+import { CaseConvertTool } from './core/caseConvert/caseConvertTool'
+import { AnsiStyleTool } from './core/ansi/ansiStyleTool'
+import { UrlExtractTool } from './core/urlExtract/urlExtractTool'
+import { GlobMatchTool } from './core/glob/globTool'
+import { ApplyDiffTool } from './core/diff/applyDiffTool'
+import { createApplyDiffPermissionHandler } from './core/diff/applyDiffPermissionHook'
+import { FindReplaceTool } from './core/findReplace/findReplaceTool'
+import { PlanModeState } from './core/planMode/planModeState'
+import { makePlanModeTools } from './core/planMode/planModeTools'
+import { writePlan } from './core/plan/state'
+import { getTaskStore } from './core/tasks/store'
+import { makeTaskTools } from './core/tasks/tools'
+import { makeTaskOutputTool } from './core/tasks/outputTool'
+import { makeTaskStopTool } from './core/tasks/stopTool'
+import { makeToolSearchTool } from './core/toolSearch/tool'
+import { FileSearchTool } from './core/fileSearch/fileSearchTool'
+import { makeRecentFilesTool } from './core/fileSearch/recentFilesTool'
+import { RecentFiles, createPersistentRecentFiles, defaultRecentFilesPath } from './core/fileSearch/recentFiles'
+import type { PersistentRecentFiles } from './core/fileSearch/recentFiles'
+import { createRecentFilesTouchHandler } from './core/fileSearch/recentFilesHook'
+import { createAutoTruncateHook } from './core/toolResult/autoTruncateHook'
+import { createPathDisplayHandler } from './core/paths/pathDisplayHook'
+import { createJsonFormatHandler } from './core/jsonFormat/jsonFormatHook'
+import { createWordWrapHandler } from './core/wordWrap/wordWrapHook'
+import { createUrlExtractHandler } from './core/urlExtract/urlExtractHook'
 import { currentGitBranch } from './core/session/telemetry'
 import { runAgent as runAgentLoop } from './core/agent/loop'
 import { compactSession } from './core/compact/compact'
@@ -70,9 +116,12 @@ import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { dispatchAgent } from './core/agents/dispatch'
+import { resolveAgentDef } from './core/agents/loader'
+import { loadSubagentsFromDir, defaultSubagentDirs } from './core/agents/subagentLoader'
 import { validatePlugin, formatReport } from './core/plugin/validate'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
+import { makeLspQueryTool } from './core/lsp/lspQueryTool'
 import { Wizard } from './tui/Onboarding/Wizard'
 import { saveWizardPatch } from './core/onboarding/save'
 import { CostTracker } from './core/cost/tracker'
@@ -96,6 +145,7 @@ import { makeTriageCommand } from './slash/triage'
 import { makeCoordinationCommand } from './slash/coordination'
 import * as fs from 'node:fs'
 import { initAutoDream } from './core/recap/autoDream'
+import { createAwaySummaryRunner, makeAwaySummaryTool, startIdleAwaySummaryHook } from './core/awaySummary'
 import { makeTeamCreateTool } from './core/tools/builtin/teamCreate'
 import { makeTeamDeleteTool } from './core/tools/builtin/teamDelete'
 import { makeSendMessageTool } from './core/tools/builtin/sendMessage'
@@ -405,9 +455,349 @@ async function runInteractive(): Promise<void> {
 
   const todoStore = createTodoStore()
   const tools = new ToolRegistry()
+  // Process-singleton in-process HookRegistry. Wired into tool execution
+  // via wrapWithHooks: every tool registered on this ToolRegistry has its
+  // `run` intercepted to fire `beforeToolCall` / `afterToolCall` hooks
+  // (with `{ skip: true }` veto semantics). Handlers are registered by
+  // future iters (plugins, hooks-config loader, etc.); today the registry
+  // ships empty so wiring is a no-op for users without hook contributors.
+  const hookRegistry = createHookRegistry()
+  // Practical Iter FFF — session-scoped MRU tracker, shared between the
+  // agent-callable RecentFilesTool (which lets the model inspect/manage
+  // history) and the beforeToolCall hook below (which bumps it on every
+  // Read/Edit/Write). Lifting the construction here keeps the tracker
+  // singleton across the two consumers without leaking it to other
+  // modules.
+  //
+  // Practical Iter OOO — when persistence is enabled (default ON; opt-out
+  // via NUKA_RECENT_FILES_NO_PERSIST=1) the tracker rehydrates from
+  // `~/.nuka/recent-files.json` on boot and atomically mirrors every
+  // touch/forget/clear back to disk. Writes are coalesced inside
+  // `createPersistentRecentFiles` — at most one in-flight write at a
+  // time, with a single follow-up flush picking up any dirty state.
+  // Failures inside the writer are swallowed so disk hiccups never
+  // surface as tool errors. Tests / CI set `NUKA_RECENT_FILES_NO_PERSIST=1`
+  // to keep the home dir untouched.
+  let recentFilesTracker: RecentFiles
+  let recentFilesPersistent: PersistentRecentFiles | null = null
+  if (process.env.NUKA_RECENT_FILES_NO_PERSIST === '1') {
+    recentFilesTracker = new RecentFiles()
+  } else {
+    try {
+      const persistent = await createPersistentRecentFiles({
+        path: defaultRecentFilesPath(),
+      })
+      recentFilesTracker = persistent
+      recentFilesPersistent = persistent
+    } catch {
+      // Any unexpected error during load → fall back to in-memory only.
+      // Persistence is best-effort; users without write access to ~ shouldn't
+      // see a crash here.
+      recentFilesTracker = new RecentFiles()
+    }
+  }
+  hookRegistry.register(
+    'beforeToolCall',
+    createRecentFilesTouchHandler(recentFilesTracker),
+    { id: 'recentFiles-auto-touch' },
+  )
+  // Practical Iter III — afterToolCall guard that middle-truncates oversized
+  // string `output` before it reaches the agent's context. Default budget
+  // (8000 graphemes) is large enough for typical reads and bash dumps,
+  // small enough to stop a 50k-line log from blowing the model's window.
+  // Error outputs and ContentBlock[] outputs pass through unchanged — the
+  // hook intentionally only shrinks successful textual results.
+  hookRegistry.register(
+    'afterToolCall',
+    createAutoTruncateHook({ maxChars: 8000 }),
+    { id: 'auto-truncate-output' },
+  )
+  // Iter LLL — opt-in path-display rewriter. When
+  // NUKA_PATH_DISPLAY_HOOK=1 is set, every successful string ToolResult
+  // is post-processed so absolute paths in `output` are humanised via
+  // `displayPath` (tildify + cwd-relativise). Default: off — rewriting
+  // tool output is a user-visible behaviour change and some workflows
+  // expect verbatim path text. The handler is conservative: error
+  // results, ContentBlock[] outputs, and substrings inside JSON string
+  // literals are left untouched.
+  if (process.env.NUKA_PATH_DISPLAY_HOOK === '1') {
+    hookRegistry.register(
+      'afterToolCall',
+      createPathDisplayHandler({ cwd }),
+      { id: 'path-display-rewriter' },
+    )
+  }
+  // Iter NNN — opt-in JSON pretty-printer. When NUKA_JSON_FORMAT_HOOK=1
+  // is set, raw single-line JSON tool output is reformatted via
+  // `formatJSON`. The handler is conservative: it parses the trimmed
+  // body with `JSON.parse` and only rewrites on a successful round-trip,
+  // so "looks JSON-ish" output (markdown that happens to start with `{`
+  // / `[`) is left untouched. Default: off — rewriting tool output is a
+  // user-visible behaviour change.
+  if (process.env.NUKA_JSON_FORMAT_HOOK === '1') {
+    hookRegistry.register(
+      'afterToolCall',
+      createJsonFormatHandler(),
+      { id: 'json-format-pretty-printer' },
+    )
+  }
+  // Iter BBBB — opt-in word-wrap rewriter. When NUKA_WORD_WRAP_HOOK=1 is
+  // set, successful STRING ToolResults are re-flowed via `wrapText` to
+  // fit the configured column budget (NUKA_WORD_WRAP_WIDTH, default 100).
+  // The handler is conservative: error results, ContentBlock[] outputs,
+  // outputs below minLength, and outputs that already fit the budget on
+  // every line pass through unchanged. Default: off — re-flowing tool
+  // output is a user-visible behaviour change and CI / mechanical-diff
+  // workflows expect verbatim columns.
+  if (process.env.NUKA_WORD_WRAP_HOOK === '1') {
+    const rawWidth = process.env.NUKA_WORD_WRAP_WIDTH
+    let width: number | undefined
+    if (rawWidth !== undefined && rawWidth.length > 0) {
+      const parsed = Number.parseInt(rawWidth, 10)
+      if (Number.isInteger(parsed) && parsed > 0) width = parsed
+    }
+    hookRegistry.register(
+      'afterToolCall',
+      createWordWrapHandler(width !== undefined ? { width } : {}),
+      { id: 'word-wrap-rewriter' },
+    )
+  }
+  // Iter EEEE — opt-in URL annotator. When NUKA_URL_EXTRACT_HOOK=1 is set,
+  // successful STRING ToolResults are scanned for URLs and the extracted
+  // list is tacked onto the surfaced result as a sibling `urls` field.
+  // The text `output` is preserved verbatim — wrap/truncate/pathDisplay
+  // handle the visible side; this hook just annotates. Downstream
+  // observers (TUI Cmd+Click sidebar, telemetry, future fetcher
+  // heuristics) can read the field; consumers that don't know it just
+  // ignore it. Error results, ContentBlock[] outputs, and outputs below
+  // 50 chars pass through unchanged. Default: off — annotation is a
+  // user-visible behaviour change for any consumer that already reads
+  // the result object as a strict ToolResult.
+  if (process.env.NUKA_URL_EXTRACT_HOOK === '1') {
+    hookRegistry.register(
+      'afterToolCall',
+      createUrlExtractHandler(),
+      { id: 'url-extract-annotator' },
+    )
+  }
+  // Iter KKK — opt-in ApplyDiff sandbox. When
+  // NUKA_APPLY_DIFF_ALLOWED_ROOTS is set (comma-separated list of roots,
+  // absolute or relative to cwd), any ApplyDiff call whose target path
+  // escapes the allow-list is vetoed before it touches disk. Unset →
+  // unchanged behaviour (production default). Roots are resolved
+  // against the launch-time cwd so the user's sandbox follows the
+  // session, not the agent's later directory hops.
+  const applyDiffAllowedRoots = process.env.NUKA_APPLY_DIFF_ALLOWED_ROOTS
+  if (applyDiffAllowedRoots && applyDiffAllowedRoots.trim().length > 0) {
+    const roots = applyDiffAllowedRoots
+      .split(',')
+      .map((r) => r.trim())
+      .filter((r) => r.length > 0)
+    if (roots.length > 0) {
+      hookRegistry.register(
+        'beforeToolCall',
+        createApplyDiffPermissionHandler({ allowedRoots: roots, cwd }),
+        { id: 'applyDiff-permission-gate' },
+      )
+    }
+  }
+  // Practical Iter GGG — load any user-defined in-process hook handlers
+  // from default search paths (cwd/.nuka/hooks.config.{js,mjs} and
+  // home/.nuka/hooks.config.{js,mjs}). Missing files are a no-op; only
+  // files that *exist* but fail to load/validate produce a warning.
+  // Mirrors the plugin-loader / cron-rehydrate posture — never blocks boot.
+  for (const hookConfigPath of defaultHookConfigPaths(cwd, os.homedir())) {
+    const cfgResult = await applyHookConfig(hookRegistry, hookConfigPath)
+    if (cfgResult.errors.length > 0) {
+      console.warn(`[nuka:hooks] config errors from ${hookConfigPath}: ${cfgResult.errors.map(e => e.message).join('; ')}`)
+    }
+  }
+  // Practical Iter JJJ — fire sessionStart once the registry is fully
+  // populated (built-in handlers + user config). The active session is
+  // already created above. Resumed sessions report `resumed: true` so
+  // handlers can distinguish a fresh boot from `--resume`.
+  {
+    const startSession = sessions.active()
+    if (startSession) {
+      void fireSessionStart(hookRegistry, {
+        sessionId: startSession.id,
+        providerId: startSession.providerId,
+        model: startSession.model,
+        cwd,
+        resumed: resumeArg !== undefined,
+      })
+    }
+  }
+  // Intercept register() to wrap each Tool exactly once. Keeping the
+  // override local avoids changing ToolRegistry's public surface and
+  // every consumer that constructs its own registry (subagent dispatch,
+  // tests, etc.) opts in independently.
+  //
+  // Iter WWW — opt-in afterToolCall pipeline mode. When
+  // NUKA_HOOK_PIPELINE_MODE=pipeline is set, multi-hook output
+  // transformers (jsonFormat + pathDisplay + auto-truncate, etc.)
+  // CHAIN: each handler's `data.replaceResult` feeds the next handler's
+  // `payload.result`, so the transforms compose into a single output.
+  // Default unset → last-write-wins, identical to Iter III behaviour
+  // (later replaceResult supersedes earlier, no chaining).
+  const hookPipelineMode =
+    process.env.NUKA_HOOK_PIPELINE_MODE === 'pipeline'
+      ? ('pipeline' as const)
+      : ('last-write-wins' as const)
+  const originalRegister = tools.register.bind(tools)
+  tools.register = ((tool) => originalRegister(wrapWithHooks(tool, hookRegistry, { pipelineMode: hookPipelineMode }))) as typeof tools.register
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool, WebFetchTool].forEach(t => tools.register(t as any))
   tools.register(makeTodoWriteTool(todoStore) as any)
   tools.register(makeWebSearchTool(config.search) as any)
+  // Iter GGGG — hoisted scheduler reference so SIGINT / beforeExit can
+  // stop it. Set inside the cron-wiring block below when (and only when)
+  // `NUKA_CRON_SCHEDULER=1` is in the env. Default is OFF so existing
+  // installs see no behaviour change — surprise periodic activity in
+  // production is opt-in.
+  let cronScheduler: CronScheduler | null = null
+  // Iter JJJJ — process-wide cron prompt queue. Always instantiated (the
+  // queue is a cheap object whether or not anything pushes to it), but the
+  // agent loop only drains it when `NUKA_CRON_INJECT_PROMPTS=1` is set.
+  // Hoisted alongside `cronScheduler` so both wiring sites (the scheduler
+  // fire callback below and the `runAgent` deps further down) see the
+  // same instance.
+  const cronPromptQueue = new CronPromptQueue()
+  {
+    // Practical Iter J — rehydrate persisted cron jobs BEFORE we touch the
+    // singleton store (first-caller-wins semantics: `getCronStore({...})`
+    // here decides durability for the process). Missed tasks (scheduled
+    // window in the past while Nuka was down) are surfaced to the user.
+    const cronPath = defaultCronPath(cwd)
+    const cronStore = getCronStore({ persistPath: cronPath })
+    try {
+      const { missed } = await bootCronRehydrate({ store: cronStore, path: cronPath })
+      if (missed.length > 0) {
+        // No structured startup-notice channel exists yet; a future iter
+        // can swap this for a Welcome-banner notice (see EmergencyTip).
+        // The `[nuka:cron]` tag makes the line trivially greppable so the
+        // future surface knows where to pick up.
+        const ids = missed.map((t) => t.id).join(', ')
+        console.warn(`[nuka:cron] ${missed.length} missed task(s) since last run: ${ids}`)
+      }
+    } catch {
+      // Best-effort — never block startup on a cron-file read.
+    }
+    const cronTools = makeCronTools(cronStore)
+    ;[cronTools.create, cronTools.list, cronTools.delete].forEach(t => tools.register(t as any))
+    // Iter GGGG — REPL-side cron tick. Opt-in via `NUKA_CRON_SCHEDULER=1`
+    // so the default boot remains tick-free (matches the cron-tools
+    // posture before this iter — registry only). When enabled, fires
+    // tasks via stderr + the `[nuka:cron]` tag so downstream UIs can
+    // hook in later without touching the scheduler contract.
+    if (process.env.NUKA_CRON_SCHEDULER === '1') {
+      cronScheduler = new CronScheduler({
+        registry: cronStore,
+        fire: async (taskId, task, firedAt) => {
+          // Iter JJJJ — route fires into the agent input queue so a cron
+          // task can actually drive the model. When
+          // `NUKA_CRON_INJECT_PROMPTS=1` is also set, the agent loop
+          // drains this queue at start-of-runAgent. Otherwise the entries
+          // pile up harmlessly and the stderr log below remains the only
+          // visible side effect (matches the Iter GGGG first-pass surface
+          // so existing behaviour with NUKA_CRON_SCHEDULER=1 alone is
+          // preserved).
+          cronPromptQueue.enqueue(taskId, task.prompt, firedAt)
+          // Diagnostic line — kept regardless of injection so the
+          // `[nuka:cron]` tag in stderr remains a stable signal for log
+          // greppers / future TUI banner integration.
+          process.stderr.write(
+            `[nuka:cron] fired ${taskId} (${task.cron}): ${task.prompt}\n`,
+          )
+        },
+      })
+      cronScheduler.start()
+    }
+  }
+  tools.register(EstimateTokensTool as any)
+  tools.register(TokenCountTool as any)
+  {
+    const wt = makeWorktreeTools({ store: getWorktreeStore() })
+    ;[wt.enter, wt.list, wt.exit].forEach(t => tools.register(t as any))
+  }
+  { const so = createStructuredOutputTool({ type: 'object', properties: {} }); if (so.ok) tools.register(so.tool as any) }
+  tools.register(SleepTool as any)
+  tools.register(FormatDurationTool as any)
+  tools.register(JsonFormatTool as any)
+  tools.register(ShellQuoteTool as any)
+  tools.register(CodeBlocksTool as any)
+  tools.register(WrapTextTool as any)
+  tools.register(SlugTool as any)
+  tools.register(TruncateTool as any)
+  tools.register(TextStatsTool as any)
+  tools.register(WhitespaceTool as any)
+  tools.register(CaseConvertTool as any)
+  tools.register(AnsiStyleTool as any)
+  tools.register(UrlExtractTool as any)
+  tools.register(GlobMatchTool as any)
+  tools.register(ApplyDiffTool as any)
+  tools.register(FindReplaceTool as any)
+  {
+    const tt = makeTaskTools(getTaskStore())
+    ;[tt.create, tt.list, tt.get, tt.update].forEach(t => tools.register(t as any))
+  }
+  tools.register(makeToolSearchTool(tools) as any)
+  tools.register(FileSearchTool as any)
+  // Practical Iter JJ — RecentFilesTool wraps the session-scoped MRU
+  // tracker so the agent can inspect/manage recent-file history via
+  // tool-use. The tracker is the same singleton bumped automatically by
+  // the `recentFiles-auto-touch` beforeToolCall hook (Iter FFF), so a
+  // tool-issued `list` reflects every Read/Edit/Write the agent has
+  // done this session.
+  tools.register(makeRecentFilesTool(recentFilesTracker) as any)
+  // Iter YYY/ZZZ — Plan-mode tool. `PlanModeState` is a per-process
+  // singleton (one per CLI invocation, just like `recentFilesTracker`
+  // above) that the three plan-mode tools share.
+  //
+  // Iter ZZZ wired the state to the active session + per-cwd plan
+  // file: the listener below flips `Session.mode` between 'plan' and
+  // 'normal' on enter/exit, which is what `PermissionChecker` already
+  // gates on (Write/Edit/Bash + destructive/openWorld annotations get
+  // blocked when `mode === 'plan'` — see core/permission/checker.ts).
+  // On exit, the plan text is also persisted to the per-cwd file via
+  // `writePlan()` so it survives the process. Persistence errors are
+  // logged but do NOT prevent the session.mode reset — losing the disk
+  // copy is bad, but leaving the user stuck in plan mode is worse.
+  const planModeState = new PlanModeState()
+  planModeState.subscribe(event => {
+    const active = sessions.active()
+    if (!active) {
+      // No active session yet (very early in startup, e.g. before
+      // `sessions.start(...)` ran). The plan-mode tools shouldn't have
+      // been callable yet, but bail safely if it happens.
+      return
+    }
+    if (event.type === 'enter') {
+      active.mode = 'plan'
+      return
+    }
+    if (event.type === 'exit') {
+      active.mode = 'normal'
+      // Fire-and-forget; we don't await inside a sync listener but we
+      // do catch + log so a fs failure doesn't leak as an unhandled
+      // promise rejection.
+      void writePlan(process.cwd(), event.plan).catch(err => {
+        console.error('[plan-mode] failed to persist plan:', err)
+      })
+      return
+    }
+    // event.type === 'reset' — same fall-back-to-normal effect as exit
+    // but without writing the (now-cleared) plan to disk.
+    active.mode = 'normal'
+  })
+  const planModeTools = makePlanModeTools(planModeState)
+  tools.register(planModeTools.enter as any)
+  tools.register(planModeTools.exit as any)
+  tools.register(planModeTools.status as any)
+  // Practical Iter HHH — agent-facing introspection over the same
+  // HookRegistry wired above. Read-only `list` / `count` plus a narrow
+  // `clearByEvent` for debugging; `register` is intentionally NOT
+  // exposed (security: agent could install arbitrary handlers).
+  tools.register(makeHookListTool(hookRegistry) as any)
 
   const slash = new SlashRegistry()
   ;[
@@ -442,6 +832,13 @@ async function runInteractive(): Promise<void> {
   ensureNukaLayout(home)
   try { runRetentionSweep(home) } catch { /* non-fatal */ }
   const taskManager = new TaskManager({ home, bus: eventBus })
+
+  // Practical track iter H — TaskOutput + TaskStop tools wrap the live
+  // TaskManager so the model can read stdout/state and kill background tasks.
+  // (Complements iter G's TaskCreate/List/Get/Update which operate on the
+  //  agent-facing TODO list in src/core/tasks/store.ts.)
+  tools.register(makeTaskOutputTool(taskManager) as any)
+  tools.register(makeTaskStopTool(taskManager) as any)
 
   // Phase 14c §6.5 — autoDream periodic memdir consolidation.
   // Ticks every 30 minutes; all three gates must pass before enqueuing a dream task.
@@ -497,12 +894,13 @@ async function runInteractive(): Promise<void> {
     const pluginConfig = await readUserConfig(os.homedir(), p.manifest.name)
     const result = await wirePlugin(p, {
       tools, slash, skills, hooks, agents, lsp: lspManager,
+      hookRegistry,
       pluginConfig: pluginConfig ?? undefined,
     })
     if (result.errors.length > 0) {
       for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
     }
-    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded} lsp=${result.lspAdded}`)
+    console.error(`[plugin:${p.manifest.name}] tools=${result.toolsAdded} slash=${result.slashAdded} skills=${result.skillsAdded} hooks=${result.hooksAdded} agents=${result.agentsAdded} lsp=${result.lspAdded} inProcessHooks=${result.inProcessHooksAdded}`)
   }
 
   // Register LSP tools when at least one server is configured
@@ -511,6 +909,10 @@ async function runInteractive(): Promise<void> {
     tools.register(makeLspDefinitionTool(lspManager) as any)
     tools.register(makeLspReferencesTool(lspManager) as any)
   }
+  // Iter UUU — LSPQuery (navigation: definition/references/hover/documentSymbols).
+  // Always registered so the schema is stable; when no server is configured
+  // every action returns a friendly `notConfigured: true` payload.
+  tools.register(makeLspQueryTool(lspManager) as any)
 
   // Register skill tool after all skill-loading (including plugin skills) finishes
   tools.register(makeSkillTool(skills) as any)
@@ -591,14 +993,64 @@ async function runInteractive(): Promise<void> {
 
   for (const role of ROLE_AGENTS) agents.register(role)
 
+  // Iter MMM — load loose-file subagent definitions from
+  // cwd/.nuka/subagents and home/.nuka/subagents. Each YAML/JSON file
+  // becomes an `AgentDef`, resolves into a `ResolvedAgentDef`, and
+  // registers under pluginName `project` (cwd-scoped) or `user`
+  // (home-scoped) so the namespaced key matches Nuka's existing
+  // `<pluginName>:<name>` convention. Missing dirs are a no-op;
+  // per-file errors surface via console.warn but never block boot.
+  {
+    const subagentDirs = defaultSubagentDirs(cwd, os.homedir())
+    for (let i = 0; i < subagentDirs.length; i++) {
+      const dirPath = subagentDirs[i]!
+      const pluginName = i === 0 ? 'project' : 'user'
+      const { loaded, errors } = await loadSubagentsFromDir(dirPath)
+      for (const err of errors) {
+        console.warn(`[nuka:subagent] ${err.path}: ${err.message}`)
+      }
+      let registered = 0
+      for (const sub of loaded) {
+        try {
+          // SubagentDefinition → AgentDef shape. `tools` is the alias
+          // the loose-file spec exposes; map to `allowedTools` so the
+          // existing AgentDefSchema accepts it.
+          const agentDef: Parameters<typeof resolveAgentDef>[0] = {
+            name: sub.name,
+            description: sub.description,
+            systemPrompt: sub.systemPrompt,
+            maxTurns: sub.maxTurns ?? 20,
+            ...(sub.tools !== undefined ? { allowedTools: sub.tools } : {}),
+            ...(sub.deniedTools !== undefined ? { deniedTools: sub.deniedTools } : {}),
+            ...(sub.model !== undefined ? { model: sub.model } : {}),
+            ...(sub.maxTokens !== undefined ? { maxTokens: sub.maxTokens } : {}),
+            ...(sub.temperature !== undefined ? { temperature: sub.temperature } : {}),
+            ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
+          }
+          const resolved = await resolveAgentDef(agentDef, dirPath, pluginName)
+          agents.register(resolved)
+          registered++
+        } catch (err) {
+          console.warn(`[nuka:subagent] ${sub.sourcePath}: ${(err as Error).message}`)
+        }
+      }
+      if (loaded.length > 0) {
+        console.error(`[nuka:subagent] ${pluginName} dir ${dirPath} — loaded ${registered}/${loaded.length}`)
+      }
+    }
+  }
+
   // Register the dispatch_agent tool after all plugins have wired their agents
   // (so the tool's description enumerates every <plugin>:<agent> pair).
+  // Iter RRR: thread the hookRegistry through so sub-agents fire their own
+  // lifecycle events under context: 'subagent'.
   tools.register(
     makeDispatchAgentTool({
       agents,
       registry: tools,
       providerResolver: providers,
       permission,
+      hookRegistry,
     }) as any,
   )
 
@@ -611,12 +1063,47 @@ async function runInteractive(): Promise<void> {
     const lspCleanup = lspManager.closeAll().catch(() => {})
     // Phase 7 §5.2 — flush cost tracker on exit. Best-effort.
     const costFlush = writeCostFile(defaultCostPath(), costTracker.snapshot()).catch(() => {})
+    // Practical Iter OOO — flush any pending recent-files write so the
+    // freshest MRU state survives ^C. The helper coalesces writes
+    // internally; flush awaits the in-flight one (if any). Best-effort.
+    const recentFilesFlush =
+      recentFilesPersistent !== null
+        ? recentFilesPersistent.flush().catch(() => {})
+        : Promise.resolve()
     // Phase 7 §5.3 — synth a memory entry from this session's transcript.
     // Hard-bounded by synth's 5s internal timeout; failures are swallowed.
     const memSynth = synthOnExit()
-    Promise.all([lspCleanup, costFlush, memSynth]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    // Practical Iter JJJ — fire sessionEnd alongside the other flush work.
+    // The fire helper has its own 5s timeout so a slow handler can't stall
+    // SIGINT cleanup; failures are absorbed inside fireSessionEnd itself.
+    const endSession = sessions.active()
+    const sessionEndFire = endSession
+      ? fireSessionEnd(hookRegistry, { sessionId: endSession.id, reason: 'sigint' })
+      : Promise.resolve([])
+    // Iter GGGG — stop the cron tick so a fresh setInterval round doesn't
+    // race the exit. Synchronous; safe before / after the async flushes.
+    cronScheduler?.stop()
+    Promise.all([lspCleanup, costFlush, recentFilesFlush, memSynth, sessionEndFire]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
   })
 
+  // Practical Iter OOO — final flush on the soft-exit path. `beforeExit`
+  // fires when the event loop drains naturally (no SIGINT, just nothing
+  // left to do). Mirrors the SIGINT branch but doesn't force-exit.
+  if (recentFilesPersistent !== null) {
+    const persistent = recentFilesPersistent
+    process.on('beforeExit', () => {
+      void persistent.flush().catch(() => {})
+    })
+  }
+
+  // Iter GGGG — defensive belt-and-braces stop on graceful exit. The
+  // scheduler's timer is `unref()`-ed so it shouldn't keep the event loop
+  // alive on its own, but an explicit stop guarantees no in-flight tick
+  // gets stranded once the rest of the system has drained.
+  if (cronScheduler !== null) {
+    const sched = cronScheduler
+    process.on('beforeExit', () => sched.stop())
+  }
   const activeSession = sessions.active()!
   let autoCompact: AutoCompactOpts | undefined
   if (hasProviders && activeSession.providerId) {
@@ -629,6 +1116,35 @@ async function runInteractive(): Promise<void> {
       autoThreshold: config.compact?.autoThreshold ?? 0.8,
       contextWindow: config.compact?.contextWindow ?? 200_000,
     }
+  }
+
+  // Practical Iter NN — awaySummary end-to-end wiring. Composes
+  // createAnthropicCallModel → createRunForkedAgent → adaptToAwaySummaryRunFork
+  // → generateAwaySummary (with per-project session memory inlined). The
+  // resulting runner is bound to the active session's provider; the
+  // AwaySummary tool surfaces it to the agent so /loop wake-ups, harness
+  // "user returned" hooks, or explicit recap requests can issue a recap
+  // without coupling to a singleton model query.
+  let idleHook: { poke: () => void; stop: () => void } | undefined
+  if (hasProviders && activeSession.providerId) {
+    const { provider: awayProvider } = providers.resolveFor(activeSession)
+    const awayRunner = createAwaySummaryRunner({ provider: awayProvider, cwd })
+    tools.register(makeAwaySummaryTool(awayRunner) as any)
+
+    // Practical Iter RR — idleWatcher → awaySummary hook. The watcher
+    // sits dormant until something pokes it from the input edge — Iter
+    // MMMM wires PromptInput's keystroke/submit handler to `poke()`
+    // via App's `idleHook` prop + `useIdlePoke` (see src/tui/hooks).
+    // When a return-after-idle does fire, the hook snapshots the live
+    // transcript and runs the recap; failures are swallowed so a flaky
+    // model never crashes the idle loop. Output currently goes to
+    // stderr — TUI banner integration is a separate iter.
+    idleHook = startIdleAwaySummaryHook({
+      runner: awayRunner,
+      getMessages: () => sessions.active()?.messages ?? [],
+    })
+    const hookForExit = idleHook
+    process.on('exit', () => hookForExit.stop())
   }
 
   // Phase 7 §5.3 — preload memory entries for this cwd. Refreshed on each
@@ -659,9 +1175,11 @@ async function runInteractive(): Promise<void> {
       persist: sessions.persist,
       autoCompact: autoCompact!,
       hooks,
+      hookRegistry,
       lsp: lspManager,
       costTracker,
       effort: config.effort,
+      cronPromptQueue,
     }, signal)
   }
 
@@ -753,6 +1271,8 @@ async function runInteractive(): Promise<void> {
       recent={welcomeRecent}
       harness={harness}
       emergencyTip={getEmergencyTipFromConfig(config)}
+      planModeState={planModeState}
+      idleHook={idleHook}
     />,
     { stdin: makeInkStdin() },
   )
@@ -767,7 +1287,7 @@ async function runInteractive(): Promise<void> {
         const config = await permBridge.promptPluginConfig({ plugin: p, fields })
         if (config !== null) {
           await writeUserConfig(os.homedir(), p.manifest.name, config)
-          const result = await wirePlugin(p, { tools, slash, skills, hooks, agents, pluginConfig: config })
+          const result = await wirePlugin(p, { tools, slash, skills, hooks, agents, hookRegistry, pluginConfig: config })
           if (result.errors.length > 0) {
             for (const e of result.errors) console.warn(`[plugin:${p.manifest.name}] ${e}`)
           }

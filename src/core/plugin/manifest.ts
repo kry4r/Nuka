@@ -49,6 +49,19 @@ export const PluginManifestSchema = z.object({
   /** Relative path to a hooks.json file within the plugin directory */
   hooks: z.string().optional(),
   /**
+   * Relative path to an in-process hook config module (JS/MJS) within the
+   * plugin directory. The module exports an array of
+   * `{ event, handler, id?, priority? }` entries (same shape as
+   * `~/.nuka/hooks.config.js`). Handlers are registered on the shared
+   * `HookRegistry` with IDs prefixed by the plugin name so they can be
+   * inspected and managed independently.
+   *
+   * Sibling to `hooks` (which loads shell-command entries from JSON). This
+   * field loads function-based handlers — the manifest itself is YAML/JSON
+   * so functions must live in a separate module.
+   */
+  inProcessHooks: z.string().optional(),
+  /**
    * Plugin dependencies — other plugins this plugin requires.
    * Resolved at install time via DFS closure.
    */

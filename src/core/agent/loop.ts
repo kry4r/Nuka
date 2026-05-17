@@ -17,10 +17,14 @@ import { activeToolsForMany } from '../skill/activation'
 import { createProgressPump } from './progressPump'
 import type { AutoCompactOpts } from '../compact/auto'
 import { maybeAutoCompact } from '../compact/auto'
+import type { AutoCompactConfig as AutoCompactPureConfig } from './autoCompact'
+import { maybeAutoCompact as maybeAutoCompactPure } from './autoCompact'
 import { validateWithJsonSchema } from '../tools/validate'
 import { serializeContentBlocks } from '../tools/content'
 import type { HookEntry } from '../hooks/types'
 import { runHooks } from '../hooks/runner'
+import type { HookRegistry } from '../hooks/registry'
+import { firePromptSubmit, fireAfterTurn, fireBeforeAutoCompact } from '../hooks/lifecycle'
 import { parallelBatch } from '../tools/concurrency'
 import type { ToolResult } from '../tools/types'
 import { getChannels } from '../notifications/channelRegistry'
@@ -31,6 +35,11 @@ import type { CheckpointLog } from '../rewind/checkpoint'
 import { captureFileSnapshot, filePathsFromToolInput } from '../rewind/checkpoint'
 import type { EventBus } from '../events/bus'
 import { isCoordinatorMode, COORDINATOR_INTERNAL_TOOLS } from './coordinatorMode'
+import {
+  CronPromptQueue,
+  formatCronPrompt,
+  isCronPromptInjectionEnabled,
+} from '../session/cronPromptQueue'
 
 /**
  * Apply coordinator-mode tool filtering.
@@ -44,6 +53,26 @@ export function applyCoordinatorFilter<T extends { name: string }>(tools: T[], s
   return tools.filter(t => COORDINATOR_INTERNAL_TOOLS.has(t.name))
 }
 
+/**
+ * Iter VVV — gate for the pure auto-compact path.
+ *
+ * Pure mode is opt-in via either:
+ *   1. `deps.autoCompactPure.mode === 'pure'` (explicit config), or
+ *   2. `NUKA_AUTOCOMPACT_MODE=pure` in the environment (debugging /
+ *      feature-flagged rollout).
+ *
+ * The legacy session-aware `deps.autoCompact` path is unaffected by this
+ * gate — both paths can coexist in config, but only the pure path is
+ * conditional. When `autoCompactPure` is absent, the gate is always
+ * closed regardless of the env var, preserving backward compatibility.
+ */
+export function isPureAutoCompactEnabled(deps: Pick<RunAgentDeps, 'autoCompactPure'>): boolean {
+  if (!deps.autoCompactPure) return false
+  if (deps.autoCompactPure.mode === 'pure') return true
+  if (process.env['NUKA_AUTOCOMPACT_MODE'] === 'pure') return true
+  return false
+}
+
 export type RunAgentDeps = {
   provider: ProviderResolver
   tools: ToolRegistry
@@ -52,7 +81,37 @@ export type RunAgentDeps = {
   skills?: Skill[]
   persist?: (session: Session, msg: Message) => void
   autoCompact?: AutoCompactOpts
+  /**
+   * Iter VVV — opt-in pure-orchestrator auto-compact path. Sibling to
+   * `autoCompact` (the legacy session-aware path). When provided AND
+   * pure-mode is enabled, the loop calls `maybeAutoCompactPure` after the
+   * legacy path on turn-end and swaps `session.messages` if the
+   * orchestrator returns a compacted transcript.
+   *
+   * Pure-mode is enabled when either:
+   *   - this `autoCompactPure` field is set, AND
+   *   - `mode === 'pure'` (default 'session', which is a no-op for this
+   *     new path) OR `NUKA_AUTOCOMPACT_MODE=pure` is set in the environment.
+   *
+   * The pure path is fully additive: the legacy `autoCompact` path runs
+   * unchanged when configured, and the new path is only consulted when
+   * explicitly opted into. The two are intentionally independent — pick
+   * one or the other depending on whether you want the provider-driven
+   * summary (legacy) or the deterministic structural fold (pure).
+   */
+  autoCompactPure?: {
+    mode?: 'session' | 'pure'
+    config: AutoCompactPureConfig
+  }
   hooks?: HookEntry[]
+  /**
+   * Practical Iter JJJ — in-process HookRegistry. When provided, the agent
+   * loop fires the broader lifecycle events (`promptSubmit`, `afterTurn`,
+   * `beforeAutoCompact`) on it. The shell-hook variant in `hooks` is
+   * unchanged; the two systems fire side-by-side so existing config-driven
+   * hooks keep working while in-process handlers can do their own thing.
+   */
+  hookRegistry?: HookRegistry
   /** Optional LSP manager for didChange notifications after Write/Edit. */
   lsp?: LspManager
   /**
@@ -80,6 +139,26 @@ export type RunAgentDeps = {
   bus?: EventBus
   /** Reasoning effort hint forwarded to provider.stream() each turn. */
   effort?: 'low' | 'medium' | 'high'
+  /**
+   * Practical Iter JJJJ — process-wide cron prompt queue. When provided
+   * AND `NUKA_CRON_INJECT_PROMPTS=1` is in the environment, the loop
+   * drains the queue at the start of each `runAgent` call and synthesises
+   * a user message for every pending cron fire. The prompts land BEFORE
+   * the user's `input.text` so the model sees the cron context first,
+   * then the user's actual prompt.
+   *
+   * Drain semantics: at start-of-runAgent only. A cron fire that lands
+   * mid-turn waits for the current turn to complete; the next `runAgent`
+   * call picks it up. We never inject into a running turn, which keeps
+   * the existing provider/tool plumbing untouched.
+   *
+   * Skill matching and `promptSubmit` hooks fire on the user's input
+   * text only (cron prompts are NOT user-typed and don't trigger skills
+   * or hooks). The synthesised cron messages are plain `makeUserMessage`
+   * entries prefixed with `[CRON ${taskId}]` so any transcript dump can
+   * distinguish them without a new message role.
+   */
+  cronPromptQueue?: CronPromptQueue
 }
 
 /**
@@ -215,6 +294,43 @@ export async function* runAgent(
   for (const skill of matchedSkills) {
     appendMessage(session, makeSystemMessage(`[Skill: ${skill.name}]\n\n${skill.body}`), deps.persist)
   }
+  // Practical Iter JJJ — fire promptSubmit BEFORE the user message lands on
+  // the transcript so handlers can observe the raw input. We don't await
+  // mutations yet; future iters may inline `additionalContext` here.
+  if (deps.hookRegistry) {
+    await firePromptSubmit(
+      deps.hookRegistry,
+      { sessionId: session.id, text: input.text },
+      { signal },
+    )
+  }
+  // Practical Iter JJJJ — drain any pending cron fires BEFORE the user's
+  // input lands on the transcript. The cron prompts become synthetic user
+  // messages prefixed with `[CRON ${taskId}]` so the model sees them as
+  // context before the user's actual input.
+  //
+  // Opt-in via `NUKA_CRON_INJECT_PROMPTS=1`: when off, the queue is
+  // untouched (cron fires still log to stderr but never reach the model).
+  // When on, drain is unconditional regardless of queue size — an empty
+  // queue is a cheap no-op, and draining ONLY when non-empty would force
+  // every caller to peek first.
+  //
+  // The drain order matches enqueue order (FIFO), so multiple fires in
+  // the same tick land in the transcript in the order the scheduler
+  // saw them. Skills and the `promptSubmit` hook fire on the user's
+  // input only — cron prompts are not user-typed and intentionally do
+  // not trigger skill activation, hook handlers, or `unDeferredToolNames`
+  // bookkeeping (those concerns belong to the user's prompt).
+  if (deps.cronPromptQueue && isCronPromptInjectionEnabled()) {
+    const cronEntries = deps.cronPromptQueue.drain()
+    for (const entry of cronEntries) {
+      appendMessage(
+        session,
+        makeUserMessage({ text: formatCronPrompt(entry) }),
+        deps.persist,
+      )
+    }
+  }
   appendMessage(session, makeUserMessage(input), deps.persist)
 
   // M2.9: Un-defer tools whose searchHint keywords appear in the first user message.
@@ -301,20 +417,79 @@ export async function* runAgent(
       })
       // afterTurn hook — non-cancelable, swallow failures
       if (deps.hooks && deps.hooks.length > 0) {
-        await runHooks(deps.hooks, 'afterTurn', { event: 'afterTurn', stopReason: assistant.stopReason ?? 'end_turn' })
+        await runHooks(deps.hooks, 'afterTurn', { event: 'afterTurn', stopReason: assistant.stopReason ?? 'end_turn' }, { registry: deps.hookRegistry })
+      }
+      if (deps.hookRegistry) {
+        await fireAfterTurn(
+          deps.hookRegistry,
+          {
+            sessionId: session.id,
+            stopReason: assistant.stopReason ?? 'end_turn',
+            toolCalls: 0,
+          },
+          { signal },
+        )
       }
       if (deps.autoCompact) {
         // beforeAutoCompact hook — veto cancels compaction
         let skipCompact = false
         if (deps.hooks && deps.hooks.length > 0) {
           const beforeTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
-          const veto = await runHooks(deps.hooks, 'beforeAutoCompact', { event: 'beforeAutoCompact', tokensBefore: beforeTokens })
+          const veto = await runHooks(deps.hooks, 'beforeAutoCompact', { event: 'beforeAutoCompact', tokensBefore: beforeTokens }, { registry: deps.hookRegistry })
           if (veto.cancel) skipCompact = true
+        }
+        if (!skipCompact && deps.hookRegistry) {
+          const beforeTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
+          const veto = await fireBeforeAutoCompact(
+            deps.hookRegistry,
+            {
+              sessionId: session.id,
+              tokensBefore: beforeTokens,
+              threshold: deps.autoCompact.autoThreshold,
+              contextWindow: deps.autoCompact.contextWindow,
+            },
+            { signal },
+          )
+          if (veto.skipped) skipCompact = true
         }
         if (!skipCompact) {
           const result = await maybeAutoCompact(session, deps.autoCompact)
           if (result.compacted) {
             yield { type: 'auto_compacted', before: result.before, after: result.after }
+          }
+        }
+      }
+      // Iter VVV — pure-orchestrator path. Sibling to the legacy
+      // session-aware compaction above. Runs only when explicitly opted
+      // into via `deps.autoCompactPure` AND either `mode === 'pure'` is set
+      // or `NUKA_AUTOCOMPACT_MODE=pure` is in the environment. Otherwise
+      // this block is inert (backward-compat for the legacy session path).
+      //
+      // The orchestrator handles its own threshold gate, hook veto, and
+      // signal abort — we just thread the registry/signal through and
+      // swap the transcript in place when it actually compacts. The
+      // `hookRegistry` here is the SAME one used by the legacy path's
+      // `fireBeforeAutoCompact` call above, so a single user handler
+      // covers both code paths (deduplication is the consumer's problem
+      // since both modes are opt-in and never run simultaneously in
+      // production).
+      if (isPureAutoCompactEnabled(deps)) {
+        const pure = deps.autoCompactPure!
+        const result = await maybeAutoCompactPure(
+          session.messages,
+          { ...pure.config, sessionId: pure.config.sessionId ?? session.id },
+          { hookRegistry: deps.hookRegistry, signal },
+        )
+        if (result.compacted) {
+          // Swap the transcript in place. `appendMessage` replaces the
+          // array reference on every append, so reassigning here keeps
+          // React/Ink consumers consistent with the rest of the loop.
+          session.messages = result.messages
+          session.updatedAt = Date.now()
+          yield {
+            type: 'auto_compacted',
+            before: result.before.estimatedTokens,
+            after: result.after.estimatedTokens,
           }
         }
       }
@@ -352,7 +527,7 @@ export async function* runAgent(
         let hookVetoed = false
         let hookVetoReason: string | undefined
         if (deps.hooks && deps.hooks.length > 0) {
-          const veto = await runHooks(deps.hooks, 'beforeToolCall', { event: 'beforeToolCall', tool: call.name, input: call.input }, { tool: call.name })
+          const veto = await runHooks(deps.hooks, 'beforeToolCall', { event: 'beforeToolCall', tool: call.name, input: call.input }, { tool: call.name, registry: deps.hookRegistry })
           if (veto.cancel) {
             hookVetoed = true
             hookVetoReason = veto.reason
@@ -491,7 +666,7 @@ export async function* runAgent(
 
         // afterToolCall hook (serial, in input order)
         if (slot.kind === 'approved' && deps.hooks && deps.hooks.length > 0) {
-          await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: outcome.result.isError }, { tool: call.name })
+          await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: outcome.result.isError }, { tool: call.name, registry: deps.hookRegistry })
         }
 
         // LSP didChange notification after Write/Edit (non-blocking)
@@ -526,7 +701,7 @@ export async function* runAgent(
         let hookVetoed = false
         let hookVetoReason: string | undefined
         if (deps.hooks && deps.hooks.length > 0) {
-          const veto = await runHooks(deps.hooks, 'beforeToolCall', { event: 'beforeToolCall', tool: call.name, input: call.input }, { tool: call.name })
+          const veto = await runHooks(deps.hooks, 'beforeToolCall', { event: 'beforeToolCall', tool: call.name, input: call.input }, { tool: call.name, registry: deps.hookRegistry })
           if (veto.cancel) {
             hookVetoed = true
             hookVetoReason = veto.reason
@@ -606,7 +781,7 @@ export async function* runAgent(
         })
         // afterToolCall hook — non-cancelable, swallow failures
         if (deps.hooks && deps.hooks.length > 0) {
-          await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: result.isError }, { tool: call.name })
+          await runHooks(deps.hooks, 'afterToolCall', { event: 'afterToolCall', tool: call.name, input: call.input, output: outputStr, isError: result.isError }, { tool: call.name, registry: deps.hookRegistry })
         }
 
         // LSP didChange notification after Write/Edit (non-blocking)

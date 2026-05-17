@@ -33,6 +33,12 @@ export class PermissionChecker {
     // Plan-mode gate runs BEFORE cache/hint shortcuts so that a previously
     // remembered "allow write" rule cannot bypass the plan. Read-only tools
     // are unaffected regardless of mode.
+    //
+    // Iter LLLL — the `'ask'` hint is a pure confirmation gate (no side-effect
+    // category). Plan-mode is about side effects, so a tool whose only
+    // permission classification is `'ask'` must NOT be blocked here. The
+    // plan-mode block applies only to hard write/exec tools or annotated
+    // destructive/openWorld surfaces.
     if (call.mode === 'plan') {
       const ann = call.annotations
       const blocked =
@@ -45,6 +51,11 @@ export class PermissionChecker {
     }
 
     if (call.hint === 'none') return { allowed: true }
+    // Iter LLLL — `'bypass'` mode trusts the session fully and skips
+    // confirmation prompts for the `'ask'` hint. Other hints still go
+    // through their normal cache/askUser path (bypass for write/exec is
+    // handled by the same prompt flow, not auto-allowed here).
+    if (call.mode === 'bypass' && call.hint === 'ask') return { allowed: true }
     if (this.getCache().isAllowed(call)) return { allowed: true }
     const payload: PermissionPayload = {
       call,

@@ -21,15 +21,15 @@ export const ROLE_AGENTS: ResolvedAgentDef[] = [
     name: 'core:researcher',
     pluginName: 'core',
     description: 'Searches codebase + docs; never writes.',
-    systemPrompt: 'You are a researcher. Use Read/Grep/Glob/WebFetch to gather context. Summarize findings with citations (file:line).',
-    allowedTools: ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch'],
+    systemPrompt: 'You are a researcher. Use Read/Grep/Glob/WebFetch to gather context. Summarize findings with citations (file:line). Prefer LSPQuery (definition/references/hover/workspaceSymbol/implementation/callHierarchy/documentSymbols) over grep for symbol-level questions; fall back to Grep on {notConfigured:true}.',
+    allowedTools: ['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'LSPQuery'],
     maxTurns: 12,
   },
   {
     name: 'core:implementer',
     pluginName: 'core',
     description: 'Executes the plan; full tool access.',
-    systemPrompt: 'You are an implementer. Execute the given plan step by step. Run tests as you go.',
+    systemPrompt: 'You are an implementer. Execute the given plan step by step. Run tests as you go. For symbol navigation (definitions/references/impls) prefer LSPQuery over grep; fall back to Grep if LSPQuery returns {notConfigured:true}.',
     maxTurns: 30,
   },
   {
