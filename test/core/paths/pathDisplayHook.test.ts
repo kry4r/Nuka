@@ -372,7 +372,14 @@ describe('createPathDisplayHandler — end-to-end via wrapWithHooks', () => {
         isError: false,
       }),
     })
-    const wrapped = wrapWithHooks(tool, registry)
+    // Iter WWW pipeline-default flip — this test asserts the legacy
+    // last-write-wins shape (no chaining; each hook reads
+    // `payload.result` directly). Now that the wrapper default is
+    // `'pipeline'`, the legacy behaviour has to be opted into
+    // explicitly.
+    const wrapped = wrapWithHooks(tool, registry, {
+      pipelineMode: 'last-write-wins',
+    })
     const result = await wrapped.run({}, makeCtx())
     // Both hooks ran; the LAST one wins. The path-display hook's rewrite
     // was overwritten by the uppercase hook (which read the original

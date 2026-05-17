@@ -1,6 +1,8 @@
 import { alwaysOnSkills } from '../skill/activator'
 import type { Skill } from '../skill/types'
 import type { MemoryEntry } from '../memdir/parser'
+import type { OutputStyle } from '../outputStyles/types'
+import { applyOutputStyle } from '../outputStyles/resolve'
 
 export type SystemPromptInput = {
   cwd: string
@@ -22,6 +24,16 @@ export type SystemPromptInput = {
    * treated as "no plan" and the section is omitted.
    */
   plan?: { active: boolean; body: string }
+  /**
+   * User-defined output style resolved upstream from
+   * `.nuka/output-styles/*.md`. When present, the prompt is post-
+   * processed by {@link applyOutputStyle}: appended under a
+   * `## Output Style` header when `keepCodingInstructions` is true /
+   * unset, or replacing the assembled base entirely when it is false.
+   * Caller passes `null` (or omits the field) to skip merging — the
+   * prompt then matches the pre-output-styles behaviour byte-for-byte.
+   */
+  outputStyle?: OutputStyle | null
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
@@ -67,5 +79,9 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     lines.push('', '## Plan', '', input.plan.body.trimEnd())
   }
 
-  return lines.join('\n')
+  const assembled = lines.join('\n')
+  if (input.outputStyle) {
+    return applyOutputStyle(assembled, input.outputStyle)
+  }
+  return assembled
 }

@@ -29,9 +29,10 @@
 //      output that the small model would just have to discard.
 //
 //   4. The recap output is hard-capped at 400 characters after trimming.
-//      Upstream returns whatever the model produces; we mirror Nuka's
-//      existing `src/core/recap/awaySummary.ts` cap so consumers don't
-//      need a second guard.
+//      Upstream returns whatever the model produces; we hard-cap so
+//      consumers don't need a second guard. (Earlier Phase 14c port
+//      `src/core/recap/awaySummary.ts` shared this cap and has since
+//      been merged into this file — see docs/plans/2026-05-17… P1 #7.)
 //
 // IMPORTANT: this module does NOT wire into the live REPL or notification
 // pipeline. The caller decides when to invoke it (idle-watcher, returning

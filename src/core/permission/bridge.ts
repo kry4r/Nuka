@@ -4,11 +4,32 @@ import type { LoadedPlugin, PluginUserConfigField } from '../plugin/manifest'
 
 export type AnnotationBadge = 'read-only' | 'destructive' | 'network'
 
+/**
+ * UX variant the permission dialog should render in.
+ *
+ * - `'default'` (or absent) — generic per-tool confirmation prompt.
+ * - `'planMode'` — special "meta operation" prompt shown when the agent
+ *   asks to enter plan mode (`EnterPlanMode` tool, `hint: 'ask'`). The
+ *   dialog swaps title / subtitle / button text so the user understands
+ *   the consequence (session becomes read-only, writes/exec are gated).
+ *
+ * P1 #8 — added so the checker can hint the UI without coupling the
+ * UI to specific tool names. New variants can be added by extending the
+ * union; consumers must treat unknown variants as `'default'`.
+ */
+export type PermissionVariant = 'default' | 'planMode'
+
 export type PermissionPayload = {
   call: PermissionCall
   suggestedPattern?: string
   /** Badges derived from the tool's annotations, shown in the permission UI. */
   annotationBadges?: AnnotationBadge[]
+  /**
+   * Optional UX variant — lets the checker request a bespoke dialog look
+   * for "meta" operations (currently only `EnterPlanMode`). Absent means
+   * default per-tool prompt.
+   */
+  variant?: PermissionVariant
 }
 
 export type PermissionHandler = (

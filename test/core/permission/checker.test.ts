@@ -318,4 +318,66 @@ describe('PermissionChecker', () => {
       expect(cache.list()[0]).toEqual({ scope: 'session', hint: 'ask' })
     })
   })
+
+  // ── P1 #8 — variant hint for the planMode dialog UX ──────────────────
+  describe('variant derivation', () => {
+    it('marks EnterPlanMode + ask as variant=planMode', async () => {
+      let captured: PermissionPayload | undefined
+      const ask = vi.fn(async (payload: PermissionPayload) => {
+        captured = payload
+        return { allowed: true }
+      })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(captured?.variant).toBe('planMode')
+    })
+
+    it('omits variant for generic ask-hint tools', async () => {
+      let captured: PermissionPayload | undefined
+      const ask = vi.fn(async (payload: PermissionPayload) => {
+        captured = payload
+        return { allowed: true }
+      })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      await checker.check({
+        toolName: 'SomeOtherConfirmTool',
+        hint: 'ask',
+        input: {},
+      })
+      expect(captured?.variant).toBeUndefined()
+    })
+
+    it('omits variant for ordinary write-hint tools', async () => {
+      let captured: PermissionPayload | undefined
+      const ask = vi.fn(async (payload: PermissionPayload) => {
+        captured = payload
+        return { allowed: true }
+      })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask)
+      await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'a' },
+      })
+      expect(captured?.variant).toBeUndefined()
+    })
+
+    it('does not invoke askUser (and therefore no variant) when cached', async () => {
+      const cache = new PermissionCache()
+      cache.add({ scope: 'session', hint: 'ask' })
+      const ask = vi.fn()
+      const checker = new PermissionChecker(() => cache, ask)
+      const d = await checker.check({
+        toolName: 'EnterPlanMode',
+        hint: 'ask',
+        input: {},
+      })
+      expect(d.allowed).toBe(true)
+      expect(ask).not.toHaveBeenCalled()
+    })
+  })
 })

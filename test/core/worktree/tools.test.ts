@@ -72,6 +72,27 @@ describe('EnterWorktree tool', () => {
     ])
   })
 
+  it('marks the new worktree as active so subsequent tools see the override (P1 #6)', async () => {
+    const store = createWorktreeStore()
+    const { runner } = makeRunner({})
+    const tool = makeEnterWorktreeTool({ store, gitRunner: runner })
+    expect(store.getActive()).toBeUndefined()
+    const r = await tool.run({ name: 'feat-a' }, ctx())
+    expect(r.isError).toBe(false)
+    const active = store.getActive()
+    expect(active?.path).toBe('/repo/.nuka/worktrees/feat-a')
+    expect(active?.branch).toBe('feat-a')
+  })
+
+  it('does NOT set active when the git command fails (P1 #6)', async () => {
+    const store = createWorktreeStore()
+    const { runner } = makeRunner({ addOk: false, addStderr: 'branch exists' })
+    const tool = makeEnterWorktreeTool({ store, gitRunner: runner })
+    const r = await tool.run({ name: 'dupe' }, ctx())
+    expect(r.isError).toBe(true)
+    expect(store.getActive()).toBeUndefined()
+  })
+
   it('rejects invalid slugs without touching git', async () => {
     const store = createWorktreeStore()
     const { runner, calls } = makeRunner({})
@@ -302,6 +323,22 @@ describe('ExitWorktree tool', () => {
     expect(r.isError).toBe(true)
     expect(r.output).toContain('deadbeef')
     expect(r.output).toContain('only operates on worktrees created via EnterWorktree')
+  })
+
+  it('clears the active pointer when removing the active worktree (P1 #6)', async () => {
+    const store = createWorktreeStore()
+    const rec = store.add({
+      path: '/repo/.nuka/worktrees/x',
+      branch: 'x',
+      originalCwd: '/repo',
+    })
+    store.setActive(rec.id)
+    expect(store.getActive()?.id).toBe(rec.id)
+    const { runner } = makeRunner({})
+    const tool = makeExitWorktreeTool({ store, gitRunner: runner })
+    const r = await tool.run({ id: rec.id }, ctx('/repo/.nuka/worktrees/x'))
+    expect(r.isError).toBe(false)
+    expect(store.getActive()).toBeUndefined()
   })
 
   it('keeps the record on git failure so retry with force is possible', async () => {

@@ -203,36 +203,61 @@
 
 ## 10. Deferred follow-ups（优先级排序）
 
+> 截至 2026-05-17 第 11+12 轮 /loop（A 方案 5 项 + 7 项扩展 + 9/10/11 移植）后状态。
+> 已废弃项归集到 [Section 10.5](#105-已废弃-mcp-相关)。
+
 ### P0 — 立即可做（独立、低风险）
 
-1. **WWW pipeline mode 转默认** — 7 个 handler 都成熟，pipeline 让它们能组合（如 `jsonFormat → pathDisplay → wordWrap → urlExtract`）；当前是 env opt-in
-2. **whitespace.normalize() 接 model output 后处理** — 类似 BBBB/LLL，但作用在 assistant 消息而非 tool 输出（需要新 event type 或新 hook 点）
-3. **Plugin hooks 文档** — KKKK 加了 `inProcessHooks:` field 但没 example/README
+1. ~~**WWW pipeline mode 转默认**~~ — **DONE (Turn 11)**: `afterToolCall` 默认翻为 pipeline，`NUKA_HOOK_PIPELINE_MODE=last-write-wins` 是新的 opt-out 路径，legacy 路径作为加性保留
+2. ~~**whitespace.normalize() 接 model output 后处理**~~ — **DONE (Turn 11, observer-only)**: 新增 lifecycle event `afterAssistantMessage`，whitespace handler 通过 `data.whitespaceNormalize` 暴露 normalize 结果。mutable replaceText 升级在 Turn 13 in-progress
+3. ~~**Plugin hooks 文档**~~ — **DONE (Turn 11)**: `docs/plugin-hooks.md` + `examples/plugins/hello-hook/`（plugin.yaml + hooks/index.mjs + README），E2E smoke test 验证 `inProcessHooks:` 注册路径
 
 ### P1 — 中等复杂度（需要 discovery）
 
-4. **prompt-mentions PromptInput 集成** — `src/promptContextReferences/` + `src/tui/promptMentions/` scaffold 已存在，缺主流程集成（Turn 11 第一次尝试被 503 中断）
-5. **MCP listing tool** — 需要先 discovery Nuka 现有 MCP infra（系统里能看到 MCP servers 在跑，所以 plugin 加载 MCP servers 的机制存在）
-6. **Worktree cwdOverride wiring** — agent loop 内 cwd 切换
-7. **merge legacy awaySummary stub** — `src/core/recap/awaySummary.ts` (legacy) 和 `src/core/awaySummary/summary.ts` (新) 共存
-8. **Cron rehydrate console.warn → Welcome banner** — 启动时错过 task 用 banner 提示
-9. **EnterPlanMode behavior:'ask' UX polish** — LLLL 已用 PermissionHint='ask'，但 askUser 文案/UI 可以专门 plan-mode 优化
+4. ~~**prompt-mentions PromptInput 集成**~~ — **DONE (Turn 11+13)**: `usePromptMention` hook + `<MentionPalette>` 取代 legacy `MentionPanel`，`@` start-of-value/whitespace 后触发，键位 ↑/↓/←/→/Tab/Enter/Esc。Turn 13 follow-up: non-file kinds (diff/staged/git/commit/url) 在 submit 时经 `inlineReferencesIntoText` → `resolvePromptDraft` 真接 `promptContextReferences/resolver`；image kind 暂留 placeholder 行（provider transport 待 follow-up）。legacy `src/tui/PromptInput/MentionPanel.tsx` + `test/tui/mentionPanel.test.tsx` 物理删除
+5. ~~**MCP listing tool**~~ — **已废弃** — 见 Section 10.5
+6. ~~**Worktree cwdOverride wiring**~~ — **DONE (Turn 12)**: `resolveToolCwd` helper 覆盖 loop.ts (并行 + 串行) + dispatch.ts (subagent tool exec + sessionStart) 4 个 callsite，subagent 默认继承 main worktree state
+7. ~~**merge legacy awaySummary stub**~~ — **DONE (Turn 12, 决策 B)**: legacy `src/core/recap/awaySummary.ts` 已删（0 production caller），覆盖由 `test/core/awaySummary/summary.test.ts` 13 cases 接管
+8. ~~**Cron rehydrate console.warn → Welcome banner**~~ — **DONE (Turn 12 + Turn 13)**: Turn 12 桥决策 A/B 均不适用——`bootCronRehydrate` 在 cli.tsx 是 `await` 早于 `render(<App>)`，`missed` 直接作 prop 传入。Turn 13 移到 `src/tui/Status/CronMissedBanner.tsx` 持久化（BOTTOM 槽 `AwaySummaryCard` 上方，gate 同 `!submenuInline && promptVisible`），dismiss 策略 `session.messages.length > 0` 自动隐藏
+9. ~~**EnterPlanMode behavior:'ask' UX polish**~~ — **DONE (Turn 12)**: `PermissionPayload.variant?: 'default' | 'planMode'` 新字段，专属 dialog 分支（warn 橙 `[PLAN MODE]` 头 + read-only 副标题 + 去除 session-scope remember 防静默自动进入）
 
 ### P2 — 较大改造（建议先评估）
 
-10. **MCP server live enumeration** — P1 #5 列表工具的下一步，需要真正接 client
+10. ~~**MCP server live enumeration**~~ — **已废弃** — 见 Section 10.5
 11. **Background task path lifecycle wiring** — `tasks/run-agent.ts` 当前是 content-agnostic sink，无 production caller；有 caller 之后需要 fire lifecycle
 12. **bundle-size 优化** — 长期超 440KB ceiling（基线 fail），需要 lazy register / tree-shake
+
+### P3 — Turn 11+12 完成后新生 follow-ups
+
+13. ~~**OutputStyles caller wiring**~~ — **DONE (Turn 13)**: `src/core/outputStyles/resolve.ts` 3 pure helpers，优先级 `NUKA_OUTPUT_STYLE` env > `config.outputStyle` > unset；APPEND 加 `## Output Style` header / REPLACE 替换 / empty body collapse；merge 在 `buildSystemPrompt` 最后（保留 IIII LSP recommendation 不变）；main loop + dispatch 两路 thread；`dispatchTool.ts` 用 resolver closure 支持 mid-session env 变化
+14. **memdir team memory port (`teamMemPaths.ts` + `teamMemPrompts.ts`)** — Turn 12 显式跳过（架构不兼容，Nuka memdir 是 per-cwd hashed 路径，无 team subdir 概念，需先有 team memory 设计才能 port）
+15. **SkillsLoader bundled 17 个具体 skills** — Turn 12 仅 port registry pattern；具体 skills body 依赖 Nuka-Code 私有 Tool/Cron/Kairos surface，需逐个评估迁移
+16. ~~**promptContextReferences resolver wiring**~~ — **DONE (Turn 13)**: 新增 `src/promptContextReferences/inlineReferences.ts` 纯 helper（synthetic PromptDraft → `resolvePromptDraft` → 文本块拼接），App.tsx `handleSubmit` 调用，`AppProps.resolverDeps?` 注入测试 stub；image kind 行为留为 placeholder 行（[image: …] (resolution deferred)），新 follow-up #19 跟踪 provider image transport
+17. ~~**Mention vim + 组合单测**（Turn 11 留 follow-up）~~ — **DONE (Turn 14)**: `test/tui/PromptInput.vimMention.test.tsx` 三 case 覆盖 vim insert + `@` 打开 palette / Esc dismiss 保留 vim mode (palette 关、`@a` 保留、vim state 未破坏) / Enter accept 后 vim resync 到新 value（后续 keystroke 正确 append 在引用之后）。**伴随 bug fix**：测试暴露 vim insert 路径不同步 `cursorOffset`，导致 mention trigger 检测看到空 prefix → palette 永不打开；`applyVimKey` 加上 `setCursorOffset(flat)` 同步
+18. **PromptMentions image provider transport**（Turn 13 新生）— image kind 目前 inline 为 `[image: …] (resolution deferred)` 占位行，真正接 provider message payload 的 `imageArtifacts` 通道留后续 iteration
+
+### 10.5 已废弃 — MCP 相关
+
+Nuka 主打不支持 MCP（per user feedback 2026-05-17，user 明确要求遇到 MCP 相关功能"想想怎么干掉或替换"）。以下条目作废：
+
+- ~~P1 #5 MCP listing tool~~
+- ~~P2 #10 MCP server live enumeration~~
+
+Turn 11 已扫荡现存残留：`promptContextReferences/types.ts` `'mcp_resource'` kind / `toolSearch/tool.ts` `isMcp` boost + `mcp__` 前缀路径 / `toolSummary/summary.ts` 注释中性化 / `plugin/install/bundle.ts` `.mcpb`+`.dxt` bundle 整文件删（决策 B：零 caller，是死代码）。代码层面 grep `mcp` 仅剩**审计注释**说明"不要 MCP 的原因"。
 
 ---
 
 ## 11. 已知 trade-off / 设计妥协
 
 1. **`compact/auto.ts`（session-aware legacy）和 `agent/autoCompact.ts`（pure VVV）共存** — pure path 是 `NUKA_AUTOCOMPACT_MODE=pure` opt-in，没替代 legacy。两条 path 互相加性，长期应统一
-2. **afterToolCall pipeline 是 opt-in，默认 last-write-wins** — 见 P0 #1
+2. ~~**afterToolCall pipeline 是 opt-in，默认 last-write-wins**~~ — **已翻转 (Turn 11)**: pipeline 是新默认，`NUKA_HOOK_PIPELINE_MODE=last-write-wins` 是 opt-out
 3. **`tasks/run-agent.ts` 不 fire lifecycle** — RRR 发现该 path 是 content-agnostic 不持有 provider/session，无 production caller 之前不修
 4. **Cron `lastFiredAt` 内存追踪后再 persist** — HHHH 落地了持久化，但 scheduler 还是先内存再写盘；非问题但值得记录
 5. **`replaceResult` 接受 sibling 字段（如 EEEE 的 `urls`）** — `isToolResult` 守卫只检查 `output`/`isError`，extra fields 结构式 passthrough。下游 consumer 自己判断是否消费 sibling
+6. ~~**`afterAssistantMessage` 是 observer-only**~~ — **Turn 13 已升级 mutable**: fire-site 移到 pre-`appendMessage`，新 `extractReplaceText` (last-write-wins) + `applyReplaceTextToAssistant` (text blocks 替换为 single block，tool_use 保序)；空字符串视为有效 rewrite，非 string 忽略
+7. ~~**CronMissed banner 当前在 Welcome**~~ — **Turn 13 已移到 `src/tui/Status/CronMissedBanner.tsx`**，BOTTOM 槽持久化；**Turn 14 EmergencyTip 同步移到 `src/tui/Status/EmergencyTipBanner.tsx`**（同 `<Static>` 滚走 bug，保留 tri-color: warn / error / dim 边框 + 文本）
+8. ~~**OutputStyles loader 无 caller**~~ — **Turn 13 已接 system prompt assembly**（见 Section 10 P3 #13）
+9. **SkillsLoader bundled 子目录空**（Turn 12 落地）— 仅 port `register/get/clear` pattern，Nuka-Code 的 17 个具体 skills 依赖私有 surface，逐个迁移代价大
 
 ---
 
@@ -276,3 +301,49 @@
 ---
 
 *本文档由 `/loop` 主线生成，描述 10 轮自主演化的累计状态。Active memory 文件：`harness-three-axis-refactor-state.md`、`nuka-feature-port-from-nuka-code.md`、`feedback_implementation_via_subagent.md`、`feedback_skip_voice_remote_prefer_practical.md`、`feedback_nuka_loop_no_delay_between_iters.md`。*
+
+---
+
+## 16. Turn 11+12+13 已落地清单（2026-05-17 增补）
+
+### Turn 11（A 方案 5 项 — 5 subagent 并行）
+
+- **PipelineDefault**: `afterToolCall` 默认翻为 pipeline + 测试更新 + 新 regression 锁默认
+- **WhitespaceAssistant**: 新 lifecycle event `afterAssistantMessage`（observer-only）+ whitespace handler `NUKA_WHITESPACE_HOOK=1` opt-in
+- **PluginHooksDocs**: `docs/plugin-hooks.md` + `examples/plugins/hello-hook/` E2E smoke 验证
+- **PromptMentions**: PromptInput 替换 legacy `MentionPanel` 为 `usePromptMention` + `MentionPalette`，`@` trigger，键位完整
+- **MCPCleanup**: 4 文件清残留 + `plugin/install/bundle.ts` 整文件删（决策 B：零 caller）
+
+### Turn 12（P1 剩余 4 项 + 9/10/11 三块 — 7 subagent 并行）
+
+- **CronBanner**: cron rehydrate `console.warn` → Welcome banner（rehydrate 已 `await`，无需 deferred flush）
+- **WorktreeCwd**: 4 个 cwd resolution 点统一走 `resolveToolCwd` 助手，subagent 默认继承
+- **AwaySummaryMerge**: 删 legacy `recap/awaySummary.ts`（决策 B：0 生产 caller）
+- **PlanModeUX**: `PermissionPayload.variant?: 'planMode'` 字段 + 专属 dialog 分支
+- **MemdirEnhance**: port `memoryAge.ts` / `memoryScan.ts` / `findRelevantMemories.ts` + slim `memoryTypes.ts`；`teamMem*` 因架构不兼容跳过
+- **OutputStyles**: 新 `src/core/outputStyles/` markdown+frontmatter loader（caller wiring 留 follow-up）
+- **SkillsLoader**: 扩 `core/skill/` 添加 `bundled.ts` + `loadDir.ts`，bundled 子目录 17 个具体 skills 暂跳过
+
+### Turn 13（A+D 收尾 — 4 subagent + 主线 plan 更新）
+
+- **PromptMentionsWiring** ✓: 新 `inlineReferences.ts` 纯 helper（synthetic PromptDraft → `resolvePromptDraft` → 文本块拼接）；PromptInput `onAttachReference` prop（file 路径不变，其他 kinds 走 reference path）；App.tsx `pendingReferences` ref + `AppProps.resolverDeps?` 注入；handleSubmit 顺序 file → 引用 → user prompt；image kind 留占位（follow-up #18）；legacy `MentionPanel.tsx` + test 删除
+- **OutputStylesWire** ✓: `resolve.ts` 3 pure helpers；优先级 `NUKA_OUTPUT_STYLE` env > `config.outputStyle` > unset；APPEND/REPLACE/empty 三模式；merge 在 `buildSystemPrompt` 最后；main + dispatch + dispatchTool（resolver closure）三处 wire
+- **CronStatusLine** ✓: 新 `CronMissedBanner.tsx` 在 BOTTOM 槽 `AwaySummaryCard` 上方；dismiss 策略 `session.messages.length > 0` 自动隐藏；Welcome cronMissed prop + `Welcome/notices/CronMissedNotice.tsx` 移除
+- **WhitespaceReplaceText** ✓: fire-site 移到 pre-`appendMessage`；`extractReplaceText` (last-write-wins) + `applyReplaceTextToAssistant`（text blocks 替换为 single block，tool_use 保序，空字符串视为有效 rewrite）；whitespace handler 在 `changed === true` 时 emit `data.replaceText: normalized`
+
+### 累计统计
+
+- **新增 / 修改文件**: ~50 src + ~30 测试（跨 16 完成任务）
+- **新增测试**: 累计 ~300+ 个新测试越过 turn 11-12-13
+- **删除文件**: 6 个（`bundle.ts` / `installBundle.test.ts` / `recap/awaySummary.ts` + test / `MentionPanel.tsx` + test / `Welcome/notices/CronMissedNotice.tsx`）
+- **MCP 残留**: 已清空（仅审计注释保留）
+
+### Turn 14（A 方案三项收尾 polish — 1 subagent 合并）
+
+- **EmergencyTipBanner** ✓: 新 `src/tui/Status/EmergencyTipBanner.tsx`，结构同 `CronMissedBanner` 但保留 EmergencyTip tri-color 语义（warning/error/dim）；删除 legacy `src/tui/Welcome/notices/EmergencyTip.tsx` + Welcome.tsx 里的 `emergencyTip` prop / render；App.tsx BOTTOM 槽 `AwaySummaryCard` ↘ `EmergencyTipBanner` ↘ `CronMissedBanner` 三连，dismiss 策略均为 `session.messages.length > 0`；`test/tui/notices/EmergencyTip*.test.tsx` 两个测试文件 retarget 到新 banner（borderColor + dismissed 行为）
+- **VimMentionTests + cursorOffset fix** ✓: 新 `test/tui/PromptInput.vimMention.test.tsx`，3 case 覆盖 vim insert 下 `@` 触发 palette / Esc 关 palette 且不破坏 vim state / Enter accept 后 vim resync（后续 keystroke 正确 append 在 `@src/alpha.ts` 之后）。**测试暴露真 bug 并修了**：vim insert 路径 `applyVimKey` 只更新 `props.value` 不动 `cursorOffset`，`detectPromptMentionQuery` 看到空 prefix，palette 永远打不开；fix 在 `applyVimKey` 末尾按 `buffer.cursor.{row,col}` 算 flat offset 然后 `setCursorOffset(flat)`
+- **PlanDocCleanup** ✓: Section 10 P3 删 `19. _（占位）_`；Section 11 trade-off #7 增补 EmergencyTip 同步条；本 Section 16 新增 Turn 14 子段
+
+### 剩余 follow-ups（Turn 14 之后）
+
+- **#18 PromptMentions image provider transport**（Turn 13 新生，需 provider 加 image channel）

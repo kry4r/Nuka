@@ -23,8 +23,13 @@ import {
   fireSessionEnd,
   firePromptSubmit,
   fireAfterTurn,
+  fireAfterAssistantMessage,
   fireBeforeAutoCompact,
+  extractReplaceText,
+  applyReplaceTextToAssistant,
 } from '../../../src/core/hooks/lifecycle'
+import type { AssistantMessage } from '../../../src/core/message/types'
+import type { InvocationResult } from '../../../src/core/hooks/events'
 import { runAgent } from '../../../src/core/agent/loop'
 import type { LLMProvider, ProviderEvent } from '../../../src/core/provider/types'
 import type { ProviderResolver } from '../../../src/core/provider/resolver'
@@ -322,5 +327,382 @@ describe('agent loop wiring', () => {
       ),
     )
     expect(seen).toBe(0)
+  })
+})
+
+describe('fireAfterAssistantMessage', () => {
+  it('invokes the afterAssistantMessage event with the typed payload', async () => {
+    const r = createHookRegistry()
+    const seen: HookContext[] = []
+    r.register('afterAssistantMessage', (ctx) => { seen.push(ctx) })
+    await fireAfterAssistantMessage(r, {
+      sessionId: 'sess-abc',
+      text: 'hello   world',
+    })
+    expect(seen).toHaveLength(1)
+    expect(seen[0]!.event).toBe('afterAssistantMessage')
+    const payload = seen[0]!.payload as { sessionId: string; text: string }
+    expect(payload.sessionId).toBe('sess-abc')
+    expect(payload.text).toBe('hello   world')
+  })
+
+  it('does not throw when a handler throws', async () => {
+    const r = createHookRegistry()
+    r.register('afterAssistantMessage', () => { throw new Error('boom') })
+    await expect(
+      fireAfterAssistantMessage(r, { sessionId: 's', text: 'x' }),
+    ).resolves.toBeDefined()
+  })
+
+  it('propagates the optional context/agentName fields', async () => {
+    const r = createHookRegistry()
+    const payloads: Array<Record<string, unknown>> = []
+    r.register('afterAssistantMessage', (ctx) => {
+      payloads.push(ctx.payload as Record<string, unknown>)
+    })
+    await fireAfterAssistantMessage(r, {
+      sessionId: 's2',
+      text: 'sub-text',
+      context: 'subagent',
+      agentName: 'plugin:tester',
+    })
+    expect(payloads[0]?.context).toBe('subagent')
+    expect(payloads[0]?.agentName).toBe('plugin:tester')
+  })
+})
+
+describe('agent loop wiring for afterAssistantMessage', () => {
+  it('fires afterAssistantMessage BEFORE the assistant message is appended', async () => {
+    const hookRegistry = createHookRegistry()
+    const observed: Array<{ messageCount: number; text: string }> = []
+    const session = makeSession()
+    hookRegistry.register('afterAssistantMessage', (ctx) => {
+      const p = ctx.payload as { text: string }
+      // Fire site is now pre-append (mutable contract: handlers may
+      // return `data.replaceText` to rewrite the assistant text before
+      // persistence). Only the user message is on the transcript at
+      // this point; the assistant message is still in flight.
+      observed.push({ messageCount: session.messages.length, text: p.text })
+    })
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    expect(observed).toHaveLength(1)
+    // The mock provider yields a 'done' text_delta then message_stop, so
+    // the handler should see exactly that text (text blocks only).
+    expect(observed[0]?.text).toBe('done')
+    // user(1) message only on the transcript when the event fires
+    // (proves the event fires BEFORE appendMessage).
+    expect(observed[0]?.messageCount).toBe(1)
+  })
+
+  it('honours data.replaceText to rewrite the assistant text before persistence', async () => {
+    const hookRegistry = createHookRegistry()
+    const session = makeSession()
+    hookRegistry.register('afterAssistantMessage', () => ({
+      data: { replaceText: 'REWRITTEN' },
+    }))
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    // session.messages = [user, assistant]; the assistant's text block
+    // should hold the handler's replacement, not the model's 'done'.
+    expect(session.messages).toHaveLength(2)
+    const assistant = session.messages[1]
+    expect(assistant?.role).toBe('assistant')
+    if (assistant?.role !== 'assistant') return
+    const texts = assistant.content
+      .flatMap(b => (b.type === 'text' ? [b.text] : []))
+      .join('')
+    expect(texts).toBe('REWRITTEN')
+  })
+
+  it('leaves the assistant text intact when a handler returns no replaceText', async () => {
+    const hookRegistry = createHookRegistry()
+    const session = makeSession()
+    hookRegistry.register('afterAssistantMessage', () => ({
+      data: { something: 'else' },
+    }))
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    const assistant = session.messages[1]
+    if (assistant?.role !== 'assistant') return
+    const texts = assistant.content
+      .flatMap(b => (b.type === 'text' ? [b.text] : []))
+      .join('')
+    // The model emitted 'done'; the handler did not request a rewrite.
+    expect(texts).toBe('done')
+  })
+
+  it('accepts empty string as a valid replaceText value', async () => {
+    const hookRegistry = createHookRegistry()
+    const session = makeSession()
+    hookRegistry.register('afterAssistantMessage', () => ({
+      data: { replaceText: '' },
+    }))
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    const assistant = session.messages[1]
+    if (assistant?.role !== 'assistant') return
+    // Empty string IS a valid rewrite — the assistant message still
+    // carries a text block, just with empty content.
+    const textBlocks = assistant.content.filter(b => b.type === 'text')
+    expect(textBlocks).toHaveLength(1)
+    if (textBlocks[0]?.type !== 'text') return
+    expect(textBlocks[0].text).toBe('')
+  })
+
+  it('last-write-wins across multiple handlers (NOT pipeline)', async () => {
+    const hookRegistry = createHookRegistry()
+    const session = makeSession()
+    const seen: string[] = []
+    // Lower priority runs LATER (priority high → low). Two handlers,
+    // both see the ORIGINAL `text`; the LAST successful replaceText
+    // is the one that lands.
+    hookRegistry.register(
+      'afterAssistantMessage',
+      (ctx) => {
+        const p = ctx.payload as { text: string }
+        seen.push(`first:${p.text}`)
+        return { data: { replaceText: 'first' } }
+      },
+      { priority: 10 },
+    )
+    hookRegistry.register(
+      'afterAssistantMessage',
+      (ctx) => {
+        const p = ctx.payload as { text: string }
+        seen.push(`second:${p.text}`)
+        return { data: { replaceText: 'second' } }
+      },
+      { priority: 0 },
+    )
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    // Both handlers see the SAME (original) text — not 'first'.
+    expect(seen).toEqual(['first:done', 'second:done'])
+    const assistant = session.messages[1]
+    if (assistant?.role !== 'assistant') return
+    const texts = assistant.content
+      .flatMap(b => (b.type === 'text' ? [b.text] : []))
+      .join('')
+    expect(texts).toBe('second')
+  })
+
+  it('ignores non-string replaceText values (number / object / null)', async () => {
+    const hookRegistry = createHookRegistry()
+    const session = makeSession()
+    hookRegistry.register('afterAssistantMessage', () => ({
+      data: { replaceText: 42 as unknown as string },
+    }))
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          hookRegistry,
+        },
+        new AbortController().signal,
+      ),
+    )
+    const assistant = session.messages[1]
+    if (assistant?.role !== 'assistant') return
+    const texts = assistant.content
+      .flatMap(b => (b.type === 'text' ? [b.text] : []))
+      .join('')
+    // Non-string ⇒ "no replacement requested" ⇒ original text preserved.
+    expect(texts).toBe('done')
+  })
+
+  it('does not fire afterAssistantMessage when hookRegistry is omitted', async () => {
+    const hookRegistry = createHookRegistry()
+    let seen = 0
+    hookRegistry.register('afterAssistantMessage', () => { seen += 1 })
+    await drain(
+      runAgent(
+        { text: 'hi' },
+        makeSession(),
+        {
+          provider: mockProviderResolver(),
+          tools: mockToolRegistry(),
+          permission: mockPermission(),
+          // hookRegistry intentionally omitted
+        },
+        new AbortController().signal,
+      ),
+    )
+    expect(seen).toBe(0)
+  })
+})
+
+describe('extractReplaceText', () => {
+  function makeResult(data: Record<string, unknown> | undefined): InvocationResult {
+    return {
+      id: 'h',
+      event: 'afterAssistantMessage',
+      outcome: 'success',
+      result: data === undefined ? undefined : { data },
+    }
+  }
+
+  it('returns undefined when no handler returns replaceText', () => {
+    expect(extractReplaceText([])).toBeUndefined()
+    expect(extractReplaceText([makeResult(undefined)])).toBeUndefined()
+    expect(extractReplaceText([makeResult({})])).toBeUndefined()
+    expect(
+      extractReplaceText([makeResult({ other: 'value' })]),
+    ).toBeUndefined()
+  })
+
+  it('returns the last string replaceText (last-write-wins)', () => {
+    const v = extractReplaceText([
+      makeResult({ replaceText: 'first' }),
+      makeResult({ replaceText: 'second' }),
+    ])
+    expect(v).toBe('second')
+  })
+
+  it('treats empty string as a valid replacement', () => {
+    expect(extractReplaceText([makeResult({ replaceText: '' })])).toBe('')
+  })
+
+  it('ignores non-string values', () => {
+    expect(
+      extractReplaceText([
+        makeResult({ replaceText: 42 }),
+        makeResult({ replaceText: null }),
+        makeResult({ replaceText: { x: 1 } }),
+      ]),
+    ).toBeUndefined()
+  })
+
+  it('skips errored / aborted results', () => {
+    const errored: InvocationResult = {
+      id: 'h1',
+      event: 'afterAssistantMessage',
+      outcome: 'error',
+      error: new Error('boom'),
+    }
+    const aborted: InvocationResult = {
+      id: 'h2',
+      event: 'afterAssistantMessage',
+      outcome: 'aborted',
+    }
+    expect(
+      extractReplaceText([errored, aborted, makeResult({ replaceText: 'ok' })]),
+    ).toBe('ok')
+  })
+})
+
+describe('applyReplaceTextToAssistant', () => {
+  function assistantWith(content: AssistantMessage['content']): AssistantMessage {
+    return {
+      role: 'assistant',
+      id: 'm1',
+      ts: 0,
+      content,
+    }
+  }
+
+  it('replaces all text blocks with a single text block at the first text-block index', () => {
+    const m = assistantWith([
+      { type: 'text', text: 'first' },
+      { type: 'tool_use', id: 't1', name: 'X', input: {} },
+      { type: 'text', text: 'second' },
+    ])
+    applyReplaceTextToAssistant(m, 'REWRITTEN')
+    expect(m.content).toEqual([
+      { type: 'text', text: 'REWRITTEN' },
+      { type: 'tool_use', id: 't1', name: 'X', input: {} },
+    ])
+  })
+
+  it('preserves the relative position of interleaved tool_use blocks', () => {
+    const m = assistantWith([
+      { type: 'tool_use', id: 't0', name: 'A', input: {} },
+      { type: 'text', text: 'middle' },
+      { type: 'tool_use', id: 't1', name: 'B', input: {} },
+    ])
+    applyReplaceTextToAssistant(m, 'NEW')
+    expect(m.content).toEqual([
+      { type: 'tool_use', id: 't0', name: 'A', input: {} },
+      { type: 'text', text: 'NEW' },
+      { type: 'tool_use', id: 't1', name: 'B', input: {} },
+    ])
+  })
+
+  it('prepends a text block when the message had none', () => {
+    const m = assistantWith([
+      { type: 'tool_use', id: 't0', name: 'A', input: {} },
+      { type: 'tool_use', id: 't1', name: 'B', input: {} },
+    ])
+    applyReplaceTextToAssistant(m, 'hello')
+    expect(m.content).toEqual([
+      { type: 'text', text: 'hello' },
+      { type: 'tool_use', id: 't0', name: 'A', input: {} },
+      { type: 'tool_use', id: 't1', name: 'B', input: {} },
+    ])
+  })
+
+  it('writes an empty string into the replacement block', () => {
+    const m = assistantWith([{ type: 'text', text: 'original' }])
+    applyReplaceTextToAssistant(m, '')
+    expect(m.content).toEqual([{ type: 'text', text: '' }])
   })
 })

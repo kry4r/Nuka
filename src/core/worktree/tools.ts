@@ -136,12 +136,14 @@ export function makeEnterWorktreeTool(
         branch: res.branch,
         originalCwd: ctx.cwd,
       })
+      // P1 #6 — make this worktree the session's active cwd override.
+      // The agent loop reads `store.getActive()` on every tool call, so
+      // subsequent Read/Write/Bash invocations land inside the new
+      // worktree dir. The `cwdOverride=...` text below stays as a
+      // human-readable marker / observability hint, but is NOT parsed
+      // by the loop — `setActive` is the wiring.
+      deps.store.setActive(record.id)
 
-      // The `cwdOverride` token in the output is the wiring contract:
-      // the agent loop (next iter) parses it and pushes the new path into
-      // the shared ToolContext.cwd so subsequent tool calls run there.
-      // Future iter may swap this for a structured-output channel; the
-      // textual marker keeps the contract observable from tests today.
       return {
         isError: false,
         output: `Created worktree ${record.id} at ${record.path} on branch ${record.branch ?? '?'}. cwdOverride=${record.path}`,

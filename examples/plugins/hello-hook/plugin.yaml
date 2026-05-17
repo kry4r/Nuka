@@ -1,0 +1,13 @@
+name: hello-hook
+version: "0.1.0"
+description: Minimal in-process hook example — logs every tool call name to stderr.
+author: Nuka Examples
+license: MIT
+keywords:
+  - example
+  - hooks
+  - inProcessHooks
+# Path is relative to this plugin directory. The module must default-export
+# (or named-export as `hooks`) an array of { event, handler, id?, priority? }
+# entries. See docs/plugin-hooks.md for the full contract.
+inProcessHooks: hooks/index.mjs

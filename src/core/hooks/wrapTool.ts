@@ -35,25 +35,30 @@
 //
 // Iter WWW — afterToolCall pipeline mode.
 //
-// In the default `last-write-wins` mode (preserved for backward compat),
-// every afterToolCall handler reads the SAME `payload.result` (the tool's
-// original output) and the wrapper picks the last successful
-// `replaceResult`. This is fine when only one handler ever mutates the
-// result, but it breaks composition: registering jsonFormat + pathDisplay
-// + auto-truncate together means each handler sees the original string —
-// none sees the prior handler's transformed output, so the transforms
-// can't chain.
+// The wrapper supports two dispatch modes for afterToolCall handlers that
+// return `data.replaceResult`:
 //
-// Pipeline mode (`pipelineMode: 'pipeline'`) fixes this by feeding each
-// handler's `data.replaceResult` into the next handler's `payload.result`
-// before invoking it. Handlers that return `{}` leave the pipeline state
-// untouched. Throwing handlers are still isolated — the pipeline continues
-// with the current state.
+//   - `pipeline` (DEFAULT): each handler's `data.replaceResult` is fed
+//     into the next handler's `payload.result` before invocation, so a
+//     stack of transformers (jsonFormat → pathDisplay → wordWrap →
+//     urlExtract) composes into a single output. Handlers that return
+//     `{}` leave the pipeline state untouched. Throwing handlers are
+//     isolated — the pipeline continues with the current state.
+//
+//   - `last-write-wins` (legacy opt-out): every afterToolCall handler
+//     reads the SAME `payload.result` (the tool's original output) and
+//     the wrapper picks the last successful `replaceResult`. This is the
+//     Iter III shape, preserved for backward compatibility for callers
+//     that depend on it. To opt back in process-wide, set
+//     `NUKA_HOOK_PIPELINE_MODE=last-write-wins` in the environment (see
+//     `src/cli.tsx`).
 //
 // The choice is per-wrap so a single registry can power both modes for
 // different tool sets (e.g. some plumbing tools opt-out of composition).
-// Default remains `last-write-wins`. beforeToolCall is unaffected — the
-// `{skip}` veto already runs first-veto-wins and doesn't compose this way.
+// Default is `pipeline` since Iter WWW pipeline-default flip — single-
+// handler registries see no behavioural change (pipeline ≡ last-write-wins
+// with one handler). beforeToolCall is unaffected — the `{skip}` veto
+// already runs first-veto-wins and doesn't compose this way.
 
 import type { HookRegistry } from './registry'
 import type { Tool, ToolContext, ToolResult } from '../tools/types'
@@ -64,18 +69,20 @@ import { compareRegisteredHooks, runOneHandler } from './pipeline'
  * How multiple afterToolCall handlers that return `data.replaceResult`
  * combine.
  *
- * - `'last-write-wins'` (default): every handler reads the original tool
- *   result via `payload.result`; the wrapper picks the last successful
- *   `replaceResult` and discards earlier ones. Matches the surface
- *   shipped in Iter III and is the production default.
- *
- * - `'pipeline'`: handlers run in priority order; each handler's
- *   `payload.result` is the CURRENT pipeline state (either the original
- *   tool result, or the previous handler's `replaceResult` if one was
- *   returned). Handlers that return `{}` pass the state through
+ * - `'pipeline'` (default): handlers run in priority order; each
+ *   handler's `payload.result` is the CURRENT pipeline state (either the
+ *   original tool result, or the previous handler's `replaceResult` if
+ *   one was returned). Handlers that return `{}` pass the state through
  *   unchanged. Throwing handlers are isolated and the pipeline continues
  *   with the current state. The final state becomes the user-visible
- *   output.
+ *   output. Lets multi-stage transformers (jsonFormat → pathDisplay →
+ *   wordWrap → urlExtract) compose.
+ *
+ * - `'last-write-wins'` (legacy opt-out): every handler reads the
+ *   original tool result via `payload.result`; the wrapper picks the
+ *   last successful `replaceResult` and discards earlier ones. Matches
+ *   the surface shipped in Iter III; preserved for callers that depend
+ *   on the historical shape.
  */
 export type WrapPipelineMode = 'last-write-wins' | 'pipeline'
 
@@ -86,7 +93,7 @@ export interface WrapWithHooksOptions {
   /**
    * Pipeline mode for afterToolCall handlers that return
    * `data.replaceResult`. See {@link WrapPipelineMode}. Defaults to
-   * `'last-write-wins'`.
+   * `'pipeline'` since Iter WWW pipeline-default flip.
    */
   pipelineMode?: WrapPipelineMode
 }
@@ -106,7 +113,7 @@ export function wrapWithHooks<I>(
   hooks: HookRegistry,
   opts: WrapWithHooksOptions = {},
 ): Tool<I> {
-  const pipelineMode: WrapPipelineMode = opts.pipelineMode ?? 'last-write-wins'
+  const pipelineMode: WrapPipelineMode = opts.pipelineMode ?? 'pipeline'
 
   const wrapped: Tool<I> = {
     ...tool,
@@ -186,7 +193,11 @@ export function wrapWithHooks<I>(
           }
         }
       } else {
-        // last-write-wins (default) — preserved verbatim from Iter III.
+        // last-write-wins (legacy opt-out) — preserved verbatim from
+        // Iter III. Reachable when callers pass
+        // `{ pipelineMode: 'last-write-wins' }` explicitly, or process-
+        // wide via `NUKA_HOOK_PIPELINE_MODE=last-write-wins` (see
+        // src/cli.tsx).
         const postResults = await hooks.invoke(
           'afterToolCall',
           {

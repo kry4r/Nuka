@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createWorktreeStore,
   WorktreeStore,
+  resolveToolCwd,
 } from '../../../src/core/worktree/store'
 
 describe('WorktreeStore', () => {
@@ -49,5 +50,92 @@ describe('WorktreeStore', () => {
 
   it('exposes a MAX_WORKTREES constant', () => {
     expect(WorktreeStore.MAX_WORKTREES).toBeGreaterThan(0)
+  })
+
+  // P1 #6 — active pointer + cwd resolution
+  describe('active pointer (P1 #6)', () => {
+    it('getActive returns undefined when nothing is set', () => {
+      const store = createWorktreeStore()
+      store.add({ path: '/a', originalCwd: '/r' })
+      expect(store.getActive()).toBeUndefined()
+    })
+
+    it('setActive marks the record returned by getActive', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/a', originalCwd: '/r', branch: 'feat' })
+      expect(store.setActive(w.id)).toBe(true)
+      expect(store.getActive()?.id).toBe(w.id)
+      expect(store.getActive()?.path).toBe('/a')
+    })
+
+    it('setActive refuses unknown ids and leaves active untouched', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/a', originalCwd: '/r' })
+      store.setActive(w.id)
+      expect(store.setActive('deadbeef')).toBe(false)
+      expect(store.getActive()?.id).toBe(w.id)
+    })
+
+    it('clearActive drops the pointer without removing records', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/a', originalCwd: '/r' })
+      store.setActive(w.id)
+      store.clearActive()
+      expect(store.getActive()).toBeUndefined()
+      expect(store.size()).toBe(1)
+    })
+
+    it('remove(activeId) clears the active pointer', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/a', originalCwd: '/r' })
+      store.setActive(w.id)
+      expect(store.remove(w.id)).toBe(true)
+      expect(store.getActive()).toBeUndefined()
+    })
+
+    it('remove(other-id) does NOT touch the active pointer', () => {
+      const store = createWorktreeStore()
+      const a = store.add({ path: '/a', originalCwd: '/r' })
+      const b = store.add({ path: '/b', originalCwd: '/r' })
+      store.setActive(a.id)
+      store.remove(b.id)
+      expect(store.getActive()?.id).toBe(a.id)
+    })
+
+    it('clear() drops both records and the active pointer', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/a', originalCwd: '/r' })
+      store.setActive(w.id)
+      store.clear()
+      expect(store.getActive()).toBeUndefined()
+      expect(store.size()).toBe(0)
+    })
+  })
+
+  describe('resolveToolCwd (P1 #6)', () => {
+    it('returns fallback when store is undefined', () => {
+      expect(resolveToolCwd(undefined, '/fallback')).toBe('/fallback')
+    })
+
+    it('returns fallback when store has no active record', () => {
+      const store = createWorktreeStore()
+      store.add({ path: '/a', originalCwd: '/r' })
+      expect(resolveToolCwd(store, '/fallback')).toBe('/fallback')
+    })
+
+    it('returns active worktree path when set', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/wt', originalCwd: '/r' })
+      store.setActive(w.id)
+      expect(resolveToolCwd(store, '/fallback')).toBe('/wt')
+    })
+
+    it('falls back after the active worktree is removed', () => {
+      const store = createWorktreeStore()
+      const w = store.add({ path: '/wt', originalCwd: '/r' })
+      store.setActive(w.id)
+      store.remove(w.id)
+      expect(resolveToolCwd(store, '/fallback')).toBe('/fallback')
+    })
   })
 })

@@ -35,7 +35,6 @@ export type PromptReferenceKind =
   | 'url'
   | 'image'
   | 'agent'
-  | 'mcp_resource'
   | 'teammate'
 
 export type PromptReferenceStatus =
@@ -77,7 +76,6 @@ export type PromptReferenceTarget =
       mimeType?: string
     }
   | { kind: 'agent'; name: string }
-  | { kind: 'mcp_resource'; server: string; uri: string }
   | { kind: 'teammate'; id: string }
 
 export type PromptReferenceToken = {

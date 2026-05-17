@@ -17,10 +17,9 @@
 // selected index, and optional preview line are all driven by props — usually
 // fed by `usePromptMention`. Colours pull from Nuka's 12-key palette (theme.ts).
 //
-// Renamed from upstream `PromptMentionPanel`; named "MentionPalette" to match
-// the iter 3a spec and to disambiguate from the existing Nuka `MentionPanel`
-// living next to PromptInput (which is the legacy file-suggester not yet
-// touched in this iter).
+// Renamed from upstream `PromptMentionPanel`; named "MentionPalette" to
+// match the iter 3a spec. The legacy `MentionPanel` file-suggester next
+// to PromptInput was removed once this palette replaced it end-to-end.
 
 import React from 'react'
 import { Box, Text } from 'ink'

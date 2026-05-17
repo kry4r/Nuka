@@ -80,10 +80,12 @@ export {
   fireSessionEnd,
   firePromptSubmit,
   fireAfterTurn,
+  fireAfterAssistantMessage,
   fireBeforeAutoCompact,
   type SessionStartPayload,
   type SessionEndPayload,
   type PromptSubmitPayload,
   type AfterTurnPayload,
+  type AfterAssistantMessagePayload,
   type BeforeAutoCompactPayload,
 } from './lifecycle'

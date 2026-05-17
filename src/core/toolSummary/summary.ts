@@ -16,10 +16,9 @@
 //      a search-like or read-like operation?". Used by display code to
 //      decide whether several adjacent calls should collapse into a
 //      single "Searched / Read X items" group. Tool-name allowlists are
-//      lifted verbatim from upstream's
-//      `tools/MCPTool/classifyForCollapse.ts`. Names normalize to
-//      snake_case before lookup, so camelCase / kebab-case variants of
-//      the same MCP tool match the same entry.
+//      a curated list of common plugin-loaded / dynamic tool names.
+//      Names normalize to snake_case before lookup, so camelCase /
+//      kebab-case variants of the same tool match the same entry.
 //
 // Why these two together: they are the *pure* slice of upstream's
 // collapse story. Upstream's full `utils/collapseReadSearch.ts` is the
@@ -37,10 +36,10 @@
 //
 // Upstream parity caveats:
 //   - The two allowlists were collected by upstream as of the source
-//     pull. New MCP tools added upstream after that point won't match
-//     until the lists are refreshed. A future iter can wire this to
-//     dynamic discovery; for now the static lists cover the major
-//     hosted + community MCP servers.
+//     pull. New dynamic / plugin-loaded tools added upstream after
+//     that point won't match until the lists are refreshed. A future
+//     iter can wire this to dynamic discovery; for now the static
+//     lists cover the major hosted + community plugin ecosystems.
 //   - We DO NOT export the allowlists. Callers should use
 //     `classifyToolForCollapse` so the normalize step is consistent.
 //
@@ -68,7 +67,7 @@ export type CollapseClassification = {
  *   whole story.
  * - `prompt`  — sub-agent tools (Task, dispatch) where the prompt is
  *   what was asked.
- * - `query`   — search tools (Grep, ToolSearch, MCP search_*).
+ * - `query`   — search tools (Grep, ToolSearch, plugin search_*).
  * - `url`     — fetchers and browser navigation.
  * - `path` / `filePath` / `file_path` / `target_file` — file-touching
  *   tools (Read, Edit, Write, FileSearch).
@@ -131,8 +130,8 @@ export function summarizeToolInput(
  * Allowlist of tool names that should classify as "search" for collapse
  * purposes. Lifted from upstream Nuka-Code's classifyForCollapse.ts.
  * Keys are pre-normalized: snake_case, lowercase. Names are stable
- * across MCP server installs, so we match on tool name alone (server
- * name is intentionally ignored).
+ * across plugin installs, so we match on tool name alone (any server /
+ * namespace prefix is intentionally ignored).
  */
 // prettier-ignore
 const SEARCH_TOOLS: ReadonlySet<string> = new Set([

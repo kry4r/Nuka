@@ -23,7 +23,14 @@ import {
   fireSessionEnd,
   firePromptSubmit,
   fireAfterTurn,
+  fireAfterAssistantMessage,
+  extractReplaceText,
+  applyReplaceTextToAssistant,
 } from '../hooks/lifecycle'
+import type { WorktreeStore } from '../worktree/store'
+import { resolveToolCwd } from '../worktree/store'
+import type { OutputStyle } from '../outputStyles/types'
+import { applyOutputStyle } from '../outputStyles/resolve'
 
 export type DispatchAgentOpts = {
   agent: ResolvedAgentDef
@@ -57,6 +64,29 @@ export type DispatchAgentOpts = {
    * fire helpers — they NEVER affect dispatch outcome.
    */
   hookRegistry?: HookRegistry
+  /**
+   * P1 #6 — when provided, sub-agent tool calls resolve their `ctx.cwd`
+   * through the same worktree-aware helper used by the main loop. Default
+   * policy is INHERIT: the dispatcher passes the parent's store reference,
+   * so a sub-agent sees the parent's active worktree at dispatch time and
+   * any EnterWorktree it issues mutates the SAME singleton (shared with
+   * the main loop). This matches the spec's "default inherit main"
+   * directive — sub-agents that want isolation must EnterWorktree
+   * themselves or callers must omit this opt.
+   */
+  worktreeStore?: WorktreeStore
+  /**
+   * User-defined output style resolved upstream from
+   * `.nuka/output-styles/*.md`. When supplied, the sub-agent's
+   * `agent.systemPrompt` is post-processed via {@link applyOutputStyle}
+   * before being sent to the provider — APPEND under a `## Output Style`
+   * header (default / `keepCodingInstructions: true`) or REPLACE entirely
+   * (`keepCodingInstructions: false`). Omitted / null → no change, the
+   * subagent sees its declared `systemPrompt` byte-for-byte (matches the
+   * pre-output-styles behaviour). Parent loop and sub-agent see the same
+   * style, mirroring the main-loop wiring in `agent/systemPrompt.ts`.
+   */
+  outputStyle?: OutputStyle | null
 }
 
 export type DispatchAgentResult = {
@@ -90,8 +120,20 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     signal,
     parentSession,
     hookRegistry,
+    worktreeStore,
+    outputStyle,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
+
+  // Pre-compute the effective system prompt once per dispatch. The
+  // sub-agent's declared `systemPrompt` is the base; user-defined
+  // output styles are merged in by `applyOutputStyle` (APPEND or
+  // REPLACE per `keepCodingInstructions`). When `outputStyle` is
+  // absent / null the base is passed through verbatim — same shape
+  // the dispatcher used before output-styles existed.
+  const effectiveSystemPrompt = outputStyle
+    ? applyOutputStyle(agent.systemPrompt, outputStyle)
+    : agent.systemPrompt
 
   // Build filtered tool registry for the sub-session.
   const filtered: Tool[] = filterTools(registry.list(), {
@@ -118,7 +160,11 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         sessionId: session.id,
         providerId,
         model,
-        cwd: process.cwd(),
+        // P1 #6 — surface the inherited worktree cwd (if any) so
+        // sessionStart handlers observe the effective working dir, not the
+        // process cwd. Falls back to process.cwd() when no worktree is
+        // active (default behaviour).
+        cwd: resolveToolCwd(worktreeStore, process.cwd()),
         resumed: false,
         context: 'subagent',
         agentName: agent.name,
@@ -186,7 +232,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       const stream = provider.stream(
         {
           model: resolvedModel,
-          system: agent.systemPrompt,
+          system: effectiveSystemPrompt,
           messages: session.messages,
           tools: toolSpecs,
           ...(agent.maxTokens !== undefined ? { maxTokens: agent.maxTokens } : {}),
@@ -214,6 +260,32 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         } else if (ev.type === 'message_stop') {
           assistant.usage = ev.usage
           assistant.stopReason = ev.stopReason
+        }
+      }
+      // P0 #2 — fire afterAssistantMessage BEFORE the message lands on
+      // the transcript so handlers may rewrite the text via
+      // `{ data: { replaceText: '<new>' } }`. Same last-write-wins
+      // contract as the main loop (see lifecycle.ts:applyReplaceText
+      // ToAssistant and the event header in events.ts). Sub-agent
+      // path threads `context: 'subagent'` + `agentName` so handlers
+      // can filter on origin.
+      if (hookRegistry) {
+        const text = assistant.content
+          .flatMap(b => (b.type === 'text' ? [b.text] : []))
+          .join('')
+        const results = await fireAfterAssistantMessage(
+          hookRegistry,
+          {
+            sessionId: session.id,
+            text,
+            context: 'subagent',
+            agentName: agent.name,
+          },
+          { signal },
+        )
+        const replaceText = extractReplaceText(results)
+        if (replaceText !== undefined) {
+          applyReplaceTextToAssistant(assistant, replaceText)
         }
       }
       appendMessage(session, assistant)
@@ -283,7 +355,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
           try {
             result = await tool.run(call.input, {
               signal,
-              cwd: process.cwd(),
+              cwd: resolveToolCwd(worktreeStore, process.cwd()),
               session,
             })
           } catch (err) {

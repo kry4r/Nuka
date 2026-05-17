@@ -25,6 +25,15 @@ export type WorktreeRecord = {
 
 export class WorktreeStore {
   private worktrees = new Map<string, WorktreeRecord>()
+  /**
+   * P1 #6 — currently-active worktree. When set, the agent loop and
+   * subagent dispatch resolve tool `ctx.cwd` to this record's `path`
+   * instead of `process.cwd()`. EnterWorktree sets this on success;
+   * ExitWorktree (via `remove`) clears it when the active record is the
+   * one being removed. Only one worktree can be active at a time — this
+   * is a flat pointer, not a stack.
+   */
+  private activeId: string | undefined
 
   /** Soft cap so an agent can't OOM by spinning up endless worktrees. */
   static readonly MAX_WORKTREES = 20
@@ -64,12 +73,58 @@ export class WorktreeStore {
   }
 
   remove(id: string): boolean {
+    if (id === this.activeId) this.activeId = undefined
     return this.worktrees.delete(id)
   }
 
   clear(): void {
+    this.activeId = undefined
     this.worktrees.clear()
   }
+
+  /**
+   * Return the currently-active worktree, if any. The agent loop reads
+   * this on every tool call to decide whether to override `ctx.cwd`.
+   */
+  getActive(): WorktreeRecord | undefined {
+    if (!this.activeId) return undefined
+    return this.worktrees.get(this.activeId)
+  }
+
+  /**
+   * Mark a tracked worktree as active. Returns false if the id is not
+   * tracked by this store (caller is expected to surface a tool error).
+   */
+  setActive(id: string): boolean {
+    if (!this.worktrees.has(id)) return false
+    this.activeId = id
+    return true
+  }
+
+  /** Clear the active pointer without removing the record. */
+  clearActive(): void {
+    this.activeId = undefined
+  }
+}
+
+/**
+ * P1 #6 — resolve the cwd a tool should run in.
+ *
+ * Returns the active worktree's path when a store is provided AND has an
+ * active record; otherwise falls back to `fallbackCwd` (typically
+ * `process.cwd()`). Pure helper so the agent loop and subagent dispatch
+ * share one resolution rule.
+ *
+ * The store is passed by reference so changes made by EnterWorktree /
+ * ExitWorktree mid-turn take effect on the NEXT tool call. This is the
+ * wiring contract that turns the `cwdOverride=...` marker into actual
+ * behaviour.
+ */
+export function resolveToolCwd(
+  store: WorktreeStore | undefined,
+  fallbackCwd: string,
+): string {
+  return store?.getActive()?.path ?? fallbackCwd
 }
 
 /**

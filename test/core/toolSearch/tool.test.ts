@@ -70,20 +70,20 @@ function mkRegistry(): ToolRegistry {
       async run() { return { isError: false, output: '' } },
     }),
     defineTool({
-      name: 'mcp__slack__send_message',
+      name: 'SlackSendMessage',
       description: 'Send a message to a Slack channel.',
       parameters: { type: 'object', properties: {} },
       source: 'plugin',
-      tags: ['mcp'],
+      tags: ['plugin'],
       needsPermission: () => 'network',
       async run() { return { isError: false, output: '' } },
     }),
     defineTool({
-      name: 'mcp__slack__list_channels',
+      name: 'SlackListChannels',
       description: 'List Slack channels in a workspace.',
       parameters: { type: 'object', properties: {} },
       source: 'plugin',
-      tags: ['mcp'],
+      tags: ['plugin'],
       needsPermission: () => 'network',
       async run() { return { isError: false, output: '' } },
     }),
@@ -97,19 +97,11 @@ describe('ToolSearch — parseToolName', () => {
     const p = parseToolName('WebFetch')
     expect(p.parts).toEqual(['web', 'fetch'])
     expect(p.full).toBe('web fetch')
-    expect(p.isMcp).toBe(false)
-  })
-
-  it('splits mcp__server__action into server + action parts', () => {
-    const p = parseToolName('mcp__slack__send_message')
-    expect(p.parts).toEqual(['slack', 'send', 'message'])
-    expect(p.isMcp).toBe(true)
   })
 
   it('splits snake_case names', () => {
     const p = parseToolName('todo_write')
     expect(p.parts).toEqual(['todo', 'write'])
-    expect(p.isMcp).toBe(false)
   })
 })
 
@@ -150,13 +142,6 @@ describe('ToolSearch — scoreTool', () => {
     const webFetchScore = scoreTool(webFetch, 'read') // description-only via "rendered"
     expect(readScore).toBeGreaterThan(webFetchScore)
     expect(readScore).toBeGreaterThanOrEqual(10)
-  })
-
-  it('weights MCP server-name parts higher than non-MCP name parts', () => {
-    const slack = reg.find('mcp__slack__send_message')!
-    const mcpScore = scoreTool(slack, 'slack')
-    // MCP tool, server-name exact match → 12 (plus searchHint/desc bonuses)
-    expect(mcpScore).toBeGreaterThanOrEqual(12)
   })
 
   it('rewards exact tag matches', () => {
@@ -210,12 +195,6 @@ describe('ToolSearch — searchTools', () => {
     expect(matches[0]!.name).toBe('Sleep')
   })
 
-  it('mcp__ prefix returns all matching prefix tools', () => {
-    const matches = searchTools(reg, 'mcp__slack')
-    const names = matches.map(m => m.name).sort()
-    expect(names).toEqual(['mcp__slack__list_channels', 'mcp__slack__send_message'])
-  })
-
   it('tag query surfaces tools sharing that tag', () => {
     const matches = searchTools(reg, 'schedule')
     expect(matches[0]!.name).toBe('CronCreate')
@@ -229,11 +208,12 @@ describe('ToolSearch — searchTools', () => {
 
   it('orders by score descending, then alphabetically for ties', () => {
     const matches = searchTools(reg, 'channel slack', 10)
-    // The list_channels description contains "channel"+"slack", send_message
-    // has only "slack" in name parts. list_channels should beat send_message.
+    // SlackListChannels description contains "channel"+"slack",
+    // SlackSendMessage has only "slack" in its name parts.
+    // SlackListChannels should beat SlackSendMessage.
     const top = matches.map(m => m.name)
-    expect(top.indexOf('mcp__slack__list_channels')).toBeLessThan(
-      top.indexOf('mcp__slack__send_message'),
+    expect(top.indexOf('SlackListChannels')).toBeLessThan(
+      top.indexOf('SlackSendMessage'),
     )
   })
 })

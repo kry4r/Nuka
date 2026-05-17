@@ -24,7 +24,14 @@ import { serializeContentBlocks } from '../tools/content'
 import type { HookEntry } from '../hooks/types'
 import { runHooks } from '../hooks/runner'
 import type { HookRegistry } from '../hooks/registry'
-import { firePromptSubmit, fireAfterTurn, fireBeforeAutoCompact } from '../hooks/lifecycle'
+import {
+  firePromptSubmit,
+  fireAfterTurn,
+  fireAfterAssistantMessage,
+  fireBeforeAutoCompact,
+  extractReplaceText,
+  applyReplaceTextToAssistant,
+} from '../hooks/lifecycle'
 import { parallelBatch } from '../tools/concurrency'
 import type { ToolResult } from '../tools/types'
 import { getChannels } from '../notifications/channelRegistry'
@@ -40,6 +47,8 @@ import {
   formatCronPrompt,
   isCronPromptInjectionEnabled,
 } from '../session/cronPromptQueue'
+import type { WorktreeStore } from '../worktree/store'
+import { resolveToolCwd } from '../worktree/store'
 
 /**
  * Apply coordinator-mode tool filtering.
@@ -159,6 +168,17 @@ export type RunAgentDeps = {
    * distinguish them without a new message role.
    */
   cronPromptQueue?: CronPromptQueue
+  /**
+   * P1 #6 — when provided, the loop resolves each tool call's `ctx.cwd`
+   * through `resolveToolCwd(worktreeStore, process.cwd())`. EnterWorktree
+   * sets the store's active record on success, so subsequent tool calls
+   * run inside the worktree dir. ExitWorktree clears the active record
+   * (via `remove`) and the cwd reverts to `process.cwd()`.
+   *
+   * Optional / additive: when absent, behaviour is unchanged (all tool
+   * calls see `ctx.cwd === process.cwd()`).
+   */
+  worktreeStore?: WorktreeStore
 }
 
 /**
@@ -381,6 +401,32 @@ export async function* runAgent(
       if (ev.type === 'text_delta') yield { type: 'text_delta', text: ev.text }
       applyToAssistant(assistant, ev)
     }
+    // P0 #2 — fire afterAssistantMessage BEFORE the message lands on
+    // the transcript so handlers may rewrite the text via
+    // `{ data: { replaceText: '<new>' } }`. Multi-handler resolution
+    // is last-write-wins (each handler reads the ORIGINAL `text`,
+    // not a previous handler's replacement). When no handler asks
+    // for a rewrite, `extractReplaceText` returns `undefined` and we
+    // append the original assembled message untouched.
+    //
+    // Text is the concatenation of text blocks; tool_use blocks are
+    // skipped (handlers care about the model's prose, not the tool
+    // argument JSON). The rewrite, when applied, preserves
+    // tool_use blocks in place — see `applyReplaceTextToAssistant`.
+    if (deps.hookRegistry) {
+      const text = assistant.content
+        .flatMap(b => (b.type === 'text' ? [b.text] : []))
+        .join('')
+      const results = await fireAfterAssistantMessage(
+        deps.hookRegistry,
+        { sessionId: session.id, text },
+        { signal },
+      )
+      const replaceText = extractReplaceText(results)
+      if (replaceText !== undefined) {
+        applyReplaceTextToAssistant(assistant, replaceText)
+      }
+    }
     appendMessage(session, assistant, deps.persist)
     if (assistant.usage) {
       session.totalUsage = addUsage(session.totalUsage, assistant.usage)
@@ -586,7 +632,7 @@ export async function* runAgent(
             let toolOk = true
             const toolPromise = tool.run(call.input, {
               signal,
-              cwd: process.cwd(),
+              cwd: resolveToolCwd(deps.worktreeStore, process.cwd()),
               onProgress: pump.onProgress,
               onProgressTyped,
               session,
@@ -734,7 +780,7 @@ export async function* runAgent(
           let serialToolOk = true
           const toolPromise = tool.run(call.input, {
             signal,
-            cwd: process.cwd(),
+            cwd: resolveToolCwd(deps.worktreeStore, process.cwd()),
             onProgress: pump.onProgress,
             onProgressTyped,
             session,

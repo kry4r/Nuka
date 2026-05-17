@@ -3,14 +3,14 @@
 // ToolSearch — agent-facing search over the tool registry.
 //
 // Upstream (Nuka-Code) ships this as a discovery surface for "deferred"
-// tools — MCP-style tools whose schema isn't shipped in the initial
+// tools — dynamic tools whose schema isn't shipped in the initial
 // prompt. The agent asks ToolSearch for a keyword and gets back the
 // matching tool names (and indirectly, their schemas).
 //
 // Nuka doesn't have a hard deferred/non-deferred split at the agent
 // surface — every registered tool is visible — but the same problem
-// shows up once the registry grows (plugins, MCP tools, dynamic
-// skills). ToolSearch here functions as agent-facing introspection:
+// shows up once the registry grows (plugins, dynamic skills).
+// ToolSearch here functions as agent-facing introspection:
 // "given a need, which tool(s) should I reach for?" with a score so
 // the agent can fall back to the next best match when its first guess
 // doesn't fit.
@@ -60,35 +60,18 @@ export type ToolSearchMatch = {
 }
 
 /**
- * Parse a tool name into searchable parts. Handles three name styles:
+ * Parse a tool name into searchable parts. Handles two name styles:
  *
- *   - MCP-ish `mcp__server__action` → ["server", "action", ...]
- *   - CamelCase `WebFetch`           → ["web", "fetch"]
- *   - snake_case `web_fetch`         → ["web", "fetch"]
+ *   - CamelCase `WebFetch`   → ["web", "fetch"]
+ *   - snake_case `web_fetch` → ["web", "fetch"]
  *
  * Returned `full` is a space-joined lowercase form for substring fallback
- * scoring; `isMcp` lets us bump the weight on MCP server-name matches,
- * matching upstream's hint that `mcp__slack` should beat `slackbot` for
- * the query "slack".
+ * scoring.
  */
 export function parseToolName(name: string): {
   parts: string[]
   full: string
-  isMcp: boolean
 } {
-  if (name.startsWith('mcp__')) {
-    const withoutPrefix = name.replace(/^mcp__/, '').toLowerCase()
-    const parts = withoutPrefix
-      .split('__')
-      .flatMap(p => p.split('_'))
-      .filter(Boolean)
-    return {
-      parts,
-      full: withoutPrefix.replace(/__/g, ' ').replace(/_/g, ' '),
-      isMcp: true,
-    }
-  }
-
   const parts = name
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
@@ -99,7 +82,6 @@ export function parseToolName(name: string): {
   return {
     parts,
     full: parts.join(' '),
-    isMcp: false,
   }
 }
 
@@ -122,8 +104,8 @@ function compileTermPatterns(terms: string[]): Map<string, RegExp> {
  * Score one tool against the query terms. Pure — no I/O, no async.
  *
  * Weights (loosely follow upstream ToolSearchTool.ts):
- *   - exact name-part match:     10 (MCP server names: 12)
- *   - partial name-part match:    5 (MCP: 6)
+ *   - exact name-part match:     10
+ *   - partial name-part match:    5
  *   - full-name substring:        3 (only when no part hit, kept for edge cases)
  *   - tag exact match:           10 (Nuka-specific — tags are curated)
  *   - tag substring:              5
@@ -156,9 +138,9 @@ export function scoreTool(
 
     // Name parts
     if (parsed.parts.includes(term)) {
-      score += parsed.isMcp ? 12 : 10
+      score += 10
     } else if (parsed.parts.some(p => p.includes(term))) {
-      score += parsed.isMcp ? 6 : 5
+      score += 5
     } else if (parsed.full.includes(term)) {
       // Full-name fallback only when no part hit registered yet.
       // Upstream gates this on `score === 0` per term loop; we keep the
@@ -236,20 +218,6 @@ export function searchTools(
         },
       ]
     }
-  }
-
-  // MCP prefix path: `mcp__server` — return prefix matches (top-N by
-  // alphabetical, since they're all equally "matched" on prefix).
-  if (queryLower.startsWith('mcp__') && queryLower.length > 5) {
-    const prefix = all
-      .filter(t => t.name.toLowerCase().startsWith(queryLower))
-      .slice(0, maxResults)
-      .map(t => ({
-        name: t.name,
-        score: 50,
-        description: (t.description ?? '').trim(),
-      }))
-    if (prefix.length > 0) return prefix
   }
 
   const queryTerms = queryLower.split(/\s+/).filter(t => t.length > 0)

@@ -4,11 +4,12 @@
 //
 // Coverage areas:
 //   - Pipeline mode chains replaceResult between handlers
+//   - Pipeline is now the wrapper DEFAULT (no options → chained dispatch)
 //   - Handler returning {} passes state through unchanged
 //   - Throwing handler is isolated; pipeline continues with current state
 //   - Order is preserved (priority → insertion order)
-//   - Last-write-wins (default) is unchanged: handlers read original
-//     payload.result, only the last replaceResult wins
+//   - Last-write-wins still available as explicit opt-out: handlers read
+//     original payload.result, only the last replaceResult wins
 //   - ToolResult type guard rejects malformed replacement payloads in
 //     both modes (so a broken hook can't poison the pipeline)
 //   - Empty handler list is a no-op in both modes
@@ -273,7 +274,7 @@ describe('wrapWithHooks pipeline mode', () => {
     expect(result.isError).toBe(false)
   })
 
-  it('last-write-wins mode (default): both A and B return replaceResult → B wins, A discarded', async () => {
+  it('last-write-wins mode (explicit opt-out): both A and B return replaceResult → B wins, A discarded', async () => {
     const seenByA: unknown[] = []
     const seenByB: unknown[] = []
     const registry = createHookRegistry()
@@ -298,8 +299,11 @@ describe('wrapWithHooks pipeline mode', () => {
     const tool = makeTool({
       run: async () => ({ output: 'original', isError: false }),
     })
-    // No options → default last-write-wins.
-    const wrapped = wrapWithHooks(tool, registry)
+    // Iter WWW pipeline-default flip — must pass the explicit opt-out
+    // now that the wrapper default is `'pipeline'`.
+    const wrapped = wrapWithHooks(tool, registry, {
+      pipelineMode: 'last-write-wins',
+    })
     const result = await wrapped.run({}, makeCtx())
     expect(seenByA).toEqual(['original'])
     // KEY: B also sees ORIGINAL, not A-output. No chaining in last-write-wins.
@@ -308,7 +312,7 @@ describe('wrapWithHooks pipeline mode', () => {
     expect(result.output).toBe('B-output')
   })
 
-  it('last-write-wins mode: explicit option matches default behaviour', async () => {
+  it('last-write-wins mode: explicit option keeps the Iter III legacy shape', async () => {
     const seenByB: unknown[] = []
     const registry = createHookRegistry()
     registry.register('afterToolCall', () => replaceWith('A-output'), { id: 'A' })
@@ -346,17 +350,21 @@ describe('wrapWithHooks pipeline mode', () => {
     const tool = makeTool({
       run: async () => ({ output: 'original', isError: false }),
     })
-    const wrapped = wrapWithHooks(tool, registry)
+    const wrapped = wrapWithHooks(tool, registry, {
+      pipelineMode: 'last-write-wins',
+    })
     const result = await wrapped.run({}, makeCtx())
     // The malformed one is skipped; the good one wins.
     expect(result.output).toBe('good')
   })
 
-  it('last-write-wins mode: empty handler list → no-op', async () => {
+  it('default (pipeline) mode: empty handler list → no-op', async () => {
     const registry = createHookRegistry()
     const tool = makeTool({
       run: async () => ({ output: 'as-is', isError: false }),
     })
+    // No options → pipeline (the new default). Empty handler list is a
+    // no-op regardless of mode.
     const wrapped = wrapWithHooks(tool, registry)
     const result = await wrapped.run({}, makeCtx())
     expect(result.output).toBe('as-is')
@@ -441,8 +449,11 @@ describe('wrapWithHooks pipeline mode', () => {
     const tool = makeTool({
       run: async () => ({ output: compact, isError: false }),
     })
-    // Default mode (last-write-wins).
-    const wrapped = wrapWithHooks(tool, registry)
+    // Iter WWW pipeline-default flip — explicit opt-out needed to keep
+    // the legacy non-chaining shape.
+    const wrapped = wrapWithHooks(tool, registry, {
+      pipelineMode: 'last-write-wins',
+    })
     const result = await wrapped.run({}, makeCtx())
     // Observer saw the ORIGINAL compact length, not pretty-printed.
     expect(seenByObserver).toEqual([compact.length])
@@ -451,5 +462,35 @@ describe('wrapWithHooks pipeline mode', () => {
     // override). This is the historical behaviour.
     expect(typeof result.output).toBe('string')
     expect((result.output as string).includes('\n')).toBe(true)
+  })
+
+  it('default (no options) mode: handler B sees A.replaceResult — pipeline is now the default', async () => {
+    // Regression guard for the Iter WWW pipeline-default flip. With no
+    // options passed, the wrapper must chain replaceResult between
+    // handlers — i.e. behave like `{ pipelineMode: 'pipeline' }`.
+    const seenByB: unknown[] = []
+    const registry = createHookRegistry()
+    registry.register('afterToolCall', () => replaceWith('A-output'), {
+      id: 'A',
+    })
+    registry.register(
+      'afterToolCall',
+      (ctx) => {
+        const payload = ctx.payload as { result?: ToolResult }
+        seenByB.push(payload.result?.output)
+        return replaceWith('B-output')
+      },
+      { id: 'B' },
+    )
+    const tool = makeTool({
+      run: async () => ({ output: 'original', isError: false }),
+    })
+    // Explicitly NO options — exercising the default.
+    const wrapped = wrapWithHooks(tool, registry)
+    const result = await wrapped.run({}, makeCtx())
+    // KEY: B sees A-output (chained), not 'original' (which would be
+    // the last-write-wins shape).
+    expect(seenByB).toEqual(['A-output'])
+    expect(result.output).toBe('B-output')
   })
 })

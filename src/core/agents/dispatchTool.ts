@@ -4,6 +4,8 @@ import type { ToolRegistry } from '../tools/registry'
 import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
+import type { WorktreeStore } from '../worktree/store'
+import type { OutputStyle } from '../outputStyles/types'
 import type { AgentRegistry } from './registry'
 import { dispatchAgent } from './dispatch'
 import { defineTool } from '../tools/define'
@@ -38,6 +40,22 @@ export function makeDispatchAgentTool(deps: {
   permission: PermissionChecker
   /** Optional — when omitted, sub-agents simply skip lifecycle fires. */
   hookRegistry?: HookRegistry
+  /**
+   * P1 #6 — optional WorktreeStore forwarded to the inner `dispatchAgent`
+   * call so sub-agent tools resolve their cwd through the same active
+   * worktree as the parent loop (inherit-by-default). When omitted,
+   * sub-agents fall back to `process.cwd()`.
+   */
+  worktreeStore?: WorktreeStore
+  /**
+   * Resolver for the active user output style. Evaluated per dispatch
+   * (not captured at `makeDispatchAgentTool` time) so the main loop and
+   * sub-agents pick up `NUKA_OUTPUT_STYLE` changes between turns. Return
+   * `null` (or omit the dep entirely) to skip the merge — sub-agents
+   * then see their declared `systemPrompt` byte-for-byte, matching the
+   * pre-output-styles behaviour.
+   */
+  outputStyle?: () => OutputStyle | null
 }): Tool<DispatchAgentInput> {
   const listed = deps.agents.list()
   const summary = listed.length === 0
@@ -100,6 +118,11 @@ export function makeDispatchAgentTool(deps: {
       const parentSession = ctx.session
         ? { providerId: ctx.session.providerId, model: ctx.session.model }
         : undefined
+      // Resolve the active output style per-dispatch so env-var changes
+      // between turns are picked up. The resolver is intentionally
+      // synchronous — styles were loaded once at boot and live in
+      // memory; per-call cost is a Map lookup.
+      const activeStyle = deps.outputStyle ? deps.outputStyle() : null
       const result = await dispatchAgent({
         agent: resolved,
         task: input.task,
@@ -110,6 +133,8 @@ export function makeDispatchAgentTool(deps: {
         signal: ctx.signal,
         ...(parentSession ? { parentSession } : {}),
         ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
+        ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
+        ...(activeStyle ? { outputStyle: activeStyle } : {}),
       })
       return { output: result.output, isError: result.isError }
     },

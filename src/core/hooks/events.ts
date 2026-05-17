@@ -42,6 +42,41 @@ export const IN_PROCESS_HOOK_EVENTS = [
   // they cannot influence the shell hook outcome (the registry's
   // `skip:true` semantics do NOT propagate back to the shell runner).
   'shellHookExecuted',
+  // P0 #2 — assistant model output observation + mutation.
+  //
+  // Fires once per model turn on the assembled assistant message
+  // (a single turn may emit text + tool_use blocks; the event fires
+  // once on the assembled message, not per delta). The fire site sits
+  // BETWEEN the in-memory assembly of the assistant message and its
+  // `appendMessage` persist call: handlers may return
+  // `{ data: { replaceText: '...' } }` to rewrite the assistant text
+  // BEFORE it lands on `session.messages`. Payload:
+  // AfterAssistantMessagePayload (see lifecycle.ts).
+  //
+  // MUTATION SEMANTICS (LAST-WRITE-WINS):
+  //   - Each handler reads the ORIGINAL `payload.text` (not the
+  //     previous handler's `replaceText`). Multiple handlers DO NOT
+  //     compose into a pipeline — the wrapTool `replaceResult`
+  //     pipeline convention does NOT apply here.
+  //   - The wrapper picks the last successful (`outcome === 'success'`)
+  //     `replaceText` value where `typeof replaceText === 'string'`.
+  //   - Empty string (`''`) is a VALID replacement: it rewrites the
+  //     assistant text to empty (the message still records a single
+  //     empty text block — the "assistant emitted something" invariant
+  //     holds).
+  //   - Non-string `replaceText` (including `undefined` / `null` /
+  //     numbers / objects) is treated as "no replacement requested"
+  //     and the original text is preserved.
+  //   - Handlers that throw are isolated by the pipeline; their
+  //     potential `replaceText` is discarded.
+  //
+  // CONTENT-BLOCK REWRITE RULE: when `replaceText` applies, ALL text
+  // blocks in `assistant.content` are replaced with a single text
+  // block (value = `replaceText`) at the position of the first
+  // pre-existing text block. tool_use blocks are preserved in place.
+  // If the message had no text block, a single text block carrying
+  // `replaceText` is prepended.
+  'afterAssistantMessage',
 ] as const
 
 export type InProcessHookEvent = (typeof IN_PROCESS_HOOK_EVENTS)[number]

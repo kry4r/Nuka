@@ -1,7 +1,7 @@
 // src/core/permission/checker.ts
 import type { PermissionCache } from './cache'
 import type { PermissionCall, PermissionDecision } from './types'
-import type { PermissionPayload, AnnotationBadge } from './bridge'
+import type { PermissionPayload, AnnotationBadge, PermissionVariant } from './bridge'
 
 export type AskUser = (payload: PermissionPayload) => Promise<PermissionDecision>
 
@@ -14,6 +14,26 @@ function deriveBadges(call: PermissionCall): AnnotationBadge[] | undefined {
   if (ann.destructive) badges.push('destructive')
   if (ann.openWorld) badges.push('network')
   return badges.length > 0 ? badges : undefined
+}
+
+/**
+ * Tool name that should trigger the `'planMode'` permission-dialog
+ * variant. Kept as a local literal (rather than importing from
+ * `../planMode/planModeTools`) so the permission layer remains
+ * dependency-free relative to plan-mode internals — the tool name is
+ * already a stable wire-level contract.
+ */
+const ENTER_PLAN_MODE_TOOL = 'EnterPlanMode'
+
+/** Derive the UX variant from a PermissionCall, or `undefined` for default. */
+function deriveVariant(call: PermissionCall): PermissionVariant | undefined {
+  // Plan-mode entry is the only "meta operation" today that uses `'ask'`
+  // and benefits from a bespoke dialog. Other `'ask'` callers fall
+  // through to the default tool-confirmation look.
+  if (call.toolName === ENTER_PLAN_MODE_TOOL && call.hint === 'ask') {
+    return 'planMode'
+  }
+  return undefined
 }
 
 /** Tool names whose writes are always blocked in plan mode. */
@@ -57,9 +77,11 @@ export class PermissionChecker {
     // handled by the same prompt flow, not auto-allowed here).
     if (call.mode === 'bypass' && call.hint === 'ask') return { allowed: true }
     if (this.getCache().isAllowed(call)) return { allowed: true }
+    const variant = deriveVariant(call)
     const payload: PermissionPayload = {
       call,
       annotationBadges: deriveBadges(call),
+      ...(variant ? { variant } : {}),
     }
     const decision = await this.askUser(payload)
     if (decision.allowed && decision.remember) {

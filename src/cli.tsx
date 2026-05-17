@@ -97,6 +97,7 @@ import { createAutoTruncateHook } from './core/toolResult/autoTruncateHook'
 import { createPathDisplayHandler } from './core/paths/pathDisplayHook'
 import { createJsonFormatHandler } from './core/jsonFormat/jsonFormatHook'
 import { createWordWrapHandler } from './core/wordWrap/wordWrapHook'
+import { createWhitespaceHookHandler } from './core/whitespace/whitespaceHook'
 import { createUrlExtractHandler } from './core/urlExtract/urlExtractHook'
 import { currentGitBranch } from './core/session/telemetry'
 import { runAgent as runAgentLoop } from './core/agent/loop'
@@ -106,6 +107,8 @@ import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
 import { loadSkills } from './core/skill/loader'
+import { loadOutputStyles } from './core/outputStyles/loader'
+import { selectActiveStyleName, resolveActiveOutputStyle } from './core/outputStyles/resolve'
 import { makeSkillTool } from './core/skill/skillTool'
 import { SessionStore, DebouncedMetaWriter } from './core/session/store'
 import { sessionsDir } from './core/session/paths'
@@ -159,6 +162,7 @@ import { runPipeline } from './core/swarm/pipeline'
 import { runRoundtable } from './core/swarm/roundtable'
 import { makeInkStdin } from './tui/inkStdin'
 import { getEmergencyTipFromConfig } from './core/notices/emergencyTip'
+import { formatCronMissedNotice, type CronMissedNotice } from './core/notices/cronMissed'
 
 const argv = process.argv.slice(2)
 
@@ -405,6 +409,16 @@ async function runInteractive(): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig({ home: os.homedir(), cwd })
   const skills = await loadSkills({ home: os.homedir(), cwd })
+  // User-defined output styles from `.nuka/output-styles/*.md`. Best-
+  // effort load: scan failures fall back to an empty list so a broken
+  // directory never blocks startup. Resolution to the active style
+  // (env var > config field > none) happens lazily so changes between
+  // turns are observed without a CLI restart.
+  const outputStylesCache = await loadOutputStyles({ home: os.homedir(), cwd }).catch(() => [])
+  const resolveActiveOutputStyleNow = () => {
+    const name = selectActiveStyleName(process.env)
+    return resolveActiveOutputStyle(outputStylesCache, name)
+  }
 
   const hasProviders = config.providers.length > 0
   if (!hasProviders) {
@@ -580,6 +594,23 @@ async function runInteractive(): Promise<void> {
       { id: 'url-extract-annotator' },
     )
   }
+  // P0 #2 — opt-in whitespace normalizer for ASSISTANT model output (not
+  // tool output, unlike BBBB/LLL/etc.). When NUKA_WHITESPACE_HOOK=1 is
+  // set, the handler runs `whitespace.normalize` over the assembled
+  // assistant text each time an assistant message lands on the
+  // transcript and surfaces the diagnostic via the registry's
+  // InvocationResult. CURRENT SEMANTICS: observer-only. The handler does
+  // NOT rewrite session.messages — `afterAssistantMessage` fires AFTER
+  // appendMessage, and a retroactive rewrite contract is not yet
+  // designed. This step plumbs the event end-to-end; a follow-up iter
+  // may layer `replaceText` once the rewrite path is agreed.
+  if (process.env.NUKA_WHITESPACE_HOOK === '1') {
+    hookRegistry.register(
+      'afterAssistantMessage',
+      createWhitespaceHookHandler(),
+      { id: 'whitespace-normalize-observer' },
+    )
+  }
   // Iter KKK — opt-in ApplyDiff sandbox. When
   // NUKA_APPLY_DIFF_ALLOWED_ROOTS is set (comma-separated list of roots,
   // absolute or relative to cwd), any ApplyDiff call whose target path
@@ -633,17 +664,19 @@ async function runInteractive(): Promise<void> {
   // every consumer that constructs its own registry (subagent dispatch,
   // tests, etc.) opts in independently.
   //
-  // Iter WWW — opt-in afterToolCall pipeline mode. When
-  // NUKA_HOOK_PIPELINE_MODE=pipeline is set, multi-hook output
-  // transformers (jsonFormat + pathDisplay + auto-truncate, etc.)
-  // CHAIN: each handler's `data.replaceResult` feeds the next handler's
-  // `payload.result`, so the transforms compose into a single output.
-  // Default unset → last-write-wins, identical to Iter III behaviour
-  // (later replaceResult supersedes earlier, no chaining).
+  // Iter WWW — afterToolCall dispatch mode. As of the pipeline-default
+  // flip, multi-hook output transformers (jsonFormat → pathDisplay →
+  // wordWrap → urlExtract) CHAIN by default: each handler's
+  // `data.replaceResult` feeds the next handler's `payload.result`, so
+  // the transforms compose into a single output. Single-handler setups
+  // see no behaviour change (pipeline ≡ last-write-wins with one
+  // handler). To restore the legacy Iter III shape (every handler reads
+  // the original tool result; last successful replaceResult wins) set
+  // NUKA_HOOK_PIPELINE_MODE=last-write-wins in the environment.
   const hookPipelineMode =
-    process.env.NUKA_HOOK_PIPELINE_MODE === 'pipeline'
-      ? ('pipeline' as const)
-      : ('last-write-wins' as const)
+    process.env.NUKA_HOOK_PIPELINE_MODE === 'last-write-wins'
+      ? ('last-write-wins' as const)
+      : ('pipeline' as const)
   const originalRegister = tools.register.bind(tools)
   tools.register = ((tool) => originalRegister(wrapWithHooks(tool, hookRegistry, { pipelineMode: hookPipelineMode }))) as typeof tools.register
   ;[ReadTool, WriteTool, EditTool, BashTool, GlobTool, GrepTool, WebFetchTool].forEach(t => tools.register(t as any))
@@ -662,23 +695,28 @@ async function runInteractive(): Promise<void> {
   // fire callback below and the `runAgent` deps further down) see the
   // same instance.
   const cronPromptQueue = new CronPromptQueue()
+  // P1 #5 — missed-task notice payload. Hoisted out of the cron IIFE so we
+  // can thread it into the `<App>` props alongside `emergencyTip`. `null`
+  // until either (a) bootCronRehydrate returns no missed tasks, or (b) the
+  // notice formatter returns null. Either way the Welcome slot stays empty.
+  let cronMissedNotice: CronMissedNotice | null = null
   {
     // Practical Iter J — rehydrate persisted cron jobs BEFORE we touch the
     // singleton store (first-caller-wins semantics: `getCronStore({...})`
     // here decides durability for the process). Missed tasks (scheduled
-    // window in the past while Nuka was down) are surfaced to the user.
+    // window in the past while Nuka was down) are surfaced via the Welcome
+    // notice slot (see CronMissedNotice).
     const cronPath = defaultCronPath(cwd)
     const cronStore = getCronStore({ persistPath: cronPath })
     try {
       const { missed } = await bootCronRehydrate({ store: cronStore, path: cronPath })
-      if (missed.length > 0) {
-        // No structured startup-notice channel exists yet; a future iter
-        // can swap this for a Welcome-banner notice (see EmergencyTip).
-        // The `[nuka:cron]` tag makes the line trivially greppable so the
-        // future surface knows where to pick up.
-        const ids = missed.map((t) => t.id).join(', ')
-        console.warn(`[nuka:cron] ${missed.length} missed task(s) since last run: ${ids}`)
-      }
+      // P1 #5 — route the missed-task list into the Welcome notice slot
+      // instead of `console.warn`. Stderr writes here would race the ink
+      // alt-screen handover (and on some terminals get eaten outright);
+      // the bordered notice below the welcome banner is the right surface.
+      // `formatCronMissedNotice` returns null for the empty case, so the
+      // slot renders nothing when there's nothing to say.
+      cronMissedNotice = formatCronMissedNotice(missed)
     } catch {
       // Best-effort — never block startup on a cron-file read.
     }
@@ -1051,6 +1089,13 @@ async function runInteractive(): Promise<void> {
       providerResolver: providers,
       permission,
       hookRegistry,
+      // P1 #6 — share the singleton so sub-agents inherit the parent's
+      // active worktree (and EnterWorktree calls from inside a sub-agent
+      // mutate the same store the main loop reads on the next turn).
+      worktreeStore: getWorktreeStore(),
+      // Output styles: same resolver the main loop uses, so a single
+      // `NUKA_OUTPUT_STYLE` setting steers both contexts consistently.
+      outputStyle: resolveActiveOutputStyleNow,
     }) as any,
   )
 
@@ -1170,6 +1215,7 @@ async function runInteractive(): Promise<void> {
       systemPromptInput: () => ({
         cwd, platform, shell, nodeVersion, gitBranch, skills,
         memory: findRelevant(memoryCache, tokenize(input.text), 5),
+        outputStyle: resolveActiveOutputStyleNow(),
       }),
       skills,
       persist: sessions.persist,
@@ -1180,6 +1226,10 @@ async function runInteractive(): Promise<void> {
       costTracker,
       effort: config.effort,
       cronPromptQueue,
+      // P1 #6 — same singleton the EnterWorktree tool mutates. The loop
+      // reads `store.getActive()` on every tool call, so EnterWorktree's
+      // side effect lands on the very next tool's `ctx.cwd`.
+      worktreeStore: getWorktreeStore(),
     }, signal)
   }
 
@@ -1271,6 +1321,7 @@ async function runInteractive(): Promise<void> {
       recent={welcomeRecent}
       harness={harness}
       emergencyTip={getEmergencyTipFromConfig(config)}
+      cronMissed={cronMissedNotice}
       planModeState={planModeState}
       idleHook={idleHook}
     />,

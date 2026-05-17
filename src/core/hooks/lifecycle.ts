@@ -22,6 +22,7 @@
 
 import type { HookRegistry } from './registry'
 import type { InvocationResult } from './events'
+import type { AssistantMessage, ContentBlock } from '../message/types'
 
 /** Hard default timeout for any lifecycle fire. Generous because handlers
  *  may do non-trivial work (memory sync, telemetry flush, etc.). */
@@ -132,6 +133,29 @@ export type BeforeAutoCompactPayload = Readonly<{
 }>
 
 /**
+ * Payload for `afterAssistantMessage` (P0 #2).
+ *
+ * Fires once per assistant message BEFORE it is appended to
+ * `session.messages`. `text` is the concatenated text content of the
+ * assembled assistant message (text blocks only — tool_use blocks are
+ * skipped); when the model emitted no text content, `text === ''`.
+ *
+ * Mutable: a handler returning `{ data: { replaceText: '<new>' } }`
+ * (where the value is a string) instructs the fire site to rewrite
+ * the assistant text blocks before persistence. See the
+ * `afterAssistantMessage` block in `events.ts` for the exact rules
+ * (last-write-wins, empty-string semantics, content-block rewrite).
+ */
+export type AfterAssistantMessagePayload = Readonly<{
+  sessionId: string
+  text: string
+  /** Execution context. Omitted = `'main'`. */
+  context?: LifecycleContext
+  /** When `context === 'subagent'`, the fully qualified `<plugin>:<name>`. */
+  agentName?: string
+}>
+
+/**
  * Fire `sessionStart` once the host wiring (registry, tools, plugins) is
  * settled and a session has been created. Called from cli.tsx after
  * `applyHookConfig` so user-defined handlers have a chance to register
@@ -182,6 +206,122 @@ export function fireAfterTurn(
   opts?: FireOptions,
 ): Promise<InvocationResult[]> {
   return safeInvoke(registry, 'afterTurn', payload, opts)
+}
+
+/**
+ * Fire `afterAssistantMessage` immediately BEFORE an assistant message is
+ * appended to `session.messages`. Fires once per model turn (an assistant
+ * message may contain text + tool_use blocks; this event sees the
+ * assembled message, not per stream delta).
+ *
+ * Mutable contract: a handler returning `{ data: { replaceText: '<new>' } }`
+ * with a string value asks the fire site to rewrite the assistant text
+ * blocks before persistence. Multi-handler resolution is
+ * LAST-WRITE-WINS (each handler sees the original `payload.text`, not
+ * a previous handler's replacement). Use {@link extractReplaceText}
+ * on the returned `InvocationResult[]` to obtain the resolved value
+ * (or `undefined` when no handler requested a rewrite).
+ *
+ * The fire helper itself does NOT mutate any caller state — it merely
+ * surfaces the invocation results. The agent loop / dispatch wrapper
+ * decides whether to apply the rewrite to the assembled message.
+ */
+export function fireAfterAssistantMessage(
+  registry: HookRegistry,
+  payload: AfterAssistantMessagePayload,
+  opts?: FireOptions,
+): Promise<InvocationResult[]> {
+  return safeInvoke(registry, 'afterAssistantMessage', payload, opts)
+}
+
+/**
+ * Last-write-wins extraction of `data.replaceText` from an
+ * `afterAssistantMessage` fire's invocation results. Walks the
+ * results in order, keeping the LAST `replaceText` value where the
+ * handler succeeded AND the value is a string. Non-string values
+ * (`undefined` / `null` / numbers / objects) are ignored. Empty
+ * string is a VALID replacement and will be returned as `''`.
+ *
+ * Returns `undefined` when no handler requested a rewrite.
+ *
+ * Lives next to `fireAfterAssistantMessage` so call sites do not
+ * reinvent the extraction shape. Pure on the `results` array — no
+ * side effects, no throws.
+ */
+export function extractReplaceText(
+  results: readonly InvocationResult[],
+): string | undefined {
+  let resolved: string | undefined
+  for (const r of results) {
+    if (r.outcome !== 'success') continue
+    const v = r.result?.data?.['replaceText']
+    if (typeof v === 'string') resolved = v
+  }
+  return resolved
+}
+
+/**
+ * Apply a resolved `replaceText` to an in-memory `AssistantMessage`,
+ * mutating its `content` per the rewrite rule documented on the
+ * `afterAssistantMessage` event in `events.ts`:
+ *
+ *   - All text blocks are replaced with a SINGLE text block carrying
+ *     `replaceText`. The replacement sits at the index of the first
+ *     pre-existing text block (preserves the relative position of
+ *     interleaved tool_use blocks around it).
+ *   - tool_use blocks are preserved verbatim in their original order
+ *     (the model's tool calls are not the assistant's prose).
+ *   - When the message had NO text block, a single text block carrying
+ *     `replaceText` is PREPENDED to `content`.
+ *
+ * `replaceText === ''` is a valid replacement: the resulting block
+ * carries an empty string but still exists, preserving the
+ * "assistant emitted at least one text block" invariant relied on by
+ * downstream consumers.
+ *
+ * Mutates `message` in place; returns nothing. Safe to call before
+ * `appendMessage` since the message is still owned by the loop.
+ */
+export function applyReplaceTextToAssistant(
+  message: AssistantMessage,
+  replaceText: string,
+): void {
+  let firstTextIdx = -1
+  for (let i = 0; i < message.content.length; i++) {
+    const b = message.content[i]
+    if (b && b.type === 'text') {
+      firstTextIdx = i
+      break
+    }
+  }
+  const newTextBlock: ContentBlock = { type: 'text', text: replaceText }
+  if (firstTextIdx === -1) {
+    // No text block — prepend a fresh one in front of any tool_use blocks.
+    message.content = [newTextBlock, ...message.content]
+    return
+  }
+  // Strip ALL text blocks; keep tool_use blocks in order; insert the
+  // replacement at the original first-text-block position. Walk once
+  // building the new array.
+  const next: ContentBlock[] = []
+  let inserted = false
+  for (let i = 0; i < message.content.length; i++) {
+    const b = message.content[i]!
+    if (b.type === 'text') {
+      if (i === firstTextIdx && !inserted) {
+        next.push(newTextBlock)
+        inserted = true
+      }
+      // skip every text block (including the one we just replaced)
+      continue
+    }
+    next.push(b)
+  }
+  // `inserted` is guaranteed true (firstTextIdx points at a text block
+  // we walked past), but defensively prepend if a future refactor
+  // breaks the invariant.
+  if (!inserted) next.unshift(newTextBlock)
+  message.content = next
 }
 
 /**

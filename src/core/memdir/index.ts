@@ -20,6 +20,33 @@ import {
 
 export type { MemoryEntry } from './parser'
 
+// Auxiliary primitives ported from upstream Nuka-Code's memdir (Issue #9).
+// Surface them through the public memdir entrypoint so external callers
+// (system prompt builders, future recall hooks) consume one canonical
+// import path.
+export {
+  memoryAge,
+  memoryAgeDays,
+  memoryFreshnessNote,
+  memoryFreshnessText,
+} from './memoryAge'
+export {
+  formatMemoryManifest,
+  scanMemoryFiles,
+  type MemoryHeader,
+} from './memoryScan'
+export {
+  MEMORY_TYPES,
+  type MemoryType,
+  parseMemoryType,
+} from './memoryTypes'
+export {
+  findRelevantMemories,
+  parseSelectedFilenames,
+  type FindRelevantMemoriesOpts,
+  type RelevantMemory,
+} from './findRelevantMemories'
+
 /** Resolve `~/.nuka/memory/<sha1(cwd)>/MEMORY.md`. */
 export function memoryPath(cwd: string, home: string = os.homedir()): string {
   const hash = crypto.createHash('sha1').update(cwd).digest('hex')

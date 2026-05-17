@@ -1,14 +1,25 @@
 // src/tui/PromptInput/PromptInput.tsx
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
 import stringWidth from 'string-width'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
-import { MentionPanel } from './MentionPanel'
 import { fuzzyFileSearch } from './fuzzyFileSearch'
 import { makeState, step, type State as VimState, type Key as VimKey } from '../../core/vim/controller'
 import { bufferToText } from '../../core/vim/mode'
 import type { SlashRegistry } from '../../slash/registry'
+import {
+  MentionPalette,
+  optionToToken,
+  usePromptMention,
+  type PromptMentionLoaders,
+} from '../promptMentions'
+import { createPromptDraft, syncPromptDraftText } from '../../promptContextReferences/draft'
+import type {
+  PromptDraft,
+  PromptReferenceToken,
+} from '../../promptContextReferences/types'
+import type { PromptMentionOption } from '../../promptContextReferences/palette'
 
 /**
  * Width-aware left-truncation: returns the tail of `s` that fits in
@@ -45,6 +56,14 @@ export type PromptInputProps = {
   placeholder?: string
   cwd?: string
   onAttachFile?: (path: string) => void
+  /**
+   * Notified when a non-file mention (diff / staged / git / commit / url
+   * / image) is accepted. The host accumulates these tokens and resolves
+   * them at submit time via `promptContextReferences/inlineReferences`.
+   * file-kind mentions are *not* routed here — they keep the existing
+   * `onAttachFile` contract so submit-time file inlining is unchanged.
+   */
+  onAttachReference?: (token: PromptReferenceToken) => void
   /** When true, route keystrokes through the vim controller. Defaults to false. */
   vim?: boolean
   /** Slash registry — when provided, typing `/` shows command suggestions. */
@@ -67,11 +86,95 @@ export type PromptInputProps = {
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const history = useInputHistory()
 
-  const [mentionActive, setMentionActive] = useState(false)
-  const [mentionQuery, setMentionQuery] = useState('')
-  const [mentionMatches, setMentionMatches] = useState<string[]>([])
-  const [mentionCursor, setMentionCursor] = useState(0)
   const [slashCursor, setSlashCursor] = useState(0)
+
+  // ---------------------------------------------------------------------------
+  // @-mention palette wiring (iter 3b)
+  //
+  // The legacy bespoke `@…` file-suggest path was replaced with the
+  // promptMentions hook + palette. The hook auto-detects the trigger from
+  // (input, cursorOffset), so we don't manually watch for `@` here — we just
+  // keep cursorOffset in sync with the controlled value and keep an internal
+  // PromptDraft mirror. On accept the hook mutates `draft` *and* calls back
+  // into the parent's onChange via onInputChange.
+  //
+  // onAttachFile is preserved: when a file option is accepted we push its
+  // label into pendingAttachments via the existing callback, so handleSubmit
+  // in App.tsx keeps inlining file contents on submit (its current contract).
+  // ---------------------------------------------------------------------------
+  const [draft, setDraft] = useState<PromptDraft>(() => createPromptDraft(props.value))
+  const [cursorOffset, setCursorOffset] = useState<number>(() => props.value.length)
+
+  // Keep cursorOffset clamped to value when value shrinks below it (e.g.
+  // history nav, slash clear). Append-only typing tracks length naturally.
+  useEffect(() => {
+    setCursorOffset(co => (co > props.value.length ? props.value.length : co))
+  }, [props.value])
+
+  // Reconcile internal draft when external value diverges (history nav,
+  // slash clear, external clear after submit, controlled tests).
+  useEffect(() => {
+    if (draft.text !== props.value) {
+      setDraft(d => syncPromptDraftText(d, props.value, Math.min(cursorOffset, props.value.length)))
+    }
+    // We intentionally don't depend on `draft` here — `setDraft` updater
+    // reads the latest value and we only want to re-run on external changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.value])
+
+  const mentionLoaders = useMemo<PromptMentionLoaders>(() => ({
+    loadFileOptions: async (type, query): Promise<PromptMentionOption[]> => {
+      // Reuse the existing fuzzy walker — only files exist today; folder /
+      // image are emitted by the same walker as plain paths, so we surface
+      // them under the requested type with neutral scoring. The palette
+      // ranks the rest.
+      const cwd = props.cwd ?? process.cwd()
+      const results = await fuzzyFileSearch({ query, cwd, limit: 20 })
+      return results.map((label, idx) => ({
+        id: `${type}-${label}`,
+        type,
+        label,
+        exactMatch: label === query,
+        prefixMatch: query.length > 0 && label.toLowerCase().startsWith(query.toLowerCase()),
+        fuzzyScore: 1,
+        recentScore: results.length - idx,
+      }))
+    },
+  }), [props.cwd])
+
+  const mention = usePromptMention({
+    input: props.value,
+    cursorOffset,
+    draft,
+    onDraftChange: setDraft,
+    onInputChange: nextValue => {
+      props.onChange(nextValue)
+    },
+    setCursorOffset,
+    loaders: mentionLoaders,
+  })
+
+  // Stable accept that also notifies the host:
+  //   - file mentions  → onAttachFile (legacy contract — App.tsx inlines
+  //                      file contents at submit via `pendingAttachments`)
+  //   - non-file kinds → onAttachReference with the resolved token; App.tsx
+  //                      runs the resolver at submit via
+  //                      `promptContextReferences/inlineReferences`.
+  // The two paths are mutually exclusive per accepted option.
+  const acceptMention = useCallback(() => {
+    const sel = mention.selectedOption
+    mention.acceptSelection()
+    if (!sel) return
+    if (sel.type === 'file') {
+      if (props.onAttachFile) {
+        props.onAttachFile(sel.label)
+      }
+      return
+    }
+    if (props.onAttachReference) {
+      props.onAttachReference(optionToToken(sel))
+    }
+  }, [mention, props])
 
   // Slash mode: active as long as value starts with `/` and registry is given.
   // The list ↔ arg-hint distinction lives inside SlashCard, not here.
@@ -115,16 +218,22 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     setVimMode(next.buffer.mode)
     const text = bufferToText(next.buffer)
     if (text !== props.value) props.onChange(text)
+    // Turn 14 fix — keep `cursorOffset` (owned by PromptInput, consumed by
+    // usePromptMention's trigger detector) in sync with the vim buffer's
+    // cursor. Without this, vim insert-mode typing updates `props.value`
+    // but leaves `cursorOffset` at 0, so `detectPromptMentionQuery` sees
+    // an empty prefix and never opens the palette. The flat offset is
+    // computed from row/col + line lengths (PromptInput sanitizes CR/LF
+    // out of the rendered value but the buffer can still be multi-row
+    // mid-paste, so we handle it generically).
+    const buf = next.buffer
+    let flat = 0
+    for (let r = 0; r < buf.cursor.row; r++) {
+      flat += (buf.lines[r] ?? '').length + 1 // +1 for the joining '\n'
+    }
+    flat += buf.cursor.col
+    setCursorOffset(flat)
   }
-
-  useEffect(() => {
-    if (!mentionActive) return
-    const cwd = props.cwd ?? process.cwd()
-    fuzzyFileSearch({ query: mentionQuery, cwd }).then(results => {
-      setMentionMatches(results)
-      setMentionCursor(0)
-    })
-  }, [mentionActive, mentionQuery, props.cwd])
 
   useInput((input, key) => {
     if (props.disabled) return
@@ -140,7 +249,7 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     // we let the existing behavior fall through (typing/backspace/enter all
     // work as before) but we also push the keystroke into the controller
     // so the vim buffer stays in sync for the next mode toggle.
-    if (props.vim && !mentionActive) {
+    if (props.vim && !mention.isOpen) {
       const isInsert = vimRef.current.buffer.mode === 'insert'
       // Esc: enter normal mode (no-op if already there).
       if (key.escape) {
@@ -204,47 +313,47 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       return
     }
 
-    if (mentionActive) {
+    // Mention palette: navigation / accept / dismiss while open. We only
+    // intercept the keys the palette owns — typing/backspace fall through
+    // to the normal append path below, which mutates props.value, which
+    // causes the hook to re-detect the trigger (or close it). This keeps
+    // the palette reactive without duplicating the typing logic.
+    if (mention.isOpen) {
       if (key.escape) {
-        setMentionActive(false)
-        setMentionQuery('')
+        mention.dismiss()
         return
       }
       if (key.upArrow) {
-        setMentionCursor(c => Math.max(0, c - 1))
+        mention.moveSelection(-1)
         return
       }
       if (key.downArrow) {
-        setMentionCursor(c => Math.min(mentionMatches.length - 1, c + 1))
+        mention.moveSelection(1)
+        return
+      }
+      if (key.leftArrow) {
+        mention.focusTypes()
+        return
+      }
+      if (key.rightArrow) {
+        mention.focusResults()
+        return
+      }
+      if (key.tab) {
+        // Tab from types pane focuses results; Tab from results accepts.
+        if (mention.focusedPane === 'types') {
+          mention.focusResults()
+        } else {
+          acceptMention()
+        }
         return
       }
       if (key.return) {
-        const chosen = mentionMatches[mentionCursor]
-        if (chosen) {
-          // Replace trailing @<query> in value with @{path}
-          const base = props.value.replace(new RegExp('@' + escapeRegex(mentionQuery) + '$'), '')
-          props.onChange(base + '@' + chosen + ' ')
-          props.onAttachFile?.(chosen)
-        }
-        setMentionActive(false)
-        setMentionQuery('')
+        acceptMention()
         return
       }
-      if (key.backspace || key.delete) {
-        if (mentionQuery.length === 0) {
-          setMentionActive(false)
-        } else {
-          setMentionQuery(q => q.slice(0, -1))
-          props.onChange(props.value.slice(0, -1))
-        }
-        return
-      }
-      if (!key.ctrl && !key.meta && input) {
-        setMentionQuery(q => q + input)
-        props.onChange(props.value + input)
-        return
-      }
-      return
+      // Typing / backspace fall through to the normal-mode handlers below
+      // so the controlled value changes and the hook re-detects the query.
     }
 
     // Slash overlay: navigate / accept while active.
@@ -311,17 +420,19 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     }
     if (key.backspace || key.delete) {
       history.reset()
-      props.onChange(props.value.slice(0, -1))
+      const nextValue = props.value.slice(0, -1)
+      props.onChange(nextValue)
+      setCursorOffset(nextValue.length)
       return
     }
     if (!key.ctrl && !key.meta && input) {
       history.reset()
-      // Detect @ trigger: input is '@' and value is empty or ends in whitespace
-      if (input === '@' && (props.value === '' || /\s$/.test(props.value))) {
-        setMentionActive(true)
-        setMentionQuery('')
-      }
-      props.onChange(props.value + input)
+      // @-trigger detection is performed inside usePromptMention via
+      // (input, cursorOffset). We just append the character and update
+      // the cursor — the hook does the rest.
+      const nextValue = props.value + input
+      props.onChange(nextValue)
+      setCursorOffset(nextValue.length)
     }
   }, { isActive: !props.disabled })
 
@@ -357,21 +468,31 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     ? '…' + truncateLeftToFit(sanitizedValue, visibleBudget - 1)
     : sanitizedValue
 
+  // Defensive guard: lower each option to its token and drop any whose
+  // resolved kind is `mcp_resource`. mcp_resource isn't in
+  // PROMPT_MENTION_TYPES today so optionToToken's static return type
+  // can't widen to it — but a future resolver could grow the surface,
+  // and the practical track owns the mcp_resource removal in
+  // src/promptContextReferences/types.ts. Until then we filter
+  // structurally via a string-typed copy of the kind so this stays a
+  // defensive no-op rather than dead code under strict TS.
+  const visibleMentionOptions = useMemo(() => {
+    return mention.options.filter(o => {
+      const kind: string = optionToToken(o).kind
+      return kind !== 'mcp_resource'
+    })
+  }, [mention.options])
+
   return (
     <Box flexDirection="column" flexShrink={0}>
-      {mentionActive && (
-        <MentionPanel
-          query={mentionQuery}
-          matches={mentionMatches}
-          cursor={mentionCursor}
-          onSelect={chosen => {
-            const base = props.value.replace(new RegExp('@' + escapeRegex(mentionQuery) + '$'), '')
-            props.onChange(base + '@' + chosen + ' ')
-            props.onAttachFile?.(chosen)
-            setMentionActive(false)
-            setMentionQuery('')
-          }}
-          onCancel={() => { setMentionActive(false); setMentionQuery('') }}
+      {mention.isOpen && (
+        <MentionPalette
+          activeType={mention.activeType}
+          focusedPane={mention.focusedPane}
+          options={visibleMentionOptions}
+          selectedIndex={mention.selectedIndex}
+          preview={mention.preview}
+          types={mention.types}
         />
       )}
       <Box
@@ -402,6 +523,3 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   )
 }
 
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}

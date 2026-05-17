@@ -9,6 +9,8 @@ import { PromptInput } from './PromptInput/PromptInput'
 import { useIdlePoke } from './hooks/useIdlePoke'
 import { useAwayRecap } from './hooks/useAwayRecap'
 import { AwaySummaryCard } from './Recap/AwaySummaryCard'
+import { CronMissedBanner } from './Status/CronMissedBanner'
+import { EmergencyTipBanner } from './Status/EmergencyTipBanner'
 import { StatusPanel } from './Status/StatusPanel'
 import { SubmenuFrame } from './Submenu/SubmenuFrame'
 import { PermissionDialog } from './dialogs/PermissionDialog'
@@ -101,6 +103,7 @@ export type SubmenuDescriptor =
       call: PermissionCall
       suggestedPattern?: string
       annotationBadges?: import('../core/permission/bridge').AnnotationBadge[]
+      variant?: import('../core/permission/bridge').PermissionVariant
       resolve: (d: PermissionDecision) => void
     }
   | {
@@ -251,6 +254,13 @@ export type AppProps = {
   /** Phase D2 — pre-resolved emergency tip from config.notices.emergency. */
   emergencyTip?: import('../core/notices/emergencyTip').EmergencyTip | null
   /**
+   * P1 #5 — pre-formatted missed-cron-task notice resolved in cli.tsx
+   * after `bootCronRehydrate`. Renders as a warning-colored bordered
+   * row beneath the Welcome banner; `null`/omitted suppresses the slot.
+   * Replaces the prior `console.warn` that raced the ink renderer.
+   */
+  cronMissed?: import('../core/notices/cronMissed').CronMissedNotice | null
+  /**
    * Iter DDDD — shared PlanModeState constructed in cli.tsx. When
    * provided, the StatusPanel subscribes via App and shows a
    * `[PLAN MODE]` badge while the agent is in plan mode. The prop is
@@ -276,6 +286,14 @@ export type AppProps = {
       listener: (event: import('../core/awaySummary/idleHook').AwayRecapEvent) => void,
     ) => () => void
   }
+  /**
+   * Resolver capability bundle for non-file prompt references (diff /
+   * staged / git / commit / url / image). Optional — when omitted,
+   * `handleSubmit` lazily constructs the default real-fs / git-CLI /
+   * fetch deps via `buildDefaultResolverDeps()`. Tests inject stubs so
+   * no real fs / network / git calls fire.
+   */
+  resolverDeps?: import('../promptContextReferences/resolver').PromptResolverDeps
 }
 
 export function App(props: AppProps): React.JSX.Element {
@@ -351,6 +369,9 @@ export function App(props: AppProps): React.JSX.Element {
   // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
   const [slashCursor, setSlashCursor] = useState(0)
   const pendingAttachments = useRef<string[]>([])
+  // Non-file mention tokens accepted via PromptInput.onAttachReference.
+  // Drained at submit and resolved through `inlineReferencesIntoText`.
+  const pendingReferences = useRef<import('../promptContextReferences/types').PromptReferenceToken[]>([])
 
   useEffect(() => {
     props.permissionBridge.setHandler((payload, resolve) => {
@@ -361,6 +382,7 @@ export function App(props: AppProps): React.JSX.Element {
           call: payload.call,
           suggestedPattern: payload.suggestedPattern,
           annotationBadges: payload.annotationBadges,
+          variant: payload.variant,
           resolve,
         },
       })
@@ -477,6 +499,27 @@ export function App(props: AppProps): React.JSX.Element {
         blocks.push(`[file: ${relPath}]\n${content}`)
       }
       text = blocks.join('\n\n') + '\n\n' + raw
+    }
+
+    // Non-file mention references (diff / staged / git / commit / url
+    // / image) — drained AFTER file attachments so resolved blocks
+    // appear above the user's prompt but below any inlined file
+    // contents. The resolver bundle is injected via props for tests;
+    // production lazily wires the default fs / git / fetch deps.
+    const referenceTokens = pendingReferences.current.splice(0)
+    if (referenceTokens.length > 0) {
+      const { inlineReferencesIntoText } = await import(
+        '../promptContextReferences/inlineReferences'
+      )
+      const deps =
+        props.resolverDeps ??
+        (await import('../promptContextReferences/deps')).buildDefaultResolverDeps()
+      const result = await inlineReferencesIntoText({
+        raw: text,
+        tokens: referenceTokens,
+        deps,
+      })
+      text = result.text
     }
 
     if (stream.running) {
@@ -702,7 +745,30 @@ export function App(props: AppProps): React.JSX.Element {
   // because it's an object whose identity may change per render.
   const branchName = props.gitBranch?.branch
   const branchDirty = props.gitBranch?.dirty
+  // Persistent EmergencyTip banner — moved out of the Welcome hero so it
+  // survives the Static-stream flush that scrolls Welcome out of view once
+  // the first message lands. Renders in the BOTTOM slot (above
+  // CronMissedBanner) until the auto-dismiss rule fires. Mirrors the
+  // CronMissed fix from Turn 13.
   const emergencyTip = props.emergencyTip ?? null
+  // Persistent CronMissed banner — moved out of the Welcome hero so it
+  // survives the Static-stream flush that scrolls Welcome out of view once
+  // the first message lands. Renders in the BOTTOM slot (next to
+  // AwaySummaryCard) until the auto-dismiss rule fires (see
+  // `cronBannerDismissed` below).
+  const cronMissed = props.cronMissed ?? null
+  // Auto-dismiss: once any message exists in the session the user has had
+  // (at minimum) one full turn of context — they've seen the banner, the
+  // notice is now nagging rather than informing. Cron tasks will fire on
+  // their next scheduled window regardless of dismissal, so a single-turn
+  // exposure window is acceptable. Manual dismiss is intentionally NOT
+  // wired — the BOTTOM slot is already crowded with PromptInput / SlashCard
+  // / StatusPanel / AwaySummaryCard keyboard ownership and stealing a key
+  // for cron dismissal would conflict with several of those.
+  const cronBannerDismissed = session.messages.length > 0
+  // EmergencyTip uses the same auto-dismiss policy as CronMissed: once any
+  // turn lands the tip has been seen and further re-renders are nagging.
+  const emergencyTipDismissed = session.messages.length > 0
   const prologueNode = useMemo(
     () => (
       <Welcome
@@ -712,11 +778,10 @@ export function App(props: AppProps): React.JSX.Element {
         version={props.version}
         updates={props.updates}
         recent={props.recent}
-        emergencyTip={emergencyTip}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.cwd, branchName, branchDirty, session.model, props.version, props.updates, props.recent, emergencyTip],
+    [props.cwd, branchName, branchDirty, session.model, props.version, props.updates, props.recent],
   )
 
   // Bug fix #9: compute a row budget so Messages can clamp its own height
@@ -807,6 +872,7 @@ export function App(props: AppProps): React.JSX.Element {
             call={submenu.call}
             suggestedPattern={submenu.suggestedPattern}
             annotationBadges={submenu.annotationBadges}
+            variant={submenu.variant}
             onDecide={d => { submenu.resolve(d); closeSubmenu() }}
           />
         </SubmenuFrame>
@@ -834,6 +900,27 @@ export function App(props: AppProps): React.JSX.Element {
           onDismiss={dismissAwayRecap}
         />
       )}
+      {/* Persistent EmergencyTip banner. Mirrors the CronMissedBanner
+          fix from Turn 13 — was previously rendered inside the Welcome
+          hero (which scrolls out of view via the Static stream once the
+          first message lands). Lives in the BOTTOM slot above
+          CronMissedBanner with the same gating + auto-dismiss policy
+          (single-turn exposure window). */}
+      {!submenuInline && promptVisible && (
+        <EmergencyTipBanner tip={emergencyTip} dismissed={emergencyTipDismissed} />
+      )}
+      {/* Persistent CronMissed banner. Was previously rendered inside the
+          Welcome hero, but Welcome rides the Static stream and scrolls
+          out of view as soon as the first message lands — so the user
+          would never see missed-task warnings during their second turn.
+          Lives in the BOTTOM slot (above SlashCard / PromptInput) so it
+          stays visible across renders. Auto-dismisses once the session
+          accumulates at least one message (see `cronBannerDismissed`).
+          Gated like AwaySummaryCard: hidden while an inline submenu owns
+          the prompt slot so it doesn't fight the dialog for vertical space. */}
+      {!submenuInline && promptVisible && (
+        <CronMissedBanner notice={cronMissed} dismissed={cronBannerDismissed} />
+      )}
       {/* SlashCard expands UPWARD above the prompt — it sits BEFORE PromptInput
           in source order so the suggestion list stacks above the input box. */}
       {slashActive && props.slash && promptVisible && (
@@ -854,6 +941,7 @@ export function App(props: AppProps): React.JSX.Element {
           placeholder=""
           cwd={props.cwd}
           onAttachFile={p => { pendingAttachments.current.push(p) }}
+          onAttachReference={t => { pendingReferences.current.push(t) }}
           vim={props.config.vim?.enabled === true}
           slash={props.slash}
           onSlashActiveChange={handleSlashActiveChange}

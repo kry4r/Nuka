@@ -31,3 +31,9 @@ export {
   type WhitespaceToolInput,
   type WhitespaceToolResult,
 } from './whitespaceTool'
+
+export {
+  createWhitespaceHookHandler,
+  type WhitespaceHookConfig,
+  type WhitespaceNormalizeDiagnostic,
+} from './whitespaceHook'
