@@ -23,6 +23,7 @@ export function SubagentDetail(p: Props): React.ReactNode {
   const { columns } = useTerminalSize()
   const primaryColor = theme.colors.primary ?? defaultPalette.primary
   const fgMutedColor = theme.colors.fgMuted ?? defaultPalette.fgMuted
+  const warnColor = theme.colors.warn ?? defaultPalette.warn
 
   // Outer box: border (2) + 1-col safety = 4 cols of host chrome budget.
   const boxWidth = Math.max(20, columns - 4)
@@ -57,7 +58,7 @@ export function SubagentDetail(p: Props): React.ReactNode {
         ))}
       </Box>
       {p.planAwaitingApproval && (
-        <Box flexDirection="column" borderStyle="single" borderColor="yellow" padding={1} width={innerPlanWidth}>
+        <Box flexDirection="column" borderStyle="single" borderColor={warnColor} padding={1} width={innerPlanWidth}>
           <Text bold>Plan awaiting approval:</Text>
           <Text wrap="wrap">{safePlan(p.planAwaitingApproval.plan, innerPlanCap)}</Text>
           <Text dimColor>[a] approve · [r] reject</Text>

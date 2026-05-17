@@ -30,7 +30,9 @@ import {
   validateSlug,
   type GitRunner,
 } from './git'
-import { slugify } from '../slug'
+// Direct import from the helper module instead of the barrel — keeps
+// the slug Tool surface out of the main bundle (Phase P2 #12).
+import { slugify } from '../slug/slug'
 import { WorktreeStore } from './store'
 
 /**

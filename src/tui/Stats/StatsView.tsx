@@ -13,6 +13,7 @@ import { aggregate, type StatsResult, type StatsRange } from '../../core/stats/a
 import { chart } from '../../core/stats/chart'
 import { RangeTabs } from './RangeTabs'
 import { useTerminalSize } from '../hooks/useTerminalSize'
+import { useColors } from '../../core/theme/context'
 
 type Tab = 'overview' | 'models'
 const TABS: Tab[] = ['overview', 'models']
@@ -42,8 +43,9 @@ function fmtTokens(n: number): string {
 }
 
 function OverviewTab({ stats }: { stats: StatsResult }): React.JSX.Element {
+  const colors = useColors()
   if (stats.tokens === 0 && stats.sessions === 0) {
-    return <Text color="gray">(no data yet)</Text>
+    return <Text color={colors.fgMuted}>(no data yet)</Text>
   }
   const avgTok = stats.sessions > 0 ? Math.round(stats.tokens / stats.sessions) : 0
   const avgUsd = stats.sessions > 0 ? stats.costUsd / stats.sessions : 0
@@ -63,7 +65,7 @@ function OverviewTab({ stats }: { stats: StatsResult }): React.JSX.Element {
       {rows.map(([label, value]) => (
         <Box key={label}>
           <Text>{'  '}</Text>
-          <Text color="cyan">{label.padEnd(16)}</Text>
+          <Text color={colors.accentCool}>{label.padEnd(16)}</Text>
           <Text>{value}</Text>
         </Box>
       ))}
@@ -89,6 +91,7 @@ export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('overview')
   const [range, setRange] = useState<StatsRange>('all')
   const { columns } = useTerminalSize()
+  const colors = useColors()
   // Chart width: clamp to [40, 72]. Subtract 8 cols of chrome — covers
   // SubmenuFrame border(2) + paddingX(2) + StatsView paddingX(2) + safety(2).
   const chartWidth = Math.min(72, Math.max(40, columns - 8))
@@ -131,9 +134,9 @@ export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
   }).join('')
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1}>
+    <Box flexDirection="column" borderStyle="round" borderColor={colors.accentCool} paddingX={1}>
       <Box>
-        <Text bold color="cyan">Stats  </Text>
+        <Text bold color={colors.accentCool}>Stats  </Text>
         <Text>{tabLabels}</Text>
       </Box>
       <Text>{'─'.repeat(ruleWidth)}</Text>
@@ -141,7 +144,7 @@ export function StatsView({ onExit, home }: StatsViewProps): React.JSX.Element {
       <Text> </Text>
       {tab === 'overview' ? <OverviewTab stats={stats} /> : <ModelsTab stats={stats} chartWidth={chartWidth} />}
       <Text> </Text>
-      <Text color="gray">Tab: switch tab · r: cycle range · Esc: close</Text>
+      <Text color={colors.fgMuted}>Tab: switch tab · r: cycle range · Esc: close</Text>
     </Box>
   )
 }

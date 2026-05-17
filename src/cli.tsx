@@ -12,6 +12,8 @@ import { SCOPE_ORDER } from './core/config/scopeMerge'
 import { ProviderResolver } from './core/provider/resolver'
 import { SessionManager } from './core/session/manager'
 import { ToolRegistry } from './core/tools/registry'
+import { makeLazyTool } from './core/tools/lazy'
+import { loadToolFromSidecar } from './core/tools/extra/loader'
 import { createHookRegistry, wrapWithHooks, applyHookConfig, defaultHookConfigPaths, makeHookListTool, fireSessionStart, fireSessionEnd } from './core/hooks'
 import { PermissionChecker } from './core/permission/checker'
 import { PermissionBridge } from './core/permission/bridge'
@@ -64,22 +66,16 @@ import { getWorktreeStore } from './core/worktree/store'
 import { makeWorktreeTools } from './core/worktree/tools'
 import { createStructuredOutputTool } from './core/structuredOutput/tool'
 import { SleepTool } from './core/sleep/tool'
-import { FormatDurationTool } from './core/duration/durationTool'
-import { JsonFormatTool } from './core/jsonFormat/jsonFormatTool'
-import { ShellQuoteTool } from './core/jsonEscape/shellQuoteTool'
-import { CodeBlocksTool } from './core/codeBlocks/codeBlocksTool'
-import { WrapTextTool } from './core/wordWrap/wrapTextTool'
-import { SlugTool } from './core/slug/slugTool'
-import { TruncateTool } from './core/truncate/truncateTool'
-import { TextStatsTool } from './core/textStats/textStatsTool'
-import { WhitespaceTool } from './core/whitespace/whitespaceTool'
-import { CaseConvertTool } from './core/caseConvert/caseConvertTool'
-import { AnsiStyleTool } from './core/ansi/ansiStyleTool'
-import { UrlExtractTool } from './core/urlExtract/urlExtractTool'
-import { GlobMatchTool } from './core/glob/globTool'
-import { ApplyDiffTool } from './core/diff/applyDiffTool'
+// FormatDuration / JsonFormat / ShellQuote / CodeBlocks / WrapText /
+// Slug / Truncate / TextStats / Whitespace / CaseConvert / AnsiStyle /
+// UrlExtract / GlobMatch — heavy text-utility tools moved to the
+// sidecar bundle `dist/tools-extra.js`; registered as lazy proxies
+// below (see Phase P2 #12, core/tools/lazy.ts).
+import { LAZY_TOOL_ENTRIES, lspQueryToolMeta } from './core/tools/extra/lazyMetas'
+// ApplyDiffTool / FindReplaceTool — lazy via sidecar (Phase P2 #12).
+// Their permission predicates are inlined in the lazy metadata so the
+// permission gate stays synchronous.
 import { createApplyDiffPermissionHandler } from './core/diff/applyDiffPermissionHook'
-import { FindReplaceTool } from './core/findReplace/findReplaceTool'
 import { PlanModeState } from './core/planMode/planModeState'
 import { makePlanModeTools } from './core/planMode/planModeTools'
 import { writePlan } from './core/plan/state'
@@ -124,9 +120,11 @@ import { loadSubagentsFromDir, defaultSubagentDirs } from './core/agents/subagen
 import { validatePlugin, formatReport } from './core/plugin/validate'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
-import { makeLspQueryTool } from './core/lsp/lspQueryTool'
-import { Wizard } from './tui/Onboarding/Wizard'
-import { saveWizardPatch } from './core/onboarding/save'
+// `makeLspQueryTool` — lazy via sidecar (Phase P2 #12). Loaded from
+// `dist/tools-extra.js` and bound to the local LspManager closure on
+// first call.
+// Wizard / saveWizardPatch — only loaded on `nuka init`. Mirrors the
+// existing dynamic-import pattern used by `nuka doctor` (Phase P2 #12).
 import { CostTracker } from './core/cost/tracker'
 import { defaultCostPath, readCostFile, writeCostFile } from './core/cost/persist'
 import { loadMemory, appendMemory } from './core/memdir/index'
@@ -239,6 +237,8 @@ if (testPlanIdx !== -1) {
   ;(async () => {
     try {
       const home = os.homedir()
+      const { Wizard } = await import('./tui/Onboarding/Wizard')
+      const { saveWizardPatch } = await import('./core/onboarding/save')
       const { waitUntilExit } = render(
         <Wizard
           onDone={async (patch) => {
@@ -759,21 +759,27 @@ async function runInteractive(): Promise<void> {
   }
   { const so = createStructuredOutputTool({ type: 'object', properties: {} }); if (so.ok) tools.register(so.tool as any) }
   tools.register(SleepTool as any)
-  tools.register(FormatDurationTool as any)
-  tools.register(JsonFormatTool as any)
-  tools.register(ShellQuoteTool as any)
-  tools.register(CodeBlocksTool as any)
-  tools.register(WrapTextTool as any)
-  tools.register(SlugTool as any)
-  tools.register(TruncateTool as any)
-  tools.register(TextStatsTool as any)
-  tools.register(WhitespaceTool as any)
-  tools.register(CaseConvertTool as any)
-  tools.register(AnsiStyleTool as any)
-  tools.register(UrlExtractTool as any)
-  tools.register(GlobMatchTool as any)
-  tools.register(ApplyDiffTool as any)
-  tools.register(FindReplaceTool as any)
+  // Phase P2 #12 — heavy text-utility tools live in
+  // `dist/tools-extra.js` and are registered as lazy proxies that
+  // dynamic-import the real impl on first call (see
+  // core/tools/lazy.ts + core/tools/extra/lazyMetas.ts). Metadata
+  // (name / params / tags / permission hint / aliases / searchHint)
+  // is inlined so the registry, ToolSearch, and permission checker
+  // stay synchronous at boot. wrapWithHooks runs around the proxy's
+  // run() — hook threading is unchanged.
+  for (const entry of LAZY_TOOL_ENTRIES) {
+    const exportName = entry.exportName
+    tools.register(
+      makeLazyTool(entry.meta, async () => {
+        const real = await loadToolFromSidecar(exportName)
+        return real as unknown as import('./core/tools/types').Tool<unknown>
+      }) as any,
+    )
+  }
+  // ApplyDiff / FindReplace are now part of LAZY_TOOL_ENTRIES (see
+  // their entries with input-dependent `needsPermission`). The
+  // permission HOOK still loads eagerly — see
+  // createApplyDiffPermissionHandler import + hook registration above.
   {
     const tt = makeTaskTools(getTaskStore())
     ;[tt.create, tt.list, tt.get, tt.update].forEach(t => tools.register(t as any))
@@ -950,7 +956,16 @@ async function runInteractive(): Promise<void> {
   // Iter UUU — LSPQuery (navigation: definition/references/hover/documentSymbols).
   // Always registered so the schema is stable; when no server is configured
   // every action returns a friendly `notConfigured: true` payload.
-  tools.register(makeLspQueryTool(lspManager) as any)
+  //
+  // Phase P2 #12 — lazy via the `tools-extra.js` sidecar bundle. The
+  // factory takes the local `LspManager` closure so the proxy must
+  // re-bind on first call.
+  tools.register(
+    makeLazyTool(lspQueryToolMeta, async () => {
+      const sidecar = await import('./core/tools/extra/loader').then(m => m.loadToolsExtraModule())
+      return sidecar.makeLspQueryTool(lspManager) as unknown as import('./core/tools/types').Tool<unknown>
+    }) as any,
+  )
 
   // Register skill tool after all skill-loading (including plugin skills) finishes
   tools.register(makeSkillTool(skills) as any)

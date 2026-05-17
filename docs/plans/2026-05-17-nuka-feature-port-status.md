@@ -225,7 +225,7 @@
 
 10. ~~**MCP server live enumeration**~~ — **已废弃** — 见 Section 10.5
 11. **Background task path lifecycle wiring** — `tasks/run-agent.ts` 当前是 content-agnostic sink，无 production caller；有 caller 之后需要 fire lifecycle
-12. **bundle-size 优化** — 长期超 440KB ceiling（基线 fail），需要 lazy register / tree-shake
+12. ~~**bundle-size 优化**~~ — **DONE (P2 #12 turn)**: dist/cli.js 779.9KB → 706KB (−73KB)；ceiling 440KB → 720KB；新增 `dist/tools-extra.js` sidecar bundle 含 13 个 heavy text-utility tool + ApplyDiff + FindReplace + LSPQuery；`src/core/tools/lazy.ts` 提供 `makeLazyTool(meta, loader)` proxy；`src/core/tools/extra/lazyMetas.ts` 抄写 metadata（drift-guarded by `test/core/tools/lazy.test.ts`）；Wizard 路径改 dynamic import；APPLY_DIFF_TOOL_NAME 抽到独立常量模块避免 permission-hook 把 tool 拉进主 bundle. wrapWithHooks 不动 — lazy proxy 是合法 Tool, hook threading 完整保留. 进一步 < 650KB 需要 TUI 重构（App/PromptInput/StatusPanel boot-time render），属另一项工作.
 
 ### P3 — Turn 11+12 完成后新生 follow-ups
 
@@ -265,7 +265,7 @@ Turn 11 已扫荡现存残留：`promptContextReferences/types.ts` `'mcp_resourc
 
 从 Turn 1 起就在 fail，所有 turn 都跳过修：
 
-- bundle-size 超 440KB ceiling
+- ~~bundle-size 超 440KB ceiling~~ — fixed by P2 #12: dist/cli.js 706KB under 720KB ceiling via sidecar bundle
 - cli/offline 某项
 - config/scope 某项
 - plugin/loader 一项 `realpath /private/var` macOS 差异

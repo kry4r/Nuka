@@ -21,7 +21,7 @@ async function readConfig(home: string): Promise<any> {
 async function writeConfig(home: string, obj: unknown): Promise<void> {
   await mkdir(path.join(home, '.nuka'), { recursive: true })
   ConfigSchema.parse(obj) // validate before writing
-  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
 }
 
 export async function saveActiveSelection(home: string, providerId: string): Promise<void> {
@@ -52,7 +52,7 @@ export async function saveVimEnabled(home: string, enabled: boolean): Promise<vo
   // Only validate the full schema when there is a provider selection;
   // in offline mode (no providers) we still want to persist the toggle.
   if (obj.active?.providerId) ConfigSchema.parse(obj)
-  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
 }
 
 export async function saveTheme(home: string, themeName: string): Promise<void> {
@@ -61,7 +61,7 @@ export async function saveTheme(home: string, themeName: string): Promise<void> 
   await mkdir(path.join(home, '.nuka'), { recursive: true })
   // Only validate when there is a provider selection (same pattern as saveVimEnabled).
   if (obj.active?.providerId) ConfigSchema.parse(obj)
-  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
 }
 
 export async function saveStatusBarHidden(home: string, hidden: string[]): Promise<void> {
@@ -69,7 +69,7 @@ export async function saveStatusBarHidden(home: string, hidden: string[]): Promi
   obj.statusBar = { ...(obj.statusBar ?? {}), hidden }
   await mkdir(path.join(home, '.nuka'), { recursive: true })
   if (obj.active?.providerId) ConfigSchema.parse(obj)
-  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
 }
 
 /**
@@ -88,7 +88,7 @@ export async function saveConfigPatch(
   mutate(obj)
   await mkdir(path.join(home, '.nuka'), { recursive: true })
   if (obj.active?.providerId) ConfigSchema.parse(obj)
-  await writeFile(globalConfigFile(home), stringifyYaml(obj), 'utf8')
+  await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
 }
 
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {

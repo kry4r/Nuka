@@ -54,7 +54,12 @@ import { defineTool } from '../tools/define'
 import { applyUnifiedDiff } from './apply'
 import { parseUnifiedDiff, type ParsedDiffFile } from './parse'
 
-export const APPLY_DIFF_TOOL_NAME = 'ApplyDiff'
+// Re-exported from a dedicated constant module so that the
+// permission-hook (and any future name-only consumer) can import the
+// canonical name WITHOUT pulling the entire tool implementation into
+// the main bundle (Phase P2 #12).
+import { APPLY_DIFF_TOOL_NAME } from './applyDiffName'
+export { APPLY_DIFF_TOOL_NAME }
 
 export type ApplyDiffInput = {
   diff: string

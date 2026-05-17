@@ -35,7 +35,10 @@
 import { resolve, relative, isAbsolute, sep } from 'node:path'
 import type { HookHandler } from '../hooks/events'
 import { parseUnifiedDiff } from './parse'
-import { APPLY_DIFF_TOOL_NAME } from './applyDiffTool'
+// Pure-constant import — does NOT pull the tool implementation into
+// the bundle, keeping `dist/cli.js` slim (Phase P2 #12). The full
+// tool lives in the lazy-loaded sidecar.
+import { APPLY_DIFF_TOOL_NAME } from './applyDiffName'
 
 /**
  * Configuration for {@link createApplyDiffPermissionHandler}.

@@ -49,7 +49,7 @@ export const StatusBarCommand: SlashCommand = {
   ],
   async run(args, ctx): Promise<SlashResult> {
     const hidden = ctx.config?.statusBar?.hidden ?? []
-    const iconMode = (ctx.config?.statusBar as any)?.iconMode ?? 'icon'
+    const iconMode = ctx.config?.statusBar?.iconMode ?? 'icon'
     const home = os.homedir()
     const trimmed = args.trim()
 
@@ -81,9 +81,9 @@ export const StatusBarCommand: SlashCommand = {
         await saveConfigPatch(home, (obj) => {
           obj.statusBar = { ...(obj.statusBar ?? {}), iconMode: next }
           if (ctx.config.statusBar) {
-            (ctx.config.statusBar as any).iconMode = next
+            ctx.config.statusBar.iconMode = next
           } else {
-            (ctx.config as any).statusBar = { iconMode: next }
+            ctx.config.statusBar = { hidden: [], layout: 'dense', iconMode: next }
           }
         })
       } catch (err) {

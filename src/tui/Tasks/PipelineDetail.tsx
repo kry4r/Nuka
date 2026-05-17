@@ -10,11 +10,12 @@ type Node = { id: string; agentName: string; status: string; parents: string[] }
 export function PipelineDetail(p: { pipelineId: string; nodes: Node[] }): React.ReactNode {
   const theme = useTheme()
   const primaryColor = theme.colors.primary ?? defaultPalette.primary
+  const warnColor = theme.colors.warn ?? defaultPalette.warn
   const placed = React.useMemo(() => {
     try { return dagLayout(p.nodes.map(n => ({ id: n.id, parents: n.parents }))) }
     catch { return null }
   }, [p.nodes])
-  if (!placed) return <Text color="yellow">Cycle detected — pipeline corrupt</Text>
+  if (!placed) return <Text color={warnColor}>Cycle detected — pipeline corrupt</Text>
   const maxLevel = Math.max(...placed.map(n => n.level))
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={primaryColor}>

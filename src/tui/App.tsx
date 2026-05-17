@@ -811,7 +811,7 @@ export function App(props: AppProps): React.JSX.Element {
           Static items are unbounded (terminal owns their scrollback). */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" minHeight={0}>
         {justCompacted && (
-          <Text color="gray" dimColor>✻ context compacted — older turns summarized</Text>
+          <Text color={activeTheme.colors.fgMuted} dimColor>✻ context compacted — older turns summarized</Text>
         )}
         <Messages
           items={session.messages}
@@ -1127,7 +1127,7 @@ export function App(props: AppProps): React.JSX.Element {
       {submenuFull && submenu?.kind === 'session-picker' && submenu.metas === 'loading' && (
         <SubmenuFrame mode="full" title="Sessions" focused>
           <Box paddingX={1}>
-            <Text color="cyan">Loading sessions…</Text>
+            <Text color={activeTheme.colors.accentCool}>Loading sessions…</Text>
           </Box>
         </SubmenuFrame>
       )}

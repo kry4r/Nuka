@@ -24,16 +24,16 @@ type IconMode = typeof ICON_MODES[number]
 const SEGMENTS = ['mode', 'model', 'cwd', 'context', 'cost', 'counts'] as const
 
 export function StatusBarForm(props: FormCommonProps): React.JSX.Element {
-  const initialLayout: Layout = (props.config.statusBar?.layout ?? 'dense') as Layout
-  const initialIconMode: IconMode = ((props.config.statusBar as any)?.iconMode ?? 'icon') as IconMode
+  const initialLayout: Layout = props.config.statusBar?.layout ?? 'dense'
+  const initialIconMode: IconMode = props.config.statusBar?.iconMode ?? 'icon'
   const initialHidden = new Set(props.config.statusBar?.hidden ?? [])
   const [layout, setLayout] = useState<Layout>(initialLayout)
   const [iconMode, setIconMode] = useState<IconMode>(initialIconMode)
   const [hidden, setHidden] = useState<Set<string>>(initialHidden)
 
   useEffect(() => {
-    setLayout((props.config.statusBar?.layout ?? 'dense') as Layout)
-    setIconMode(((props.config.statusBar as any)?.iconMode ?? 'icon') as IconMode)
+    setLayout(props.config.statusBar?.layout ?? 'dense')
+    setIconMode(props.config.statusBar?.iconMode ?? 'icon')
     setHidden(new Set(props.config.statusBar?.hidden ?? []))
   }, [props.config])
 

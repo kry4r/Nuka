@@ -8,3 +8,5 @@ core.*
 coverage/
 .claude
 .worktrees/
+# Project-scope Nuka config may contain API keys — never commit
+.nuka/
