@@ -7,7 +7,7 @@
 //   3. resolveViewports honours per-fixture viewport override
 //   4. Empty directory returns empty array; non-fixture files are skipped
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import path from 'path'
 import fs from 'fs'
 import type { FixtureDef, Viewport } from '../../../../../src/core/testing/explorer/types'
@@ -94,6 +94,11 @@ describe('resolveViewports — override', () => {
 // ---------------------------------------------------------------------------
 describe('loadFixtures — glob boundaries', () => {
   beforeAll(() => {
+    ensureTmp()
+  })
+
+  afterEach(() => {
+    cleanTmp()
     ensureTmp()
   })
 

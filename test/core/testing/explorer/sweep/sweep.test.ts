@@ -7,7 +7,7 @@
 //   3. multiple viewport profiles exercised
 //   4. failure dump written to .ink-explorer/failures/
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import path from 'path'
 import fs from 'fs'
 import React from 'react'
@@ -24,8 +24,17 @@ function cleanTmp() {
   fs.rmSync(TMP_OUT, { recursive: true, force: true })
 }
 
-beforeAll(() => {
+function ensureTmp() {
   fs.mkdirSync(TMP_OUT, { recursive: true })
+}
+
+beforeAll(() => {
+  ensureTmp()
+})
+
+afterEach(() => {
+  cleanTmp()
+  ensureTmp()
 })
 
 afterAll(() => {

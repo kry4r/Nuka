@@ -6,7 +6,7 @@
 //   2. exits 1 when failures present
 //   3. summary contains fixture name + pass/fail counts
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import path from 'path'
 import fs from 'fs'
 import { runExploreCli } from '../../src/core/testing/explorer/index'
@@ -34,6 +34,13 @@ beforeAll(() => {
   fs.mkdirSync(CLEAN_FIXTURES_DIR, { recursive: true })
   fs.mkdirSync(FAILING_FIXTURES_DIR, { recursive: true })
   fs.mkdirSync(OUT_DIR, { recursive: true })
+})
+
+afterEach(() => {
+  // Wipe and recreate FAILING_FIXTURES_DIR between tests so fixtures written
+  // by one test cannot leak into and influence the next test's run.
+  fs.rmSync(FAILING_FIXTURES_DIR, { recursive: true, force: true })
+  fs.mkdirSync(FAILING_FIXTURES_DIR, { recursive: true })
 })
 
 afterAll(() => {
@@ -164,7 +171,7 @@ export default fixture
 
     const output = lines.join('')
     // Summary must contain fixture name
-    expect(output).toMatch(/SummaryTestFixture|summary-test/)
+    expect(output).toMatch(/SummaryTestFixture/)
     // Summary must contain pass and fail counts
     expect(output).toMatch(/passed|PASS/i)
     expect(output).toMatch(/failed|FAIL/i)
