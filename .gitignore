@@ -12,3 +12,5 @@ coverage/
 .nuka/
 # ink-ui-explorer transient run state (failures, captures, judge-cache, runs)
 /.ink-explorer/
+# ink-ui-explorer test scratch dir (interrupted test runs)
+/.tmp-ink-explorer-test/

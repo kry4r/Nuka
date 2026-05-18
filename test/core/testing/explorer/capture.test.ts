@@ -3,7 +3,7 @@
 // M1.T4 tests for the capture() function and runExploreCli 'capture' dispatch.
 // Locked spec §4.1: capture mounts a fixture at one viewport, writes grid files.
 
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, afterAll } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -17,18 +17,26 @@ import { capture, runExploreCli } from '../../../../src/core/testing/explorer/in
 // ---------------------------------------------------------------------------
 
 let tmpDir: string | undefined
+const tmpFixturePaths: string[] = []
 
 function makeTmpDir(): string {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ink-explorer-test-'))
   return tmpDir
 }
 
-afterEach(() => {
+function cleanup() {
   if (tmpDir) {
     fs.rmSync(tmpDir, { recursive: true, force: true })
     tmpDir = undefined
   }
-})
+  for (const p of tmpFixturePaths) {
+    fs.rmSync(p, { recursive: true, force: true })
+  }
+  tmpFixturePaths.length = 0
+}
+
+afterEach(cleanup)
+afterAll(cleanup)
 
 // ---------------------------------------------------------------------------
 // Inline fixture def (used directly in capture() calls)
@@ -42,20 +50,23 @@ const inlineFixture: FixtureDef = {
   },
 }
 
-// Write a temporary fixture file that exports a default FixtureDef
-function writeTmpFixture(dir: string): string {
-  const fixturePath = path.join(dir, 'inline.fixtures.tsx')
+// Write a temporary fixture file inside the project src tree (so node_modules
+// are reachable via normal resolution during dynamic import in vitest ESM).
+// Dot-prefixed + .gitignored so an interrupted test run cannot pollute the repo.
+function writeTmpFixture(_dir: string): string {
+  const tmpTestDir = path.join(process.cwd(), '.tmp-ink-explorer-test')
+  fs.mkdirSync(tmpTestDir, { recursive: true })
+  const fixturePath = path.join(tmpTestDir, 'inline.fixtures.mts')
   fs.writeFileSync(
     fixturePath,
     `import React from 'react'
 import { Text } from 'ink'
-import type { FixtureDef } from '${path.resolve('/data/xtzhang/Nuka/src/core/testing/explorer/types.js').replace(/\.tsx?$/, '')}'
 
-const fixture: FixtureDef = {
+const fixture = {
   component: 'InlineText',
   cases: {
     hello: {
-      render: () => React.createElement(Text, null, 'hello world'),
+      render: () => React.createElement(Text, null, 'cli test frame'),
     },
   },
 }
@@ -63,6 +74,8 @@ const fixture: FixtureDef = {
 export default fixture
 `,
   )
+  // Register cleanup
+  if (!tmpFixturePaths.includes(tmpTestDir)) tmpFixturePaths.push(tmpTestDir)
   return fixturePath
 }
 
