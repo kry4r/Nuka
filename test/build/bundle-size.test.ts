@@ -32,6 +32,12 @@
 //     ~780 KB → ~700 KB. The ceiling is set ~20 KB above that
 //     measurement to leave room for incremental UI polish without
 //     immediately tripping CI.
+//   - B5 (2026-05-18): 720 → 744 KB. The `coordinate_agents` tool
+//     (Blackboard + Coordinator + bb_read/bb_write) is statically wired
+//     behind the `NUKA_COORDINATOR=1` env opt-in in cli.tsx, so the
+//     module is part of the prod bundle even when the feature is off.
+//     Measured at ~721 KB; ceiling bumped to 744 KB to retain the
+//     ~20 KB incremental-polish headroom contract.
 //
 // Further reduction below ~650 KB requires TUI restructuring (App.tsx,
 // PromptInput, StatusPanel etc. render at boot, so lazy-loading them
@@ -47,7 +53,7 @@ const CLI_JS = join(ROOT, 'dist', 'cli.js')
 const TEST_RUNNER_JS = join(ROOT, 'dist', 'test-runner.js')
 const TOOLS_EXTRA_JS = join(ROOT, 'dist', 'tools-extra.js')
 
-const CLI_CEILING_BYTES = 720 * 1024
+const CLI_CEILING_BYTES = 744 * 1024
 
 describe('build: bundle split + size', () => {
   beforeAll(() => {
