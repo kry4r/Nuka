@@ -1,0 +1,25 @@
+// src/slash/history.ts
+//
+// B4 — /history slash command. Opens the full-screen session browser
+// (SessionList.tsx via the App submenu reducer). When persistence is
+// disabled (NUKA_SESSION_PERSIST unset) we return a plain text response
+// telling the user how to enable it, rather than opening an empty list.
+import type { SlashCommand } from './types'
+import { isPersistEnabled, PERSIST_ENV } from '../core/session/history/persist'
+
+export const HistoryCommand: SlashCommand = {
+  name: 'history',
+  description: 'Browse, resume or delete past sessions',
+  source: 'builtin',
+  usage: '/history',
+  examples: ['/history'],
+  run: async () => {
+    if (!isPersistEnabled(process.env)) {
+      return {
+        type: 'text',
+        text: `Session history is disabled. Set ${PERSIST_ENV}=1 and restart Nuka to enable cross-startup session resume.`,
+      }
+    }
+    return { type: 'dialog', dialog: { kind: 'history-list' } }
+  },
+}

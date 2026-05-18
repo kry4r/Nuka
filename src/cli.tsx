@@ -31,6 +31,7 @@ import { EffortCommand } from './slash/effort'
 import { SettingsCommand, ConfigCommand } from './slash/settings'
 import { CompactCommand } from './slash/compact'
 import { ResumeCommand } from './slash/resume'
+import { HistoryCommand } from './slash/history'
 import { MemdirCommand, setMemdirSynthCallable } from './slash/memdir'
 import { VimCommand } from './slash/vim'
 import { DoctorCommand } from './slash/doctor'
@@ -858,6 +859,7 @@ async function runInteractive(): Promise<void> {
   ;[
     ExitCommand, HelpCommand, ClearCommand, NewCommand, ForkCommand, BtwCommand,
     CostCommand, ModelCommand, EffortCommand, SettingsCommand, ConfigCommand, CompactCommand, ResumeCommand,
+    HistoryCommand,
     MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, TaskRunCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
     StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
