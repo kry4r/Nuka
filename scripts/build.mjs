@@ -110,6 +110,41 @@ await build({
 // in the `nuka explore` argv branch, so it never enters dist/cli.js.
 // The same externals as test-runner.js: react + ink are peer deps from the
 // target project; string-width / strip-ansi / ansi-regex are bundled in.
+//
+// M6.P0: verifyWorker.js is a separate bundle — verify.ts spawns it as a
+// worker_threads Worker so it must NOT be inlined into explorer.js (each
+// verify() call needs its own isolate with a fresh module registry).
+await build({
+  entryPoints: ['src/core/testing/explorer/L4_repair/verifyWorker.ts'],
+  outfile: 'dist/verifyWorker.js',
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'esm',
+  jsx: 'automatic',
+  banner: {
+    js: [
+      "import { createRequire as __nuka_createRequire } from 'node:module';",
+      'const require = __nuka_createRequire(import.meta.url);',
+    ].join('\n'),
+  },
+  external: [
+    ...runtimeExternals,
+    'react',
+    'ink',
+    'ink-testing-library',
+    '@anthropic-ai/sdk',
+    'tsx',
+    'tsx/esm',
+    'tsx/esm/api',
+    'tsx/cjs',
+    'tsx/cjs/api',
+  ],
+  minifyWhitespace: true,
+  legalComments: 'none',
+  logLevel: 'info',
+})
+
 await build({
   entryPoints: ['src/core/testing/explorer/index.ts'],
   outfile: 'dist/explorer.js',

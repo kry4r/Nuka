@@ -117,6 +117,10 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
             violations,
             asciiView: grid.asciiView,
             gridHash: grid.hash,
+            // Fix 1 (M6.P0): populate fixturePath so the repair subagent's
+            // verify tool can re-mount. `fixturePath` is the absolute path
+            // from the LoadedFixture loop variable at line 76.
+            fixturePath,
             timestamp: new Date().toISOString(),
           }
 

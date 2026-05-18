@@ -108,6 +108,7 @@ export async function repair(opts: RepairOptsExtended): Promise<RepairResult> {
       outDir,
       dumpPath,
       rootCause: subagentRes.summary,
+      cwd,
     })
   } catch (err) {
     return {

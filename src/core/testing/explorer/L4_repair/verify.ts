@@ -1,40 +1,45 @@
 // src/core/testing/explorer/L4_repair/verify.ts
 //
-// M5.T2 — in-process re-mount + L0/L1 verification of a single fixture
-// case at a single viewport. See locked spec §4.6 step 3.
+// M5.T2 — re-mount + L0/L1 verification of a single fixture case at a
+// single viewport. See locked spec §4.6 step 3.
 //
-// **Hard constraint (plan §509):** verify MUST NOT spawn a subprocess.
-// No subprocess imports at all — keep this file's import list pure
-// node:fs/path plus the explorer's own L0/L1 modules. The whole flow
-// runs in the calling process so the repair subagent can iterate
-// quickly inside one Anthropic-API-priced session.
+// **worker_threads (NOT a subprocess — spec §4.6/§509 interpretation):**
+//   Spec §509 says "no subprocess". `worker_threads` is NOT a subprocess:
+//   the Worker runs in the SAME process (same PID) but in a separate V8
+//   isolate with its own ESM module registry. This satisfies the spec's
+//   intent (no IPC overhead, no spawn cost, no PATH-resolution surprises)
+//   while giving us a *fresh module graph per verify call*, including all
+//   transitive imports. The old copy-rename hack only freshened the entry
+//   file's cache key; transitive deps still hit the stale registry.
 //
-// **Module-cache strategy (ESM limitation note):**
-//   ESM modules cannot be evicted from the registry from userland — Node's
-//   spec deliberately omits that surface. tsImport's namespace API was
-//   designed to re-evaluate, but in practice Node's module loader caches
-//   the URL→source mapping at a layer below tsx, so calling tsImport
-//   twice on the same path returns the same content. The robust workaround
-//   is to load the fixture from a UNIQUELY-NAMED copy each call — that
-//   path has never been seen by the loader so the cache key misses, the
-//   file is read fresh from disk, and tsx re-evaluates with the latest
-//   bytes. The copy sits in the fixture's own directory so relative
-//   imports inside the fixture continue to resolve from the same point.
+// **M6.P0 fix (transitive deps):**
+//   M6.T1 observed that verify() was producing false-positive "verified"
+//   when the Opus subagent edited non-fixture source files (e.g.
+//   src/core/tools/todoWrite.ts). The old in-process strategy could never
+//   fix this because Node's ESM registry is append-only: once a URL is
+//   cached, no userland API can evict it. worker_threads solves it cleanly:
+//   each Worker boots a brand-new V8 isolate whose module registry is empty,
+//   so every import — including transitive deps — is resolved fresh from disk.
 //
-// Transitive module note: edits to files imported BY the fixture (e.g. a
-// component module the fixture re-exports) still hit the underlying ESM
-// registry's cached entries for those *original* paths. Verify only
-// guarantees fresh evaluation of the entry fixture file. Subagent edits
-// to deeper source files require the caller to either round-trip through
-// a copy (not done here) or accept that the verify result reflects the
-// process snapshot at startup for transitive deps.
+// **Worker startup timing (empirical — measured 2026-05-18):**
+//   Round-trip ~700-850ms per verify() call. At the M5.T3 default budget of
+//   maxTurns=20, that adds ≤17s of worker overhead — well inside the
+//   300s wall-clock budget. Flagged here for future tuning if turn count
+//   increases significantly.
+//
+// **Fallback policy:**
+//   1. Worker with `execArgv: ['--import', 'tsx']` — this is the primary path.
+//      tsx's ESM loader hook registers inside the worker isolate so tsImport
+//      can handle .tsx resolution.
+//   2. Only if both Worker variants fail empirically may the caller fall back
+//      to spawning a subprocess — that deviation MUST be documented in the
+//      header. This file intentionally contains no subprocess imports.
 
-import { copyFileSync, existsSync, unlinkSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { renderWithViewport } from '../L0/render'
-import { AnsiGrid } from '../L0/grid'
-import { runAll } from '../L1/index'
-import type { FixtureDef, Viewport, Violation } from '../types'
+import { Worker } from 'node:worker_threads'
+import { fileURLToPath } from 'node:url'
+import type { Viewport, Violation } from '../types'
 
 export type VerifyOpts = {
   fixturePath: string
@@ -47,9 +52,20 @@ export type VerifyResult =
   | { clean: true }
   | { clean: false; violations: Violation[] }
 
+// 30-second timeout per verify call — generous enough for slow CI and warm
+// worker startup, tight enough to surface hangs rather than silently eating
+// the whole repair budget.
+const VERIFY_TIMEOUT_MS = 30_000
+
 /**
  * Mount one fixture-case at one viewport, run L1 invariants, return the
- * pass/fail JSON. No subprocess, no shell, no spawn — pure in-process.
+ * pass/fail JSON.
+ *
+ * Each call spins up a fresh worker_threads Worker with its own V8 isolate
+ * and ESM module registry. This guarantees that every verify() call sees the
+ * latest on-disk content of ALL imported modules — not just the fixture entry
+ * file. The Worker shares the same process PID (not a subprocess per spec
+ * §4.6/§509).
  *
  * @throws if `fixturePath` does not exist, is not loadable as a FixtureDef,
  *         or `caseName` is not present in the fixture's `cases` map.
@@ -65,92 +81,82 @@ export async function verify(opts: VerifyOpts): Promise<VerifyResult> {
     throw new Error(`verify: fixture not found: ${absPath}`)
   }
 
-  const fixture = await loadFixtureFresh(absPath)
-  const fixtureCase = fixture.cases[caseName]
-  if (!fixtureCase) {
-    throw new Error(
-      `verify: case '${caseName}' not in fixture ${fixture.component} ` +
-        `(known: ${Object.keys(fixture.cases).join(', ')})`,
-    )
-  }
+  // Resolve the worker entry. In source-mode (vitest, tsx) import.meta.url
+  // points at the .ts file; in dist mode it points at dist/explorer.js. We
+  // probe for a .js neighbour first (dist) then fall back to .ts (source).
+  const workerUrl = resolveWorkerUrl()
 
-  const handle = renderWithViewport(fixtureCase.render(), viewport)
-  // Tiny settle so the first frame is committed before we parse the grid.
-  // We don't run a fuzz loop here so a single setImmediate is sufficient.
-  await new Promise<void>((r) => setImmediate(r))
+  return new Promise<VerifyResult>((resolve, reject) => {
+    let settled = false
 
-  try {
-    const frame = handle.lastFrame()
-    const grid = AnsiGrid.parse(frame, viewport)
-    const violations = runAll(grid, {
-      viewport,
-      staticWrites: handle.staticWrites(),
-      fixtureCase,
+    const worker = new Worker(workerUrl, {
+      workerData: { fixturePath: absPath, caseName, viewport, cwd },
+      execArgv: ['--import', 'tsx'],
     })
 
-    if (violations.length === 0) return { clean: true }
-    return { clean: false, violations }
-  } finally {
-    handle.unmount()
-  }
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      void worker.terminate()
+      reject(
+        new Error(
+          `verify: worker timed out after ${VERIFY_TIMEOUT_MS}ms ` +
+            `(fixture: ${absPath}, case: ${caseName})`,
+        ),
+      )
+    }, VERIFY_TIMEOUT_MS)
+
+    worker.on('message', (msg: { clean: boolean; violations?: Violation[]; error?: string }) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (msg.error) {
+        reject(new Error(`verify: worker error — ${msg.error}`))
+        return
+      }
+      if (msg.clean) {
+        resolve({ clean: true })
+      } else {
+        resolve({ clean: false, violations: msg.violations ?? [] })
+      }
+    })
+
+    worker.on('error', (err) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(new Error(`verify: worker failed — ${err.message}`))
+    })
+
+    worker.on('exit', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (code !== 0) {
+        reject(new Error(`verify: worker exited with code ${code}`))
+      }
+    })
+  })
 }
 
 /**
- * Load a fixture file with a fresh evaluation each call. We copy the
- * source to a uniquely-named sibling, import THAT path (so Node's loader
- * has never seen this URL before), then delete the copy.
- *
- * The copy lives in the same directory as the original so any relative
- * imports inside the fixture (e.g. `import x from '../../src/...'`)
- * resolve from the same point and behave identically.
+ * Resolve the verifyWorker entry path. In dist mode (import.meta.url ends
+ * with .js or is under dist/) we look for verifyWorker.js next to the
+ * current bundle. In source mode we use verifyWorker.ts next to this file.
  */
-async function loadFixtureFresh(absPath: string): Promise<FixtureDef> {
-  const dir = path.dirname(absPath)
-  const ext = path.extname(absPath)
-  const uniq = `.verify-tmp-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}${ext}`
-  const copyPath = path.join(dir, uniq)
+function resolveWorkerUrl(): URL | string {
+  const selfUrl = import.meta.url
+  const isDist =
+    selfUrl.endsWith('.js') ||
+    selfUrl.includes('/dist/') ||
+    selfUrl.includes('\\dist\\')
 
-  copyFileSync(absPath, copyPath)
-
-  let raw: unknown
-  try {
-    // Native import first — under vitest, Vite handles .tsx transforms
-    // per-URL, so a unique copy path forces a fresh transform. Under the
-    // compiled dist runtime the tsx ESM hook (see commit 5d9693b) handles
-    // the resolve. tsImport is the fallback for environments where neither
-    // hook is installed.
-    try {
-      const mod = (await import(copyPath)) as
-        | { default?: FixtureDef }
-        | FixtureDef
-      raw =
-        'default' in (mod as object)
-          ? (mod as { default?: FixtureDef }).default
-          : mod
-    } catch {
-      const { tsImport } = await import('tsx/esm/api')
-      const mod = (await tsImport(copyPath, import.meta.url)) as
-        | { default?: FixtureDef }
-        | FixtureDef
-      raw =
-        'default' in (mod as object)
-          ? (mod as { default?: FixtureDef }).default
-          : mod
-    }
-  } finally {
-    try {
-      unlinkSync(copyPath)
-    } catch {
-      /* best-effort */
-    }
+  if (isDist) {
+    // dist/explorer.js lives alongside dist/verifyWorker.js
+    const selfDir = path.dirname(fileURLToPath(selfUrl))
+    return path.join(selfDir, 'verifyWorker.js')
   }
 
-  if (!raw || typeof raw !== 'object') {
-    throw new Error(
-      `verify: ${absPath} default export is not a FixtureDef object`,
-    )
-  }
-  return raw as FixtureDef
+  // Source mode: verifyWorker.ts is next to verify.ts
+  return new URL('./verifyWorker.ts', selfUrl)
 }

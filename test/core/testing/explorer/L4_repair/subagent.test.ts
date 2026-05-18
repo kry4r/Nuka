@@ -135,8 +135,16 @@ describe('L4_repair/subagent — runRepairSubagent', () => {
         ],
       },
       {
+        // Mixed content block: text reasoning followed by a tool_use call.
+        // Locks the parser's handling of assistant turns that contain both
+        // text and tool_use blocks (the parser must not drop the tool_use
+        // because a text block preceded it).
         stop_reason: 'tool_use',
         content: [
+          {
+            type: 'text',
+            text: "I'll edit the fixture to fix the violation.",
+          },
           {
             type: 'tool_use',
             id: 'toolu_2',
