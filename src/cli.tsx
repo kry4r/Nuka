@@ -107,8 +107,7 @@ import { loadSkills } from './core/skill/loader'
 import { loadOutputStyles } from './core/outputStyles/loader'
 import { selectActiveStyleName, resolveActiveOutputStyle } from './core/outputStyles/resolve'
 import { makeSkillTool } from './core/skill/skillTool'
-import { SessionStore, DebouncedMetaWriter } from './core/session/store'
-import { sessionsDir } from './core/session/paths'
+import { buildSessionPersistence } from './core/session/history/persist'
 import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
@@ -431,9 +430,14 @@ async function runInteractive(): Promise<void> {
   }
 
   const providers = new ProviderResolver(config)
-  const store = new SessionStore({ dir: sessionsDir(os.homedir()) })
-  const metaWriter = new DebouncedMetaWriter(store)
-  const sessions = new SessionManager({ store, metaWriter })
+  // B4 — persistence is now opt-in via NUKA_SESSION_PERSIST. When the env
+  // is unset (default), both store + metaWriter are undefined, the
+  // SessionManager runs in-memory only, and `--resume` / `/history` are
+  // unavailable. When set, the wiring is identical to pre-B4 behaviour.
+  const persistence = buildSessionPersistence({ home: os.homedir(), env: process.env })
+  const store = persistence.store
+  const metaWriter = persistence.metaWriter
+  const sessions = new SessionManager(persistence)
   const firstProvider = config.providers[0]
   const activeProviderId = config.active.providerId || firstProvider?.id || ''
   const activeProvider = activeProviderId ? config.providers.find(p => p.id === activeProviderId) : undefined
@@ -445,6 +449,10 @@ async function runInteractive(): Promise<void> {
 
   // Parse --resume flag: --resume (most recent) or --resume=<id-prefix>
   const resumeArg = process.argv.find(a => a === '--resume' || a.startsWith('--resume='))
+  if (resumeArg !== undefined && !store) {
+    console.error('--resume requires NUKA_SESSION_PERSIST=1')
+    process.exit(2)
+  }
   if (resumeArg !== undefined) {
     const prefix = resumeArg.includes('=') ? resumeArg.split('=').slice(1).join('=') : ''
     const allMetas = await sessions.listPersisted()
@@ -1155,7 +1163,10 @@ async function runInteractive(): Promise<void> {
     // Iter GGGG — stop the cron tick so a fresh setInterval round doesn't
     // race the exit. Synchronous; safe before / after the async flushes.
     cronScheduler?.stop()
-    Promise.all([lspCleanup, costFlush, recentFilesFlush, memSynth, sessionEndFire]).finally(() => metaWriter.flush().finally(() => process.exit(0)))
+    Promise.all([lspCleanup, costFlush, recentFilesFlush, memSynth, sessionEndFire]).finally(() => {
+      const flushMeta = metaWriter ? metaWriter.flush() : Promise.resolve()
+      flushMeta.finally(() => process.exit(0))
+    })
   })
 
   // Practical Iter OOO — final flush on the soft-exit path. `beforeExit`
