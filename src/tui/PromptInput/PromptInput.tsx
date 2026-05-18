@@ -1,12 +1,20 @@
 // src/tui/PromptInput/PromptInput.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Text, useInput, useStdout } from 'ink'
+import { homedir } from 'node:os'
 import stringWidth from 'string-width'
 import { defaultPalette as P } from '../theme'
 import { useInputHistory } from './useInputHistory'
 import { fuzzyFileSearch } from './fuzzyFileSearch'
 import { makeState, step, type State as VimState, type Key as VimKey } from '../../core/vim/controller'
 import { bufferToText } from '../../core/vim/mode'
+import {
+  buildResolver,
+  readUserBindings,
+  type KeybindingResolver,
+  type KeybindingAction,
+  type KeybindingContext,
+} from '../../core/keybindings'
 import type { SlashRegistry } from '../../slash/registry'
 import {
   MentionPalette,
@@ -85,6 +93,24 @@ export type PromptInputProps = {
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const history = useInputHistory()
+
+  // Env-gated user-overridable keybinding resolver. When NUKA_KEYBINDINGS is
+  // unset (default) we leave `resolver` as null and the legacy hardcoded
+  // branches below run unchanged. When set to '1' we load
+  // ~/.nuka/keybindings.yaml asynchronously; until it loads, resolver is null
+  // (preserving legacy behavior on first paint).
+  const [resolver, setResolver] = useState<KeybindingResolver | null>(null)
+  useEffect(() => {
+    if (process.env.NUKA_KEYBINDINGS !== '1') {
+      setResolver(null)
+      return
+    }
+    let cancelled = false
+    void readUserBindings(homedir())
+      .then(user => { if (!cancelled) setResolver(() => buildResolver(user)) })
+      .catch(() => { if (!cancelled) setResolver(() => buildResolver(null)) })
+    return () => { cancelled = true }
+  }, [])
 
   const [slashCursor, setSlashCursor] = useState(0)
 
@@ -244,6 +270,72 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     // The callback is `useIdlePoke`-stable in production (no-op when
     // the watcher is absent) so this is safe to call on every key.
     props.onUserInput?.()
+
+    // Env-gated keybindings dispatch (NUKA_KEYBINDINGS=1).
+    // When resolver is null (default — env unset, or loader pending) this
+    // entire block is skipped and the legacy branches below run unchanged.
+    if (resolver) {
+      const ctx: KeybindingContext = mention.isOpen
+        ? 'Mention'
+        : slashActive
+          ? 'Slash'
+          : props.vim && vimRef.current.buffer.mode !== 'insert'
+            ? 'Vim'
+            : 'Chat'
+      const action: KeybindingAction | null = resolver(input, key, ctx)
+      if (action !== null) {
+        switch (action) {
+          case 'chat:submit':
+            if (props.value.trim()) {
+              history.push(props.value)
+              props.onSubmit(props.value)
+            }
+            return
+          case 'chat:cancel':
+            // Fall through to legacy escape handling (vim/mention/slash branches
+            // own context-specific cancel semantics).
+            break
+          case 'history:previous': {
+            const prev = history.prev(props.value)
+            if (prev !== null) props.onChange(prev)
+            return
+          }
+          case 'history:next': {
+            const next = history.next()
+            if (next !== null) props.onChange(next)
+            return
+          }
+          case 'mention:dismiss':
+            mention.dismiss()
+            return
+          case 'mention:previous': mention.moveSelection(-1); return
+          case 'mention:next':     mention.moveSelection(1);  return
+          case 'mention:focusTypes':   mention.focusTypes();   return
+          case 'mention:focusResults': mention.focusResults(); return
+          case 'mention:accept':       acceptMention();        return
+          case 'slash:dismiss':        props.onChange('');     return
+          case 'slash:previous':
+            setSlashCursor(c => Math.max(0, c - 1))
+            return
+          case 'slash:next':
+            setSlashCursor(c => Math.min(slashCandidates.length - 1, c + 1))
+            return
+          case 'slash:accept': {
+            const chosen = slashCandidates[slashCursor]
+            if (chosen) props.onChange('/' + chosen.name + ' ')
+            return
+          }
+          case 'vim:escape':
+            applyVimKey({ kind: 'esc' })
+            return
+          case 'chat:newline':
+            // Legacy path appends newline via the normal-mode `input` branch
+            // when shift+enter or similar reaches here; fall through.
+            break
+        }
+      }
+      // No match — fall through to the legacy branches below unchanged.
+    }
 
     // Vim mode: in normal/visual we route through the controller. In insert
     // we let the existing behavior fall through (typing/backspace/enter all
