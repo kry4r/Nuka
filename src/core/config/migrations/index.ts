@@ -1,0 +1,6 @@
+export { loadAndMigrate, type LoadAndMigrateResult, type LoadAndMigrateOptions } from './loadAndMigrate'
+export { runMigrations, type RunOptions, type RunResult } from './run'
+export { atomicWriteYaml } from './atomicWrite'
+export { MIGRATIONS } from './registry'
+export { CURRENT_CONFIG_VERSION, MigrationError, type Migration } from './types'
+export { v1ToV2 } from './v1-to-v2'
