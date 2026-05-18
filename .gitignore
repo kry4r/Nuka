@@ -20,3 +20,6 @@ coverage/
 /.tmp-fuzz-test/
 /.tmp-judge-cache-test/
 /.tmp-judge-test/
+/.tmp-verify-test/
+/.tmp-subagent-test/
+/.tmp-repair-test/
