@@ -77,18 +77,17 @@ describe('ui-auto fixtures', () => {
     fixtures = await loadFixtures()
   })
 
-  // Bug A fixtures — currently RED at HEAD (no "When NOT to use" in description,
-  // no TodoWrite section in systemPrompt). Marked it.fails() so vitest exits 0.
-  it.fails('regression-bug-a: tool-description-has-when-not-to-use', async () => {
-    const bugA = fixtures.find(f => f.file.includes('regression-bug-a'))
+  // Bug A fixtures — flipped GREEN at M6.T1.
+  it('regression-bug-a: tool-description-has-when-not-to-use', async () => {
+    const bugA = fixtures.find(f => f.file === path.join(FIXTURES_DIR, 'regression-bug-a.fixtures.tsx'))
     expect(bugA, 'regression-bug-a fixture not found').toBeDefined()
     const c = bugA!.def.cases['tool-description-has-when-not-to-use']
     expect(c, 'case not found').toBeDefined()
     await runFixtureCase(c!)
   })
 
-  it.fails('regression-bug-a: system-prompt-has-todowrite-section', async () => {
-    const bugA = fixtures.find(f => f.file.includes('regression-bug-a'))
+  it('regression-bug-a: system-prompt-has-todowrite-section', async () => {
+    const bugA = fixtures.find(f => f.file === path.join(FIXTURES_DIR, 'regression-bug-a.fixtures.tsx'))
     expect(bugA, 'regression-bug-a fixture not found').toBeDefined()
     const c = bugA!.def.cases['system-prompt-has-todowrite-section']
     expect(c, 'case not found').toBeDefined()
