@@ -43,9 +43,14 @@ describe('nuka explore argv branch', () => {
     )
     // Should exit non-zero (2 = usage)
     expect(result.status).not.toBe(0)
-    // Should emit usage-like content
+    // Should emit usage-like content — each verb asserted independently
+    // to ensure no verb is silently dropped from the help output.
     const combined = (result.stdout ?? '') + (result.stderr ?? '')
-    expect(combined).toMatch(/capture|sweep|fuzz|judge|repair/i)
+    expect(combined).toMatch(/capture/)
+    expect(combined).toMatch(/sweep/)
+    expect(combined).toMatch(/fuzz/)
+    expect(combined).toMatch(/judge/)
+    expect(combined).toMatch(/repair/)
   })
 
   it('explore unknown-verb exits non-zero (dev mode)', () => {
