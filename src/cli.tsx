@@ -115,6 +115,7 @@ import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
+import { makeCoordinateAgentsTool } from './core/tools/coordinator/coordinateAgentsTool'
 import { dispatchAgent } from './core/agents/dispatch'
 import { resolveAgentDef } from './core/agents/loader'
 import { loadSubagentsFromDir, defaultSubagentDirs } from './core/agents/subagentLoader'
@@ -1135,6 +1136,20 @@ async function runInteractive(): Promise<void> {
       outputStyle: resolveActiveOutputStyleNow,
     }) as any,
   )
+
+  // B5 — `coordinate_agents` is opt-in via NUKA_COORDINATOR=1 (Nuka env-opt-in
+  // invariant). When enabled, the tool is registered alongside `dispatch_agent`
+  // and runs on top of the same AgentRegistry / ToolRegistry / providers.
+  if (process.env['NUKA_COORDINATOR'] === '1') {
+    tools.register(
+      makeCoordinateAgentsTool({
+        agents,
+        registry: tools,
+        providerResolver: providers,
+        permission,
+      }) as any,
+    )
+  }
 
   const nodeVersion = process.version
   const shell = process.env.SHELL ?? '/bin/sh'
