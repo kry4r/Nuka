@@ -82,6 +82,7 @@ recap:
     // enumeration covers them. Skip them here so the harness doesn't have
     // to invent provider fixtures per key.
     const sentinels: Record<string, string> = {
+      version: 'version: 1\n',
       theme: 'theme:\n  name: default-dark\n',
       compact: 'compact:\n  keepTurns: 7\n',
       search: 'search:\n  endpoint: https://example.com/search\n',

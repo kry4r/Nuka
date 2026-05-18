@@ -8,6 +8,7 @@ import { SCOPE_ORDER, deepMergeWithLock, extractLocked } from './scopeMerge'
 import { discoverScopes, readScopeConfig, scopePathMap } from './scope'
 
 const EMPTY: Config = {
+  version: 1,
   providers: [],
   active: { providerId: '' },
 }
@@ -210,6 +211,7 @@ export async function loadConfig(opts: {
   // The shape-walk regression test in test/core/config/load.test.ts asserts
   // every ConfigSchema key is reachable through this output.
   const merged: Config = {
+    version: projectCfg.version ?? globalCfg.version,
     providers: mergeProviders(globalCfg.providers, projectCfg.providers),
     active: projectCfg.active.providerId
       ? projectCfg.active

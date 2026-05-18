@@ -178,6 +178,12 @@ export const NoticesConfigSchema = z
 export type NoticesConfig = z.infer<typeof NoticesConfigSchema>
 
 export const ConfigSchema = z.object({
+  /**
+   * Schema version. Defaults to 1 when absent so unversioned (pre-migrations)
+   * configs continue to parse. Bumped by migrations under
+   * `src/core/config/migrations/`.
+   */
+  version: z.number().int().positive().default(1),
   providers: z.array(ProviderConfigSchema).default([]),
   active: ActiveSelectionSchema.default({ providerId: '' }),
   theme: ThemeSchema,
