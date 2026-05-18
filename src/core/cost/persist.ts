@@ -105,3 +105,7 @@ export function capEntries(entries: readonly CostEntry[]): CostEntry[] {
   const sorted = entries.slice().sort((a, b) => a.ts - b.ts)
   return sorted.slice(sorted.length - MAX_ENTRIES)
 }
+
+// Re-export of the daily-totals helpers so consumers can import the whole
+// cost persistence surface from one location (matches `defaultCostPath`).
+export { defaultCostHistoryPath } from './costHistory'
