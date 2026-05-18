@@ -7,7 +7,7 @@ import type {
   ProviderEvent,
   ToolSpec,
 } from './types'
-import type { Message, StopReason, ToolContentBlock } from '../message/types'
+import type { ContentBlock, Message, StopReason, ToolContentBlock } from '../message/types'
 import { fetchRemoteModels } from './remoteModels'
 
 type AnthropicOpts = {
@@ -189,13 +189,37 @@ function toAnthropicMessages(messages: Message[]): unknown[] {
   return out
 }
 
-function blocksToAnthropic(blocks: any[]): unknown[] {
-  return blocks.map((b: any) => {
+function blocksToAnthropic(blocks: ContentBlock[]): unknown[] {
+  return blocks.map((b): unknown => {
     if (b.type === 'text') return { type: 'text', text: b.text }
-    if (b.type === 'tool_use') return { type: 'tool_use', id: b.id, name: b.name, input: b.input }
+    if (b.type === 'tool_use') {
+      return { type: 'tool_use', id: b.id, name: b.name, input: b.input }
+    }
+    if (b.type === 'image') {
+      if (b.dataBase64 !== undefined) {
+        return {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: b.mediaType,
+            data: b.dataBase64,
+          },
+        }
+      }
+      if (b.url !== undefined) {
+        return {
+          type: 'text',
+          text: `[image: ${b.url} (remote URL not supported by Anthropic)]`,
+        }
+      }
+      return { type: 'text', text: '[image: (no data)]' }
+    }
     return b
   })
 }
+
+/** Test-only re-export. Not part of the public provider API. */
+export const __test_toAnthropicMessages = toAnthropicMessages
 
 function toAnthropicTool(spec: ToolSpec): unknown {
   return {
