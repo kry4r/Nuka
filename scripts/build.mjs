@@ -127,12 +127,20 @@ await build({
   // Mark heavy framework + SDK deps external (loaded from project node_modules).
   // string-width / strip-ansi / ansi-regex are intentionally bundled in so the
   // skill is usable in projects that may not have them installed.
+  // tsx is externalized so tsImport() in fixtureLoader can register the ESM
+  // loader hook correctly at runtime (the hook mechanism needs the real tsx
+  // loader, not a bundled copy of it).
   external: [
     ...runtimeExternals,
     'react',
     'ink',
     'ink-testing-library',
     '@anthropic-ai/sdk',
+    'tsx',
+    'tsx/esm',
+    'tsx/esm/api',
+    'tsx/cjs',
+    'tsx/cjs/api',
   ],
   minifyWhitespace: true,
   legalComments: 'none',
