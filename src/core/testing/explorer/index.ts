@@ -86,8 +86,44 @@ export async function runExploreCli(argv: string[]): Promise<number> {
     },
 
     async fuzz() {
-      await fuzz({})
-      return 0
+      // Parse --target=<fixture>, --seed=<int>, --steps=<int>, --p-resize=<float>
+      const targetArg = argv.find(a => a.startsWith('--target='))
+      const seedArg = argv.find(a => a.startsWith('--seed='))
+      const stepsArg = argv.find(a => a.startsWith('--steps='))
+      const pResizeArg = argv.find(a => a.startsWith('--p-resize='))
+
+      const target = targetArg ? targetArg.slice('--target='.length) : undefined
+      const seed = seedArg ? Number(seedArg.slice('--seed='.length)) : 0
+      const steps = stepsArg ? Number(stepsArg.slice('--steps='.length)) : 200
+      const pResize = pResizeArg ? Number(pResizeArg.slice('--p-resize='.length)) : 0.05
+
+      if (!target) {
+        process.stderr.write('explore fuzz: --target=<fixture-path> is required\n')
+        return 2
+      }
+
+      const result = await fuzz({
+        target,
+        seed,
+        steps,
+        pResize,
+        cwd: process.cwd(),
+      })
+
+      if (result.ok) {
+        process.stdout.write(
+          `[fuzz] OK  seed=${seed} steps=${steps} target=${target} — no invariant violations\n`,
+        )
+        return 0
+      }
+      const f = result.failure!
+      process.stdout.write(
+        `[fuzz] FAIL  seed=${f.seed} invariant=${f.invariant} ` +
+          `viewport=${f.viewport.cols}x${f.viewport.rows}\n` +
+          `       sequence (${f.sequence.length} keys) → shrunk (${f.shrunk.length} keys):\n` +
+          `       ${JSON.stringify(f.shrunk)}\n`,
+      )
+      return 1
     },
     async judge() {
       await judge({})

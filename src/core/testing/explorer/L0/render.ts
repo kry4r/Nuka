@@ -25,6 +25,15 @@ class MockStdin extends EventEmitter {
     this.emit('data', data)
   }
 
+  // ink's App listens on 'readable' and pulls bytes with stdin.read() —
+  // mirrors ink-testing-library's Stdin shim. Without this, useInput
+  // components crash on the first keystroke (`stdin.read is not a function`).
+  read(): string | null {
+    const { data } = this
+    this.data = null
+    return data
+  }
+
   setEncoding(): void { /* noop */ }
   setRawMode(): void { /* noop */ }
   resume(): void { /* noop */ }

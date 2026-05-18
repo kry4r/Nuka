@@ -4,13 +4,19 @@
 // capturing writes into liveBuffer / staticBuffer channels.
 // See locked spec §4.1.
 //
-// Static detection heuristic (ink 6.8, non-debug mode):
-//   Ink emits Static content as a plain write that arrives BEFORE the
-//   ESC[?25l (cursor-hide) sequence that precedes each live-frame repaint.
-//   We classify writes as follows:
-//     - "mode-set" write (ESC[?2026h / ESC[?25l / ESC[?25h / ESC[?2026l) → control, skip
-//     - plain text write following ESC[?2026h but before ESC[?25l → staticBuffer
-//     - plain text write following ESC[?25l → liveBuffer (live frame content)
+// Static-vs-live classification (ink 6.8, non-debug mode):
+//   * Pure-control writes (single escape like ESC[?2026h / ESC[?25l) carry
+//     no printable payload and are dropped.
+//   * BSR-enable (ESC[?2026h) opens a frame transaction. We clear liveBuffer
+//     so subsequent live-frame content overwrites (not appends to) the
+//     previous frame; staticBuffer accumulates across frames.
+//   * Mixed writes that contain BOTH cursor-positioning escapes (e.g.
+//     ESC[2K, ESC[<n>A, ESC[G) AND printable content come from ink's
+//     in-place rerender path — they are **live-frame content**, regardless
+//     of whether ESC[?25l has been seen yet in this transaction.
+//   * Plain-text writes (no ANSI escapes at all) that arrive BEFORE
+//     ESC[?25l are Static commits → staticBuffer. After ESC[?25l, plain
+//     text is live-frame content.
 //
 // ESC[?2026h = enable synchronized output (BSR Synchronized Output)
 // ESC[?25l   = cursor hide (marks start of live-frame rendering)
@@ -19,8 +25,9 @@
 
 import { Writable } from 'stream'
 
-const CTRL_WRITE_RE = /^\u001b\[/   // any write starting with ESC[  = control
-const CURSOR_HIDE   = '\u001b[?25l' // live-frame start marker
+const CURSOR_HIDE = '\u001b[?25l' // live-frame start marker
+const ANSI_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g
+const CURSOR_MOVE_RE = /\u001b\[(?:\d*[ABCDGJKfH]|\d*;\d*[fH]|2K)/
 
 export class FakeStdout extends Writable {
   columns: number
@@ -30,8 +37,8 @@ export class FakeStdout extends Writable {
   liveBuffer = ''
   staticBuffer = ''
 
-  /** Internal: true while we are in the "between BSR and cursor-hide" window */
-  private _inStaticWindow = false
+  /** True between BSR-enable and the first cursor-hide of a transaction. */
+  private _beforeCursorHide = false
 
   constructor(cols: number, rows: number) {
     super()
@@ -43,23 +50,34 @@ export class FakeStdout extends Writable {
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
 
     if (str === CURSOR_HIDE) {
-      // Cursor-hide: any subsequent plain writes are live-frame content
-      this._inStaticWindow = false
+      this._beforeCursorHide = false
       cb(); return
     }
 
-    if (CTRL_WRITE_RE.test(str)) {
-      // Other control write (ESC[?2026h, ESC[?2026l, ESC[?25h, etc.)
-      // BSR enable opens the static window
-      if (str.includes('?2026h')) this._inStaticWindow = true
+    // BSR-enable opens a new frame transaction.
+    if (str.includes('?2026h')) {
+      this._beforeCursorHide = true
+      // Reset liveBuffer so the next live-frame write *overwrites* the
+      // previous frame. Static commits (already routed to staticBuffer)
+      // are untouched.
+      this.liveBuffer = ''
+    }
+
+    // Strip ANSI escapes; keep printable residue.
+    const stripped = str.replace(ANSI_RE, '')
+    if (stripped.length === 0) {
       cb(); return
     }
 
-    // Plain-text content write
-    if (this._inStaticWindow) {
-      this.staticBuffer += str
+    // Mixed writes containing cursor-positioning escapes (e.g. ink's
+    // in-place rerender `[2K[1A[2K[GBROKEN\n`) are live-frame content
+    // even before ESC[?25l in the same transaction.
+    const looksLikeRedraw = CURSOR_MOVE_RE.test(str)
+
+    if (!looksLikeRedraw && this._beforeCursorHide) {
+      this.staticBuffer += stripped
     } else {
-      this.liveBuffer += str
+      this.liveBuffer += stripped
     }
     cb()
   }
@@ -67,7 +85,7 @@ export class FakeStdout extends Writable {
   clear(): void {
     this.liveBuffer = ''
     this.staticBuffer = ''
-    this._inStaticWindow = false
+    this._beforeCursorHide = false
   }
 
   resize(cols: number, rows: number): void {

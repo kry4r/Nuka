@@ -24,8 +24,10 @@ describe('explorer skeleton stubs', () => {
     })
   })
 
-  it('fuzz rejects with /not implemented/', async () => {
-    await expect(fuzz({} as never)).rejects.toThrow(/not implemented/)
+  it('fuzz rejects on missing target (M3 implemented — no longer a stub)', async () => {
+    // fuzz is implemented in M3; calling without target or _fixtureDef
+    // throws a usage error instead of the legacy "not implemented" message.
+    await expect(fuzz({})).rejects.toThrow(/must supply target/)
   })
 
   it('judge rejects with /not implemented/', async () => {

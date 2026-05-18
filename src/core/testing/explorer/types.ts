@@ -169,14 +169,39 @@ export type SweepResult = {
 }
 
 export type FuzzOpts = {
+  /** Path to a *.fixtures.tsx file (or `__inline__` when _fixtureDef given). */
   target?: string
+  /** PRNG seed. Same seed → byte-identical key sequence + viewport choices. */
   seed?: number
+  /** Maximum keystroke steps before declaring "no violation". Default: 200. */
   steps?: number
+  /** Probability of a viewport-resize between keystrokes. Default: 0.05. */
+  pResize?: number
+  /** Working dir for fixture resolution + dump output. Default: process.cwd(). */
+  cwd?: string
+  /** Viewport matrix the fuzzer picks from on resize. Default: spec §4.3. */
+  viewportMatrix?: Viewport[]
 }
 
+/**
+ * Result of one fuzz run.
+ *   * `ok: true`  — no L1 invariant fired within `steps` keystrokes.
+ *   * `ok: false` — first violation observed; `failure` carries the seed,
+ *     the full keystroke sequence up to the violation, the *shrunk* repro,
+ *     the rule name, and the viewport active at the moment of violation.
+ *
+ * Note: only the keystroke sequence is shrunk. The viewport is not
+ * minimised — it is fixed at the violation-time viewport during replay.
+ */
 export type FuzzResult = {
-  failures: FailureRecord[]
-  stepsRun: number
+  ok: boolean
+  failure?: {
+    seed: number
+    sequence: string[]
+    shrunk: string[]
+    invariant: string
+    viewport: Viewport
+  }
 }
 
 export type JudgeOpts = {

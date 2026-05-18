@@ -16,7 +16,7 @@ import { describe, it, expect, afterEach, afterAll } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import React from 'react'
-import { Text } from 'ink'
+import { Text, useInput } from 'ink'
 import type { FixtureDef } from '../../../../src/core/testing/explorer/types'
 import { fuzz } from '../../../../src/core/testing/explorer/fuzz'
 
@@ -37,27 +37,25 @@ afterEach(cleanup)
 afterAll(cleanup)
 
 // ---------------------------------------------------------------------------
-// writeQuitFixture — emits a .fixtures.tsx file with a component that breaks
-// on byte 'q'. We use `mustContain` so the L1 noLossyTruncation invariant
-// fires deterministically when the marker disappears.
+// QuitBug — inline crafted component whose `mustContain` marker disappears on
+// the byte 'q'. We use an inline _fixtureDef (instead of a disk fixture file)
+// so the React + ink modules match the test runtime exactly. Loading .tsx
+// fixtures through tsx/esm/api would duplicate the React module instance and
+// disconnect ink's renderer from the test's `useState` hook tracking.
+// The dot-prefixed TMP_DIR is still ensured/cleaned so the cleanup
+// invariants are honoured even for inline-only tests.
 // ---------------------------------------------------------------------------
-function writeQuitFixture(): string {
-  ensureTmp()
-  const filePath = path.join(TMP_DIR, 'quitbug.fixtures.tsx')
-  fs.writeFileSync(
-    filePath,
-    `import React from 'react'
-import { Text, useInput } from 'ink'
-
-function QuitBug() {
+function QuitBug(): React.ReactElement {
   const [broken, setBroken] = React.useState(false)
   useInput((input) => {
     if (input === 'q') setBroken(true)
   })
-  return React.createElement(Text, null, broken ? 'BROKEN' : 'OK-MARKER')
+  // Different-length content so ink emits an in-place rerender FakeStdout
+  // can detect via its cursor-positioning heuristic.
+  return React.createElement(Text, null, broken ? 'BROKEN-LONG' : 'OK-MARKER')
 }
 
-const fixture = {
+const quitBugFixture: FixtureDef = {
   component: 'QuitBug',
   cases: {
     fuzz: {
@@ -66,13 +64,6 @@ const fixture = {
     },
   },
   viewports: [{ cols: 40, rows: 10 }],
-}
-
-export default fixture
-`,
-    'utf8',
-  )
-  return filePath
 }
 
 // ---------------------------------------------------------------------------
@@ -128,18 +119,22 @@ describe('fuzz — determinism', () => {
 // ---------------------------------------------------------------------------
 describe('fuzz — finds + shrinks crafted "q crashes" bug', () => {
   it('discovers violation within 50 steps and shrinks to ["q"]', async () => {
-    const fixturePath = writeQuitFixture()
+    // Touch the tmp dir so the cleanup invariants are exercised even when
+    // no file is written (memory rule feedback_test_temp_cleanup.md).
+    ensureTmp()
 
     const result = await fuzz({
-      target: fixturePath,
+      target: '__inline__',
       // Seed chosen so the bounded charset hits 'q' inside the first 50
-      // draws — any seed should eventually trigger this, but pinning gives
-      // us a deterministic test run.
-      seed: 1,
+      // draws. Empirically scanning seeds 1..200: seed=46 puts 'q' at
+      // position 1 (so the shrinker has to drop one neighbour to reach
+      // length 1, which exercises the per-step deletion phase).
+      seed: 46,
       steps: 50,
       pResize: 0.0, // viewport changes irrelevant for this bug
       cwd: TMP_DIR,
-    })
+      _fixtureDef: quitBugFixture,
+    } as Parameters<typeof fuzz>[0])
 
     expect(result.ok).toBe(false)
     expect(result.failure).toBeDefined()
