@@ -39,7 +39,7 @@ export class FakeStdout extends Writable {
     this.rows = rows
   }
 
-  _write(chunk: Buffer | string, _enc: string, cb: () => void): void {
+  override _write(chunk: Buffer | string, _enc: string, cb: () => void): void {
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
 
     if (str === CURSOR_HIDE) {

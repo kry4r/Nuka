@@ -70,9 +70,15 @@ describe('staticTap', () => {
     // Mount a fixture with <Static> content
     const items = [{ id: 'a', text: 'prologue-line' }]
     const node = React.createElement(
-      Static<{ id: string; text: string }>,
-      { items },
-      (item: { id: string; text: string }) => React.createElement(Text, { key: item.id }, item.text)
+      Static as unknown as React.FC<{
+        items: { id: string; text: string }[]
+        children: (item: { id: string; text: string }) => React.ReactNode
+      }>,
+      {
+        items,
+        children: (item: { id: string; text: string }) =>
+          React.createElement(Text, { key: item.id }, item.text),
+      },
     )
     const handle = renderWithViewport(node, { cols: 40, rows: 10 })
     await new Promise(r => setImmediate(r))

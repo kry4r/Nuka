@@ -59,7 +59,7 @@ function parseSgrStates(ansi: string): SgrState[] {
     if (ansi[i] === '\u001b' && ansi[i + 1] === '[') {
       // Find end of CSI sequence
       let j = i + 2
-      while (j < ansi.length && (ansi[j] < '@' || ansi[j] > '~')) j++
+      while (j < ansi.length && (ansi[j]! < '@' || ansi[j]! > '~')) j++
       const final = ansi[j]
       if (final === 'm') {
         const params = ansi.slice(i + 2, j)
