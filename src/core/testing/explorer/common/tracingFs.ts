@@ -83,10 +83,15 @@ export function writeFailureDump(
     `- **case:** ${rec.fixtureCase}`,
     `- **viewport:** ${rec.viewport.cols}×${rec.viewport.rows}`,
     `- **timestamp:** ${rec.timestamp}`,
-    ``,
-    `## Violations`,
-    ``,
   ]
+  // M5.T1 / M4-review-1 fix: emit gridHash so dumpReader can round-trip the
+  // judge cache key. Optional — omitted when the producer never set it.
+  if (rec.gridHash) {
+    lines.push(`- **gridHash:** ${rec.gridHash}`)
+  }
+  lines.push(``)
+  lines.push(`## Violations`)
+  lines.push(``)
 
   for (const v of rec.violations) {
     lines.push(`### ${v.rule} (${v.severity})`)
