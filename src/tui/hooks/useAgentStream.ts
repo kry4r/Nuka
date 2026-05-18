@@ -1,11 +1,24 @@
 // src/tui/hooks/useAgentStream.ts
 import { useCallback, useRef, useState } from 'react'
 import type { AgentEvent } from '../../core/agent/events'
-import type { AssistantMessage, ContentBlock } from '../../core/message/types'
+import type { AssistantMessage, ContentBlock, ImageContentBlock } from '../../core/message/types'
 import { emptyAssistant } from '../../core/message/factories'
 
+export type SendOpts = {
+  /** Provider-bound image attachments resolved by `inlineReferencesIntoText`. */
+  images?: readonly ImageContentBlock[]
+}
+
 export type AgentStreamDeps = {
-  runAgent: (input: { text: string }, signal: AbortSignal) => AsyncIterable<AgentEvent>
+  /**
+   * Wrapped agent driver. `input.images` carries optional provider-bound
+   * image attachments alongside the user's text prompt; text-only callers
+   * may omit the field entirely.
+   */
+  runAgent: (
+    input: { text: string; images?: readonly ImageContentBlock[] },
+    signal: AbortSignal,
+  ) => AsyncIterable<AgentEvent>
 }
 
 /**
@@ -34,7 +47,7 @@ export function useAgentStream(deps: AgentStreamDeps): {
   progressByToolId: Record<string, string[]>
   running: boolean
   streamingAssistant: AssistantMessage | null
-  send: (text: string) => Promise<void>
+  send: (text: string, opts?: SendOpts) => Promise<void>
   cancel: () => void
   reset: () => void
 } {
@@ -44,13 +57,18 @@ export function useAgentStream(deps: AgentStreamDeps): {
   const [streamingAssistant, setStreamingAssistant] = useState<AssistantMessage | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, opts?: SendOpts) => {
     const ac = new AbortController()
     abortRef.current = ac
     setRunning(true)
     setStreamingAssistant(null)
     try {
-      for await (const ev of deps.runAgent({ text }, ac.signal)) {
+      // Only forward `images` when present so the legacy text-only path
+      // observes the identical `{ text }` shape it had before.
+      const input = opts?.images !== undefined
+        ? { text, images: opts.images }
+        : { text }
+      for await (const ev of deps.runAgent(input, ac.signal)) {
         setEvents(prev => [...prev, ev])
         if (ev.type === 'text_delta') {
           setStreamingAssistant(prev => applyTextDelta(prev, ev.text))

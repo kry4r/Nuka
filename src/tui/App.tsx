@@ -30,6 +30,7 @@ import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
 import type { AgentEvent } from '../core/agent/events'
+import type { ImageContentBlock } from '../core/message/types'
 import type { SlashRegistry } from '../slash/registry'
 import type { Session } from '../core/session/types'
 import type { PermissionCall, PermissionDecision } from '../core/permission/types'
@@ -222,7 +223,11 @@ export type AppProps = {
   slash: SlashRegistry
   providers: ProviderResolver
   config: Config
-  runAgent: (input: { text: string }, session: Session, signal: AbortSignal) => AsyncIterable<AgentEvent>
+  runAgent: (
+    input: { text: string; images?: readonly ImageContentBlock[] },
+    session: Session,
+    signal: AbortSignal,
+  ) => AsyncIterable<AgentEvent>
   permissionBridge: PermissionBridge
   onExit: () => void
   onOpenEditor: () => void
@@ -415,8 +420,10 @@ export function App(props: AppProps): React.JSX.Element {
   // Resets UIState back to normal — used by every dialog onCancel/onClose.
   const closeSubmenu = useCallback(() => dispatchUI({ type: 'reset' }), [])
 
-  const runner = (i: { text: string }, signal: AbortSignal): AsyncIterable<AgentEvent> =>
-    props.runAgent(i, session, signal)
+  const runner = (
+    i: { text: string; images?: readonly ImageContentBlock[] },
+    signal: AbortSignal,
+  ): AsyncIterable<AgentEvent> => props.runAgent(i, session, signal)
   const stream = useAgentStream({ runAgent: runner })
 
   const handleSlashEffect = useCallback(async (effect: { kind: string }) => {
@@ -515,6 +522,12 @@ export function App(props: AppProps): React.JSX.Element {
     // appear above the user's prompt but below any inlined file
     // contents. The resolver bundle is injected via props for tests;
     // production lazily wires the default fs / git / fetch deps.
+    //
+    // Image references additionally produce structured
+    // `ImageContentBlock[]` that ride on the user-message `content`
+    // channel via `stream.send(text, { images })` — base64 / URL
+    // payloads never live on the text prompt.
+    let pendingImages: readonly ImageContentBlock[] = []
     const referenceTokens = pendingReferences.current.splice(0)
     if (referenceTokens.length > 0) {
       const { inlineReferencesIntoText } = await import(
@@ -529,13 +542,18 @@ export function App(props: AppProps): React.JSX.Element {
         deps,
       })
       text = result.text
+      pendingImages = result.images
     }
 
     if (stream.running) {
-      session.queue.push(text) // /btw semantics: pressing enter while running queues
+      // Queued path stays text-only: there is no place to stash the
+      // structured image attachment alongside a queued prompt today, so
+      // dropping silently is the least surprising behaviour. The user
+      // can re-attach after the active turn finishes.
+      session.queue.push(text)
       return
     }
-    await stream.send(text)
+    await stream.send(text, pendingImages.length > 0 ? { images: pendingImages } : undefined)
   }, [props, session, stream, handleSlashEffect, exit])
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
