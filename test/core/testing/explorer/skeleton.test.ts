@@ -15,8 +15,13 @@ import {
 } from '../../../../src/core/testing/explorer/index'
 
 describe('explorer skeleton stubs', () => {
-  it('sweep rejects with /not implemented/', async () => {
-    await expect(sweep({} as never)).rejects.toThrow(/not implemented/)
+  it('sweep resolves (M2 implemented — no longer a stub)', async () => {
+    // sweep is fully implemented in M2; it no longer throws.
+    // Use a known-empty temp dir so loadFixtures returns [] quickly.
+    import('node:os').then(async ({ tmpdir }) => {
+      const result = await sweep({ cwd: process.cwd(), fixturesGlob: tmpdir() })
+      expect(result.totalRuns).toBeGreaterThanOrEqual(0)
+    })
   })
 
   it('fuzz rejects with /not implemented/', async () => {
