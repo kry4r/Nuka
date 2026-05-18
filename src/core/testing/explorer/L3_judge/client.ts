@@ -103,3 +103,100 @@ async function safeReadText(res: Response): Promise<string> {
     return '<no-body>'
   }
 }
+
+// ---------------------------------------------------------------------------
+// Tool-use client (M5.T3)
+// ---------------------------------------------------------------------------
+//
+// The repair subagent (`L4_repair/subagent.ts`) drives a tool-use loop:
+// model emits `tool_use` blocks, runner executes the tools, feeds the
+// `tool_result` blocks back as the next user message, repeat. This client
+// is the minimal multi-turn wrapper that surfaces the Anthropic-spec
+// content[] array intact so the subagent can dispatch tools generically.
+
+/** One block in either an outgoing assistant turn or incoming response. */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+
+/** One full message in the messages[] array. */
+export type ToolMessage = {
+  role: 'user' | 'assistant'
+  content: ContentBlock[] | string
+}
+
+/** Tool definition shape passed in the request body (Anthropic spec). */
+export type ToolDef = {
+  name: string
+  description: string
+  input_schema: Record<string, unknown>
+}
+
+/** Response from a tools-enabled /v1/messages call. */
+export type ToolResponse = {
+  /** Anthropic stop_reason — 'tool_use' means the runner must execute and loop. */
+  stop_reason: 'tool_use' | 'end_turn' | 'max_tokens' | 'stop_sequence'
+  /** Mixed content blocks the model emitted. */
+  content: ContentBlock[]
+  usage: { inTok: number; outTok: number }
+}
+
+/**
+ * Multi-turn /v1/messages POST with tools[] support.
+ *
+ * @throws RateLimitError / ServerError as in callMessages.
+ */
+export async function callMessagesWithTools(opts: {
+  apiKey: string
+  model: JudgeModel
+  system: string
+  messages: ToolMessage[]
+  tools: ToolDef[]
+  maxTokens: number
+}): Promise<ToolResponse> {
+  const { apiKey, model, system, messages, tools, maxTokens } = opts
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      system,
+      tools,
+      messages,
+    }),
+  })
+
+  if (res.status === 429) {
+    throw new RateLimitError(`Anthropic 429: ${await safeReadText(res)}`)
+  }
+  if (res.status >= 500 && res.status < 600) {
+    throw new ServerError(
+      `Anthropic ${res.status}: ${await safeReadText(res)}`,
+      res.status,
+    )
+  }
+  if (!res.ok) {
+    throw new Error(`Anthropic ${res.status}: ${await safeReadText(res)}`)
+  }
+
+  const raw = (await res.json()) as {
+    stop_reason?: string
+    content?: ContentBlock[]
+    usage?: { input_tokens?: number; output_tokens?: number }
+  }
+
+  const stop_reason =
+    (raw.stop_reason as ToolResponse['stop_reason']) ?? 'end_turn'
+  const content = Array.isArray(raw.content) ? raw.content : []
+  const inTok = raw.usage?.input_tokens ?? 0
+  const outTok = raw.usage?.output_tokens ?? 0
+
+  return { stop_reason, content, usage: { inTok, outTok } }
+}
