@@ -98,7 +98,7 @@ import { createUrlExtractHandler } from './core/urlExtract/urlExtractHook'
 import { currentGitBranch } from './core/session/telemetry'
 import { runAgent as runAgentLoop } from './core/agent/loop'
 import { compactSession } from './core/compact/compact'
-import type { AutoCompactOpts } from './core/compact/auto'
+import type { AutoCompactSessionAwareOpts } from './core/agent/autoCompact'
 import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
@@ -1165,14 +1165,9 @@ async function runInteractive(): Promise<void> {
     process.on('beforeExit', () => sched.stop())
   }
   const activeSession = sessions.active()!
-  let autoCompact: AutoCompactOpts | undefined
+  let autoCompact: AutoCompactSessionAwareOpts | undefined
   if (hasProviders && activeSession.providerId) {
-    const compactModel = config.compact?.model ?? activeSession.model
-    const { provider: compactProvider } = providers.resolveFor(activeSession)
     autoCompact = {
-      provider: compactProvider,
-      model: compactModel,
-      keepTurns: config.compact?.keepTurns ?? 3,
       autoThreshold: config.compact?.autoThreshold ?? 0.8,
       contextWindow: config.compact?.contextWindow ?? 200_000,
     }

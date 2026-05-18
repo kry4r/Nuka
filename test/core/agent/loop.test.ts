@@ -6,7 +6,7 @@ import { ToolRegistry } from '../../../src/core/tools/registry'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Tool } from '../../../src/core/tools/types'
-import type { AutoCompactOpts } from '../../../src/core/compact/auto'
+import type { AutoCompactSessionAwareOpts as AutoCompactOpts } from '../../../src/core/agent/autoCompact'
 
 function stubProvider(scripts: ProviderEvent[][]): LLMProvider {
   let i = 0
@@ -364,10 +364,10 @@ describe('runAgent', () => {
 
   it('yields auto_compacted event when totalUsage exceeds autoThreshold after a turn', async () => {
     const session = createSession({ providerId: 'p', model: 'm' })
-    // Pre-populate enough turns so compactSession won't no-op
+    // Pre-populate enough turns so the structural fold has middle messages
     for (let i = 0; i < 6; i++) {
-      session.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
-      session.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+      session.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}-${'x'.repeat(200)}` }] })
+      session.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}-${'y'.repeat(200)}` }] })
     }
     // Set totalUsage above the threshold (contextWindow:1000 * autoThreshold:0.8 = 800)
     session.totalUsage = { inputTokens: 500, outputTokens: 400 }
@@ -377,19 +377,7 @@ describe('runAgent', () => {
       { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
     ]])
 
-    // Separate stub provider for the summarizer
-    const summarizerProvider: LLMProvider = {
-      id: 'summarizer', format: 'openai',
-      async *stream(): AsyncIterable<ProviderEvent> {
-        yield { type: 'text_delta', text: 'SUMMARY' }
-        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 10, outputTokens: 20 } }
-      },
-      async listRemoteModels() { return [] },
-    } as LLMProvider
-
     const autoCompact: AutoCompactOpts = {
-      provider: summarizerProvider,
-      model: 'm',
       autoThreshold: 0.8,
       contextWindow: 1000,
     }

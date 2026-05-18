@@ -295,7 +295,11 @@ export async function compactSessionAware(
 
   const target = opts.targetTokens ?? Math.floor(opts.contextWindow * opts.autoThreshold * 0.5)
   const config: AutoCompactConfig = {
-    triggerTokens: trigger,
+    // Set triggerTokens to 0 so the pure orchestrator always proceeds —
+    // the usage-based threshold check above already made the "should compact"
+    // decision. The pure orchestrator still guards via hook veto, abort
+    // signal, and nothing-to-compact, but not the threshold gate again.
+    triggerTokens: 0,
     targetTokens: target,
     sessionId: session.id,
   }
