@@ -5,12 +5,26 @@ import type {
   ToolMessage,
   SystemMessage,
   ToolContentBlock,
+  ImageContentBlock,
+  ContentBlock,
 } from './types'
 
-export function makeUserMessage(input: { text: string }): UserMessage {
+export function makeUserMessage(input: {
+  text: string
+  images?: readonly ImageContentBlock[]
+}): UserMessage {
+  const blocks: ContentBlock[] = []
+  if (input.text.length > 0) {
+    blocks.push({ type: 'text', text: input.text })
+  }
+  if (input.images && input.images.length > 0) {
+    for (const img of input.images) {
+      blocks.push({ ...img })
+    }
+  }
   return {
     role: 'user',
-    content: [{ type: 'text', text: input.text }],
+    content: blocks,
     id: ulid(),
     ts: Date.now(),
   }

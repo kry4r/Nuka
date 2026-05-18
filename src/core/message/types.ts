@@ -17,9 +17,19 @@ export type StopReason =
   | 'stop_sequence'
   | 'error'
 
+export type ImageContentBlock = {
+  type: 'image'
+  mediaType: string
+  /** base64-encoded image bytes; mutually exclusive with `url` in practice. */
+  dataBase64?: string
+  /** Remote URL passthrough. OpenAI consumes natively; Anthropic falls back to text. */
+  url?: string
+}
+
 export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | ImageContentBlock
 
 export type UserMessage = {
   role: 'user'
