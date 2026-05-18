@@ -28,7 +28,7 @@ Verbs:
 export async function runExploreCli(argv: string[]): Promise<number> {
   const verb = argv[0]
   if (!verb || argv.includes('--help') || argv.includes('-h')) {
-    process.stderr.write(USAGE)
+    process.stdout.write(USAGE)
     return 2
   }
 
