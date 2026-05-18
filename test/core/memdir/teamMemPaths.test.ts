@@ -84,6 +84,15 @@ describe('validateTeamMemKey', () => {
     ).rejects.toBeInstanceOf(PathTraversalError)
   })
 
+  it('rejects NFKC-normalized unicode separator (fullwidth solidus)', async () => {
+    // U+FF0F (fullwidth solidus) normalizes to ASCII '/' under NFKC.
+    // Sanitizer must reject so downstream filesystems / layers that do
+    // normalize cannot be tricked into seeing a separator.
+    await expect(
+      validateTeamMemKey('acme', '/repo/app', '..\uFF0Fevil.md', '/h'),
+    ).rejects.toBeInstanceOf(PathTraversalError)
+  })
+
   it('rejects symlink-based escape', async () => {
     const home = mkdtempSync(join(tmpdir(), 'nuka-tm-symlink-'))
     try {
