@@ -595,6 +595,25 @@ Goal: prove the verb chain on the two real bugs from bringup §2. Two production
 **Acceptance:** Bug B fixture green across all 7 profiles; B1 logo not compact at 79; B2 prologue remains in live area; no `staticWrites()` contains the prologue. Commits: `fix(tui/welcome): stabilize layout mode on remount frame` + `fix(tui/messages): guard prologue static-flip on stream flicker`.
 **LOC:** ≈ 50 prod patch + 60 test = 110.
 
+> **Landed-as note (post-M6 review, 2026-05-18):** The Welcome.tsx
+> remount-frame scaffolding in §588 turned out to be unnecessary —
+> Bug B1's measurable acceptance is `getLayoutMode(79) !== 'compact'`,
+> a pure-function assertion. The `layout.ts` threshold change
+> (80→79) alone satisfies it. The §588 module-scope-ref / live-stdout
+> scaffolding was attempted in commit `5f4ae97` but introduced
+> 3 plan-mode test regressions via worker-shared mutable state;
+> reverted in commit `4e86be3` and kept only the threshold change.
+>
+> The §589 `hasEverStreamed` gate was attempted in commit `138d659`
+> but blocked legitimate prologue flips when `/plan on` appended a
+> system message (total 0→1 with `streaming` never non-null). Simplified
+> in `4e86be3` to gate on `total > 0` alone — `bumpMessages()` only
+> bumps a render tick and never advances `total`, so the original
+> §589 Bug B2 fixture (`total=1, streaming=null`) modelled a phantom
+> scenario. The B2 fixture was repointed to the actually-reachable
+> flicker (`total=0, streaming` transiently non-null), which `total > 0`
+> naturally blocks. See `4e86be3` commit body for the full rationale.
+
 ### Task M6.T4 — Auto-promote check (regression fixtures exist where M5.T4 placed them)
 
 **File (assertion-only):** `test/core/testing/explorer/dogfood/promotion.test.ts`.

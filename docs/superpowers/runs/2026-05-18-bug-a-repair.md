@@ -3,7 +3,7 @@
 **Date:** 2026-05-18
 **Verb:** `nuka explore repair`
 **Failure id:** `bug-a-001`
-**Status:** verified (simulated)
+**Status:** patches-correct-by-inspection; real-run pending API budget
 
 > This is a **simulated run**, not a real Opus subagent invocation. The
 > patches below are hand-authored to match what an Opus repair subagent
