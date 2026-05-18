@@ -17,6 +17,7 @@
 
 import type { ResolvedAgentDef } from '../agents/types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
+import type { HookRegistry } from '../hooks/registry'
 
 export type { ProgressTrackerSnapshot } from './progressTracker'
 
@@ -61,6 +62,27 @@ export type LocalAgentSpec = {
   /** Returns an async iterable of textual chunks. The runner persists
    *  each chunk to the task's outputFile in order. */
   agentRunner: (signal: AbortSignal) => AsyncIterable<AgentChunk>
+  /**
+   * Optional in-process hook registry. When provided, `runAgent` fires
+   * `sessionStart` / `sessionEnd` / `afterTurn` with `context: 'task'`.
+   * Absent → no events fire (backward-compat for any test fixture that
+   * builds a spec without lifecycle wiring).
+   */
+  hookRegistry?: HookRegistry
+  /**
+   * Stable identifier used in the lifecycle payloads' `sessionId` field.
+   * Defaults to the task id (assigned by `TaskManager.enqueue`) when
+   * omitted. Surface as a separate field so callers can correlate a
+   * task to a parent session if they wish.
+   */
+  taskSessionId?: string
+  /**
+   * Provider/model strings forwarded into `sessionStart` payload so
+   * handlers can branch on model identity. Falls back to `'unknown'` /
+   * `'unknown'` when the caller does not know (purely metadata).
+   */
+  providerId?: string
+  model?: string
 }
 
 export type InProcessTeammateSpec = {
