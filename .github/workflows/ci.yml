@@ -67,7 +67,7 @@ jobs:
           node --input-type=module -e "
           import { statSync } from 'node:fs';
           import { join } from 'node:path';
-          const CEILING = 720 * 1024;
+          const CEILING = 744 * 1024; // match test/build/_constants.ts — bumped from 720 by B5 (2026-05-18)
           const cliJs = join(process.cwd(), 'dist', 'cli.js');
           const size = statSync(cliJs).size;
           if (size > CEILING) {

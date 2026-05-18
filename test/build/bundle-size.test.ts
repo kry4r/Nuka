@@ -47,13 +47,14 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
+import { CLI_BUNDLE_CEILING_BYTES } from './_constants'
 
 const ROOT = join(__dirname, '..', '..')
 const CLI_JS = join(ROOT, 'dist', 'cli.js')
 const TEST_RUNNER_JS = join(ROOT, 'dist', 'test-runner.js')
 const TOOLS_EXTRA_JS = join(ROOT, 'dist', 'tools-extra.js')
 
-const CLI_CEILING_BYTES = 744 * 1024
+const CLI_CEILING_BYTES = CLI_BUNDLE_CEILING_BYTES
 
 describe('build: bundle split + size', () => {
   beforeAll(() => {
