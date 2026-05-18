@@ -282,24 +282,33 @@ describe('agent loop wiring', () => {
     expect(calls).toBe(0)
   })
 
-  it('fires beforeAutoCompact when autoCompact is configured (below threshold)', async () => {
+  it('fires beforeAutoCompact when autoCompact is configured and usage exceeds threshold', async () => {
     const hookRegistry = createHookRegistry()
     let calls = 0
     hookRegistry.register('beforeAutoCompact', () => { calls += 1 })
+    const session = makeSession()
+    // Set totalUsage above the threshold (2000 > 200_000 * 0.8 = 160 is wrong,
+    // use small contextWindow so the arithmetic works: 2 > 1000 * 0.001 = 1)
+    session.totalUsage = { inputTokens: 2000, outputTokens: 1000 }
+    // Pre-populate messages so the fold has material to work with
+    for (let i = 0; i < 8; i++) {
+      session.messages.push({
+        role: 'user', id: `u${i}`, ts: i,
+        content: [{ type: 'text', text: `msg${i}-${'x'.repeat(200)}` }],
+      })
+    }
     await drain(
       runAgent(
         { text: 'hi' },
-        makeSession(),
+        session,
         {
           provider: mockProviderResolver(),
           tools: mockToolRegistry(),
           permission: mockPermission(),
           hookRegistry,
           autoCompact: {
-            provider: mockProvider(),
-            model: 'm',
             autoThreshold: 0.8,
-            contextWindow: 200_000,
+            contextWindow: 1000,
           },
         },
         new AbortController().signal,
