@@ -77,6 +77,24 @@ function scripted(seq: MockResponse[]) {
   }
 }
 
+/**
+ * Like scripted(), but also tracks how many times the client was called.
+ * Used in the idempotency test to assert the subagent is never invoked on
+ * the second run (when the dump is already in resolved/).
+ */
+function scriptedCounted(seq: MockResponse[]): {
+  client: ReturnType<typeof scripted>
+  callCount: () => number
+} {
+  let count = 0
+  const inner = scripted(seq)
+  const client = async (...args: Parameters<typeof inner>) => {
+    count++
+    return inner(...args)
+  }
+  return { client, callCount: () => count }
+}
+
 function writeDumpFile(args: {
   failuresDir: string
   id: string
@@ -159,8 +177,10 @@ describe('repair (M5.T4) — end-to-end + idempotency', () => {
     )
     expect(existsSync(expectedFixture)).toBe(true)
     const fixtureBody = readFileSync(expectedFixture, 'utf8')
-    expect(fixtureBody).toContain(id)
-    expect(fixtureBody).toContain('RepairTest')
+    // Fix 6 (M6.P0): deeper assertions — named export, back-link, viewport pin
+    expect(fixtureBody).toMatch(new RegExp(`regression_${id}`))
+    expect(fixtureBody).toContain(fixturePath)
+    expect(fixtureBody).toMatch(/viewport.*\d+.*\d+/)
 
     // Dump moved from failures/ to resolved/.
     expect(existsSync(dumpPath)).toBe(false)
@@ -195,25 +215,36 @@ describe('repair (M5.T4) — end-to-end + idempotency', () => {
     const { repair } = await import(
       '../../../../../src/core/testing/explorer/repair'
     )
+    const { client: firstClient } = scriptedCounted(script)
     const first = await repair({
       failureId: id,
       cwd: TMP_ROOT,
       apiKey: 'sk-fake',
-      _client: scripted(script),
+      _client: firstClient,
       fixtureOutDir,
     })
     expect(first.promoted).toBe(true)
 
-    // Second run — dump has already been moved to resolved/. Repair must
-    // not throw; treat as a no-op success.
+    // Second run — dump has already been moved to resolved/. Repair must:
+    //  1. Not throw; treat as a no-op success.
+    //  2. NEVER invoke the subagent client (fast-path before any API call).
+    //  3. The resolved file still exists; failures/ dir is empty.
+    const { client: secondClient, callCount } = scriptedCounted(script)
     const second = await repair({
       failureId: id,
       cwd: TMP_ROOT,
       apiKey: 'sk-fake',
-      _client: scripted(script),
+      _client: secondClient,
       fixtureOutDir,
     })
     expect(second.promoted).toBe(true)
     expect(typeof second.summary).toBe('string')
+    // Fix 6 (M6.P0): subagent must NOT be invoked on the idempotent fast-path.
+    expect(callCount()).toBe(0)
+    // Resolved file still present.
+    expect(existsSync(path.join(resolvedDir, `${id}.md`))).toBe(true)
+    // Failures dir empty.
+    const { readdirSync } = await import('node:fs')
+    expect(readdirSync(failuresDir)).toHaveLength(0)
   })
 })

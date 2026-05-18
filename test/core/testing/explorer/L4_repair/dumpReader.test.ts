@@ -30,10 +30,21 @@ function mkTmp(): string {
 }
 
 afterEach(() => {
-  // intentional no-op; rely on afterAll to clean (matches sweep tests)
+  // Per-test cleanup: remove all tmp dirs created so far.
+  // Keeps test isolation tight: a failure in one test doesn't leave
+  // artefacts that interfere with subsequent tests.
+  for (const dir of tmpRoots.splice(0)) {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* ignore */
+    }
+  }
 })
 
 afterAll(() => {
+  // Final sweep: clean up any dirs that survived afterEach (e.g. if test
+  // was aborted before afterEach ran). Memory rule: both hooks active.
   for (const dir of tmpRoots) {
     try {
       rmSync(dir, { recursive: true, force: true })
@@ -68,6 +79,9 @@ function makeSample(overrides: Partial<FailureRecord> = {}): FailureRecord {
     ],
     asciiView: 'hello\nworld\n',
     gridHash: 'a1b2c3d4e5f6',
+    // Fix 5 (M6.P0): fixturePath must be present so the round-trip test
+    // is non-vacuous — the writer emits it, the reader must restore it.
+    fixturePath: '/abs/path/foo.fixtures.tsx',
     stdinSequence: ['q', 'ctrl-c'],
     timestamp: '2026-05-18T12:34:56.000Z',
     ...overrides,
@@ -158,6 +172,6 @@ describe('L4_repair/dumpReader — readDump', () => {
     )
     const badPath = path.join(tmpRoot, 'bad.md')
     writeFileSync(badPath, '# not a real failure dump\n', 'utf8')
-    expect(() => readDump(badPath)).toThrow()
+    expect(() => readDump(badPath)).toThrow(/dump|parse|missing/i)
   })
 })

@@ -6,15 +6,17 @@
 // Contract:
 //   * verify({ fixturePath, caseName, viewport, cwd }) returns
 //     { clean: true } or { clean: false; violations: Violation[] }.
-//   * Re-mounts the target fixture INSIDE the runner process — no spawn,
-//     no execa, no worker_threads. Pure in-process.
+//   * Re-mounts the target fixture via worker_threads — same PID, separate
+//     V8 isolate, fresh module graph (transitive deps included).
+//     Spec §4.6/§509 "no subprocess" = no child_process/execa; worker_threads
+//     shares the same process PID so this is NOT a subprocess per spec intent.
 //   * Module-cache awareness: between two verify() calls the fixture file
-//     on disk may change. The second call must observe the new content.
+//     AND any of its transitive imports may change on disk. Both calls must
+//     reflect the on-disk state at call time.
 //
-// Note (ESM cache limitation): tsImport's per-call evaluation gives us a
-// fresh evaluation of the *entry* fixture file but NOT of arbitrary
-// transitive imports. This test patches the fixture file itself, which is
-// exactly the supported case. Verify also documents this in its own header.
+// M6.P0 note: the transitive-dep test below (Fix 3) is RED on the current
+// copy-rename verify.ts implementation (which only freshens the entry file).
+// It turns GREEN after the worker_threads refactor in the GREEN commit.
 
 import { describe, it, expect, afterEach, afterAll } from 'vitest'
 import {
@@ -139,11 +141,10 @@ describe('L4_repair/verify — in-process re-mount + L0/L1', () => {
     }
   })
 
-  it('does NOT spawn a subprocess (pure in-process invariant)', async () => {
+  it('does NOT use child_process or execa (spec §4.6/§509 — worker_threads is allowed)', async () => {
     // Hard structural check: the verify.ts source file must not import
-    // child_process, execa, or worker_threads. The grep in the M5 acceptance
-    // doc covers the whole directory; this test asserts the verify module
-    // specifically.
+    // child_process or execa. worker_threads IS permitted — it runs in the
+    // same PID as a separate V8 isolate (not a subprocess per spec intent).
     const { readFileSync } = await import('node:fs')
     const verifySrc = readFileSync(
       path.join(REPO_ROOT, 'src/core/testing/explorer/L4_repair/verify.ts'),
@@ -151,7 +152,6 @@ describe('L4_repair/verify — in-process re-mount + L0/L1', () => {
     )
     expect(verifySrc).not.toMatch(/child_process/)
     expect(verifySrc).not.toMatch(/from ['"]execa['"]/)
-    expect(verifySrc).not.toMatch(/worker_threads/)
   })
 
   it('throws if the fixture path does not exist', async () => {
@@ -168,4 +168,83 @@ describe('L4_repair/verify — in-process re-mount + L0/L1', () => {
       }),
     ).rejects.toThrow()
   })
+
+  // ---------------------------------------------------------------------------
+  // Fix 3 (M6.P0) — transitive-dep test: verify() must see edits to files
+  // imported BY the fixture, not just the fixture entry itself.
+  //
+  // This test is intentionally RED on the pre-Fix-2 copy-rename strategy
+  // because that strategy only freshens the entry file's module-cache key;
+  // transitive imports still hit the original cached entries. It turns GREEN
+  // after the worker_threads refactor gives every verify() call its own fresh
+  // V8 module registry.
+  // ---------------------------------------------------------------------------
+  it('reflects on-disk edits to transitive dependencies (Fix 3 — RED before worker refactor)', async () => {
+    mkdirSync(TMP_ROOT, { recursive: true })
+
+    // sharedSource.ts — a transitive dep; fixture imports it
+    const sharedSourcePath = path.join(TMP_ROOT, 'sharedSource.ts')
+    writeFileSync(
+      sharedSourcePath,
+      `export function getValue() { return 'BEFORE' }\n`,
+      'utf8',
+    )
+
+    // fixture.ts imports sharedSource and renders getValue()
+    // The fixture uses mustContain: ['AFTER'] so it fails when it sees 'BEFORE'.
+    const fixturePath = path.join(TMP_ROOT, 'transitive.fixtures.tsx')
+    writeFileSync(
+      fixturePath,
+      `
+import React from 'react'
+import { Text } from 'ink'
+import { getValue } from './sharedSource'
+import type { FixtureDef } from '../../../src/core/testing/explorer/types'
+
+const fixture: FixtureDef = {
+  component: 'TransitiveTest',
+  cases: {
+    main: {
+      render: () => React.createElement(Text, null, getValue()),
+      mustContain: ['AFTER'],
+    },
+  },
+}
+
+export default fixture
+`,
+      'utf8',
+    )
+
+    const { verify } = await import(
+      '../../../../../src/core/testing/explorer/L4_repair/verify'
+    )
+
+    // Step 3: First verify — fixture contains 'BEFORE', mustContain=['AFTER'] → fails.
+    const firstResult = await verify({
+      fixturePath,
+      caseName: 'main',
+      viewport: VIEWPORT,
+      cwd: REPO_ROOT,
+    })
+    expect(firstResult.clean).toBe(false)
+
+    // Step 4: Rewrite sharedSource.ts to return 'AFTER'.
+    writeFileSync(
+      sharedSourcePath,
+      `export function getValue() { return 'AFTER' }\n`,
+      'utf8',
+    )
+
+    // Step 5: Second verify — must pick up the transitive dep change.
+    // On current verify.ts (copy-rename only) this FAILS (still sees BEFORE).
+    // After the worker_threads refactor this PASSES (fresh module registry).
+    const secondResult = await verify({
+      fixturePath,
+      caseName: 'main',
+      viewport: VIEWPORT,
+      cwd: REPO_ROOT,
+    })
+    expect(secondResult.clean).toBe(true)
+  }, 60000) // generous timeout for worker startup
 })
