@@ -233,3 +233,76 @@ describe('judge — Haiku budget cap', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// 4. CLI smoke — `nuka explore judge --re-judge --dump=<path>` parses the flag
+//    and propagates it through to judge() so a pre-populated cache entry is
+//    bypassed. Exercises the runExploreCli argv → judge() wiring end-to-end.
+// ---------------------------------------------------------------------------
+describe('judge — CLI parses --re-judge and propagates to judge()', () => {
+  it('runExploreCli judge --re-judge bypasses an existing cache entry', async () => {
+    const explorerBase = ensureTmpRoot()
+    const failuresDir = path.join(explorerBase, 'failures')
+    fs.mkdirSync(failuresDir, { recursive: true })
+
+    // Write a minimal failures JSON the CLI's --dump=<path> branch reads.
+    const failure = makeFailure(0)
+    const dumpPath = path.join(failuresDir, 'dump.json')
+    fs.writeFileSync(dumpPath, JSON.stringify([failure]), 'utf8')
+
+    // Pre-populate cache with a stale Opus verdict — re-judge must ignore it.
+    const cache = new JudgeCache(path.join(explorerBase, 'judge-cache'))
+    cache.put(
+      {
+        gridHash: failure.gridHash!,
+        component: failure.component,
+        viewportKey: '80x24',
+      },
+      {
+        ok: false,
+        judgedBy: 'opus',
+        judgedAt: 1,
+        issues: [{ invariant: 'stale-cached', description: 'should be ignored' }],
+      },
+    )
+
+    const { client, calls } = makeMockClient({ haikuClean: true })
+    const { __setJudgeClientForTest, judge: _judge } = await import(
+      '../../../../src/core/testing/explorer/judge'
+    )
+    _judge // keep import live (also confirms the export name)
+    __setJudgeClientForTest(client)
+
+    const prevKey = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'sk-cli-test'
+
+    const stdoutSpy = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true)
+
+    const { runExploreCli } = await import(
+      '../../../../src/core/testing/explorer/index'
+    )
+    const code = await runExploreCli([
+      'judge',
+      '--re-judge',
+      `--dump=${dumpPath}`,
+      `--out=${explorerBase}`,
+    ])
+
+    stdoutSpy.mockRestore()
+    __setJudgeClientForTest(null)
+    if (prevKey === undefined) {
+      delete process.env.ANTHROPIC_API_KEY
+    } else {
+      process.env.ANTHROPIC_API_KEY = prevKey
+    }
+
+    expect(code).toBe(0)
+    // Cache was bypassed → at least one Haiku call was issued.
+    const haikuCalls = calls.filter(
+      (c) => c.model === 'claude-haiku-4-5-20251001',
+    )
+    expect(haikuCalls.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
