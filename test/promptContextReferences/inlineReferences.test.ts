@@ -131,7 +131,7 @@ describe('inlineReferencesIntoText', () => {
     expect(res.artifacts.textArtifacts).toHaveLength(2)
   })
 
-  it('surfaces a placeholder block for image references (transport deferred)', async () => {
+  it('attaches a structured ImageContentBlock for image references and keeps the raw text intact', async () => {
     const imageToken: PromptReferenceToken = {
       id: 'image-foo',
       kind: 'image',
@@ -151,8 +151,12 @@ describe('inlineReferencesIntoText', () => {
       tokens: [imageToken],
       deps,
     })
-    expect(res.text).toContain('[image: /abs/foo.png] (resolution deferred)')
-    expect(res.text.endsWith('what is in the image?')).toBe(true)
+    // No deferred-placeholder text marker any more — the image rides the
+    // provider message payload via `res.images` instead.
+    expect(res.text).toBe('what is in the image?')
+    expect(res.images).toEqual([
+      { type: 'image', mediaType: 'image/png', dataBase64: 'AA==' },
+    ])
     expect(res.artifacts.imageArtifacts).toHaveLength(1)
   })
 
