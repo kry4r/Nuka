@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import {
-  capture,
   sweep,
   fuzz,
   judge,
@@ -16,10 +15,6 @@ import {
 } from '../../../../src/core/testing/explorer/index'
 
 describe('explorer skeleton stubs', () => {
-  it('capture rejects with /not implemented/', async () => {
-    await expect(capture({} as never)).rejects.toThrow(/not implemented/)
-  })
-
   it('sweep rejects with /not implemented/', async () => {
     await expect(sweep({} as never)).rejects.toThrow(/not implemented/)
   })

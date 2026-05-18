@@ -40,8 +40,20 @@ export async function runExploreCli(argv: string[]): Promise<number> {
 
   const verbMap: Record<string, () => Promise<number>> = {
     async capture() {
+      // Parse --viewport=COLSxROWS and --out=PATH flags
+      const viewportArg = argv.find(a => a.startsWith('--viewport='))
+      const outArg = argv.find(a => a.startsWith('--out='))
+      let viewport: { cols: number; rows: number } | undefined
+      if (viewportArg) {
+        const [cols, rows] = viewportArg.slice('--viewport='.length).split('x').map(Number)
+        if (cols && rows) viewport = { cols, rows }
+      }
+      const out = outArg ? outArg.slice('--out='.length) : undefined
       await capture({
         fixturePath: argv[1] ?? '',
+        viewport,
+        cwd: process.cwd(),
+        out,
       })
       return 0
     },
