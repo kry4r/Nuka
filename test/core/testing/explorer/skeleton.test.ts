@@ -5,7 +5,7 @@
 // /not implemented/. Also asserts that runExploreCli([]) returns exit code 2
 // (usage / bad args) without throwing.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   capture,
   sweep,
@@ -37,7 +37,20 @@ describe('explorer skeleton stubs', () => {
   })
 
   it('runExploreCli([]) returns exit code 2 (usage)', async () => {
+    const written: string[] = []
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      written.push(typeof chunk === 'string' ? chunk : chunk.toString())
+      return true
+    })
     const code = await runExploreCli([])
+    spy.mockRestore()
     expect(code).toBe(2)
+    // Usage text must mention all 5 verb names individually
+    const usage = written.join('')
+    expect(usage).toMatch(/capture/)
+    expect(usage).toMatch(/sweep/)
+    expect(usage).toMatch(/fuzz/)
+    expect(usage).toMatch(/judge/)
+    expect(usage).toMatch(/repair/)
   })
 })
