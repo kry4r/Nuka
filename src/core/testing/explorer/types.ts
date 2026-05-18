@@ -68,6 +68,8 @@ export type FixtureCase = {
   expectsHugContent?: boolean
   allowStatic?: boolean
   zones?: Record<string, { x: number; y: number; w: number; h: number }>
+  /** Custom assertion hook — receives the render handle after mount; can be async. */
+  assert?: (handle: InkRenderHandle) => Promise<void> | void
 }
 
 /** A fixture file export — one component with N named cases. */
@@ -107,6 +109,32 @@ export type FailureRecord = {
 }
 
 // ---------------------------------------------------------------------------
+// L0 — Render handle (locked spec §4.1)
+// ---------------------------------------------------------------------------
+
+/** Return type of renderWithViewport — the single handle all layers consume. */
+export type InkRenderHandle = {
+  frames(): string[]
+  lastFrame(): string
+  staticWrites(): string[]
+  grid(frame?: string): AnsiGrid
+  stdin: { write(s: string): void }
+  resize(cols: number, rows: number): void
+  unmount(): void
+}
+
+// ---------------------------------------------------------------------------
+// L1 — Invariant context (locked spec §4.2)
+// ---------------------------------------------------------------------------
+
+/** Context object passed to every invariant function alongside the grid. */
+export type InvariantCtx = {
+  viewport: Viewport
+  staticWrites: string[]
+  fixtureCase?: FixtureCase
+}
+
+// ---------------------------------------------------------------------------
 // Verb option/result types (stub shapes — filled in M1–M5)
 // ---------------------------------------------------------------------------
 
@@ -114,6 +142,8 @@ export type CaptureOpts = {
   fixturePath: string
   viewport?: Viewport
   caseName?: string
+  cwd?: string
+  out?: string
 }
 
 export type CaptureResult = {
