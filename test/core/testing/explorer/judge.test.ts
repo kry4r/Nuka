@@ -234,7 +234,56 @@ describe('judge — Haiku budget cap', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 4. CLI smoke — `nuka explore judge --re-judge --dump=<path>` parses the flag
+// 4. Opus budget cap: 21 failures, maxOpus=20 → 21st gets a marker verdict
+//    (opus_cap_exhausted), persisted to cache, warning logged.
+// ---------------------------------------------------------------------------
+describe('judge — Opus budget cap', () => {
+  it('opus cap exhausted → marker verdict persisted to cache', async () => {
+    const cacheRoot = ensureTmpRoot()
+    // Haiku always says "issues" so every failure escalates to Opus.
+    const { client, calls } = makeMockClient({
+      haikuIssues: true,
+      opusIssues: [{ invariant: 'noBorderBleed', description: 'test' }],
+    })
+    const failures: FailureRecord[] = []
+    for (let i = 0; i < 21; i++) failures.push(makeFailure(i))
+
+    const result = await judge({
+      failures,
+      apiKey: 'test',
+      cacheRoot,
+      maxHaiku: 50,
+      maxOpus: 20,
+      _client: client,
+    } as Parameters<typeof judge>[0])
+
+    // All 21 verdicts returned (no early break on opus cap).
+    expect(result.verdicts.length).toBe(21)
+    expect(result.budgetHit.opus).toBe(true)
+
+    // The 21st verdict (index 20) is the marker — judgedBy haiku with sentinel.
+    expect(result.verdicts[20]!.judgedBy).toBe('haiku')
+    expect(result.verdicts[20]!.issues?.[0]?.invariant).toBe('opus_cap_exhausted')
+
+    // Sentinel verdict WAS persisted to cache — verify via fresh JudgeCache.
+    const cache2 = new JudgeCache(cacheRoot)
+    const persisted = cache2.get({
+      gridHash: failures[20]!.gridHash!,
+      component: failures[20]!.component,
+      viewportKey: '80x24',
+    })
+    expect(persisted).not.toBeNull()
+    expect(persisted!.issues?.[0]?.invariant).toBe('opus_cap_exhausted')
+
+    // Warning was logged containing 'opus'.
+    expect(warnSpy).toHaveBeenCalled()
+    const warnMsg = warnSpy.mock.calls.map((c) => String(c[0])).join('\n')
+    expect(warnMsg.toLowerCase()).toContain('opus')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 5. CLI smoke — `nuka explore judge --re-judge --dump=<path>` parses the flag
 //    and propagates it through to judge() so a pre-populated cache entry is
 //    bypassed. Exercises the runExploreCli argv → judge() wiring end-to-end.
 // ---------------------------------------------------------------------------

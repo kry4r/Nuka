@@ -140,12 +140,22 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
     }
   }
 
-  // M4.T4 — invoke judge() on the collected failures unless the caller
-  // opted out via opts.judge === false (CLI flag --no-judge). The judge
-  // stage is skipped when ANTHROPIC_API_KEY is unset so unit tests + dry
-  // runs don't issue any API calls; the missing key is logged at info
-  // level rather than failing the sweep.
-  const wantJudge = opts.judge !== false
+  // M4.T4 — invoke judge() only when the caller explicitly opts in:
+  //   * opts.judge === true  (CLI --judge flag or programmatic override), OR
+  //   * INK_EXPLORER_JUDGE=1 (CI / automation env var)
+  // AND ANTHROPIC_API_KEY is set.
+  //
+  // Rationale: having ANTHROPIC_API_KEY in the shell environment indicates
+  // credentials are present, NOT that the developer consents to spend during
+  // this particular run.  An explicit opt-in is required to avoid billed API
+  // calls when running `npm test` in a dev shell that has the key set.
+  //
+  // opts.judge === false (CLI --no-judge) hard-disables judge even if the
+  // env opt-in is set.
+  const explicitJudgeOpt = opts.judge === true
+  const envJudgeOpt = process.env.INK_EXPLORER_JUDGE === '1'
+  const judgeDisabled = opts.judge === false
+  const wantJudge = !judgeDisabled && (explicitJudgeOpt || envJudgeOpt)
   if (wantJudge && records.length > 0) {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (apiKey) {

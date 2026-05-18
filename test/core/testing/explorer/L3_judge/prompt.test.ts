@@ -3,11 +3,13 @@
 // M4.T2 — RED-first tests for the Haiku/Opus prompt builders.
 // See locked spec §4.5 prompt requirements.
 //
-// 2 tests:
-//   1. Golden-string assertions on key fragments — component name interpolation,
+// 3 tests:
+//   1. Golden-string assertions for Haiku prompt — component name interpolation,
 //      structural-only instruction line, fenced asciiView block, presence of
 //      mustContain / expectsHugContent metadata when supplied.
-//   2. Byte-size cap: both prompts ≤ 6 KB on a 200×50 stress input.
+//   2. Opus prompt golden-string assertions — invariant taxonomy, fenced
+//      asciiView, structural-only instruction, overflow/overlap/border tags.
+//   3. Byte-size cap: both prompts ≤ 6 KB on a 200×50 stress input.
 
 import { describe, it, expect } from 'vitest'
 import {
@@ -65,9 +67,8 @@ describe('L3_judge/prompt — buildHaikuPrompt', () => {
   })
 })
 
-describe('L3_judge/prompt — buildOpusPrompt + byte-size cap', () => {
-  it('opus prompt includes invariant taxonomy + fenced asciiView + both prompts ≤ 6 KB on 200×50', () => {
-    // (a) Opus golden-string assertions.
+describe('L3_judge/prompt — buildOpusPrompt', () => {
+  it('opus prompt includes invariant taxonomy + fenced asciiView + structural-only line', () => {
     const { system, user } = buildOpusPrompt(SMALL_INPUT)
     expect(user).toContain('PromptInput')
     expect(user).toContain('```')
@@ -78,9 +79,13 @@ describe('L3_judge/prompt — buildOpusPrompt + byte-size cap', () => {
     expect(combined).toContain('border')
     expect(combined).toContain('structural')
     expect(combined).toMatch(/do not consider (color|colour|style)/i)
+  })
+})
 
-    // (b) Byte cap on the 200×50 stress input — raw view is ~10 KB so
-    //     the builder must clip while keeping structural cues intact.
+describe('L3_judge/prompt — byte-size cap', () => {
+  it('Haiku and Opus prompts stay ≤6KB at 200×50 grid', () => {
+    // Raw asciiView is ~10 KB (200×50 = 10_000 chars + newlines); the
+    // builder must clip while keeping structural cues intact.
     const stress = makeStressInput()
     const haiku = buildHaikuPrompt(stress)
     const opusStress = buildOpusPrompt(stress)

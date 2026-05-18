@@ -61,21 +61,27 @@ export async function runExploreCli(argv: string[]): Promise<number> {
     async sweep() {
       const { formatSummary, buildRunRows } = await import('./sweep/reporter')
 
-      // Parse --fixture-root=<dir>, --out=<dir>, --no-judge
+      // Parse --fixture-root=<dir>, --out=<dir>, --judge / --no-judge.
+      // Three-state: --judge → true (explicit opt-in), --no-judge → false
+      // (hard disable), neither → undefined (default = skip judge, safe).
       const fixtureRootArg = argv.find(a => a.startsWith('--fixture-root='))
       const outArg = argv.find(a => a.startsWith('--out='))
-      const noJudge = argv.includes('--no-judge')
+      const hasJudge = argv.includes('--judge')
+      const hasNoJudge = argv.includes('--no-judge')
 
       const fixtureRoot = fixtureRootArg
         ? fixtureRootArg.slice('--fixture-root='.length)
         : undefined
       const out = outArg ? outArg.slice('--out='.length) : undefined
 
+      // --no-judge overrides --judge when both present.
+      const judgeOpt: boolean | undefined = hasNoJudge ? false : hasJudge ? true : undefined
+
       const result = await sweep({
         fixturesGlob: fixtureRoot,
         cwd: process.cwd(),
         out,
-        judge: !noJudge,
+        judge: judgeOpt,
       })
 
       // Print summary table
