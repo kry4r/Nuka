@@ -9,6 +9,8 @@ import { noContentBeyondColumns } from './noContentBeyondColumns'
 import { noBorderBleed } from './noBorderBleed'
 import { noStaticWrites } from './noStaticWrites'
 import { flexGrowBounded } from './flexGrowBounded'
+import { noOverlapBetweenZones } from './noOverlapBetweenZones'
+import { noLossyTruncation } from './noLossyTruncation'
 
 export type InvariantFn = (grid: AnsiGrid, ctx: InvariantCtx) => Violation[]
 
@@ -17,6 +19,8 @@ export const invariants: Record<string, InvariantFn> = {
   noBorderBleed,
   noStaticWrites,
   flexGrowBounded,
+  noOverlapBetweenZones,
+  noLossyTruncation,
 }
 
 /**

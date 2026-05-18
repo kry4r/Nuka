@@ -65,6 +65,8 @@ export type Violation = {
 export type FixtureCase = {
   render: () => import('react').ReactElement
   mustContain?: string[]
+  /** Single-string shorthand for noLossyTruncation; complements mustContain[]. */
+  expectedText?: string
   expectsHugContent?: boolean
   allowStatic?: boolean
   zones?: Record<string, { x: number; y: number; w: number; h: number }>
