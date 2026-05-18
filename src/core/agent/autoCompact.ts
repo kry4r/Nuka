@@ -29,6 +29,33 @@ import { fireBeforeAutoCompact } from '../hooks/lifecycle'
 import type { HookRegistry } from '../hooks/registry'
 
 /**
+ * Project a transcript down to a single string of model-visible text.
+ *
+ * Used by callers that need a plain-text view of a conversation (e.g. for
+ * summarising into a synthetic system message). Skips `tool_use` argument
+ * JSON, all `image` content blocks (their base64 payload is never useful
+ * as text), and tool result blocks — those are downstream concerns.
+ *
+ * Image safety pin: `ImageContentBlock.dataBase64` is intentionally not
+ * concatenated. Including it would bloat compaction summaries by the full
+ * decoded byte length of every attached image.
+ */
+export function extractTextForCompaction(messages: readonly Message[]): string {
+  const parts: string[] = []
+  for (const m of messages) {
+    if (m.role === 'system') {
+      parts.push(m.content)
+      continue
+    }
+    if (m.role === 'tool') continue
+    for (const b of m.content) {
+      if (b.type === 'text') parts.push(b.text)
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
  * Configuration for {@link maybeAutoCompact}.
  *
  * Token thresholds are estimates produced by
