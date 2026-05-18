@@ -47,6 +47,23 @@ export {
   type RelevantMemory,
 } from './findRelevantMemories'
 
+import {
+  teamMemoryPath,
+  teamMemoryDir,
+  isTeamMemoryEnabled as isTeamMemoryEnabledForConfig,
+  validateTeamMemKey,
+  PathTraversalError,
+} from './teamMemPaths'
+
+// Re-export so external consumers import one canonical entrypoint.
+export {
+  teamMemoryPath,
+  teamMemoryDir,
+  validateTeamMemKey,
+  PathTraversalError,
+}
+export const isTeamMemoryEnabled = isTeamMemoryEnabledForConfig
+
 /** Resolve `~/.nuka/memory/<sha1(cwd)>/MEMORY.md`. */
 export function memoryPath(cwd: string, home: string = os.homedir()): string {
   const hash = crypto.createHash('sha1').update(cwd).digest('hex')
@@ -104,4 +121,27 @@ export async function writeAllMemory(cwd: string, entries: readonly MemoryEntry[
 export async function clearMemory(cwd: string, home?: string): Promise<void> {
   const file = memoryPath(cwd, home)
   await fs.rm(file, { force: true })
+}
+
+/**
+ * Load team-memory entries for `<teamId, cwd>`. Returns `[]` on ENOENT
+ * (most common state — a brand-new team hasn't written anything yet)
+ * and rethrows any other I/O error. Parsing uses the SAME parser as
+ * per-cwd memory because the on-disk format is identical; only the
+ * directory differs.
+ */
+export async function loadTeamMemory(
+  teamId: string,
+  cwd: string,
+  home?: string,
+): Promise<MemoryEntry[]> {
+  const file = teamMemoryPath(teamId, cwd, home)
+  let raw: string
+  try {
+    raw = await fs.readFile(file, 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
+    throw err
+  }
+  return parseMemoryFile(raw)
 }
