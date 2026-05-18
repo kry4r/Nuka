@@ -14,9 +14,12 @@ import type { ExplorerPaths } from '../common/tracingFs'
 import { loadFixtures, resolveViewports, type LoadedFixture } from './fixtureLoader'
 import type { SweepOpts, SweepResult, FailureRecord, Viewport } from '../types'
 
-// file-local: extends SweepOpts with test backdoor for inline fixtures
+// file-local: extends SweepOpts with test backdoor for inline fixtures +
+// optional judge-stage opt-out (CLI maps --no-judge → judge:false)
 type SweepOptsExtended = SweepOpts & {
   _fixtures?: LoadedFixture[]
+  /** Inject a mock judge() for tests; defaults to the real two-tier judge. */
+  _judge?: typeof import('../judge').judge
 }
 
 /**
@@ -113,6 +116,7 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
             viewport,
             violations,
             asciiView: grid.asciiView,
+            gridHash: grid.hash,
             timestamp: new Date().toISOString(),
           }
 
@@ -133,6 +137,34 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
           )
         }
       }
+    }
+  }
+
+  // M4.T4 — invoke judge() on the collected failures unless the caller
+  // opted out via opts.judge === false (CLI flag --no-judge). The judge
+  // stage is skipped when ANTHROPIC_API_KEY is unset so unit tests + dry
+  // runs don't issue any API calls; the missing key is logged at info
+  // level rather than failing the sweep.
+  const wantJudge = opts.judge !== false
+  if (wantJudge && records.length > 0) {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (apiKey) {
+      const judgeFn = opts._judge ?? (await import('../judge')).judge
+      try {
+        await judgeFn({
+          failures: records,
+          apiKey,
+          cacheRoot: explorerPaths.judgeCache,
+        })
+      } catch (err) {
+        process.stdout.write(
+          `[sweep] judge stage failed: ${(err as Error).message}\n`,
+        )
+      }
+    } else {
+      process.stdout.write(
+        '[sweep] ANTHROPIC_API_KEY not set — skipping judge stage.\n',
+      )
     }
   }
 

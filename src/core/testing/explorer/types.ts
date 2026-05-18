@@ -82,17 +82,26 @@ export type FixtureDef = {
 }
 
 // ---------------------------------------------------------------------------
-// L3' — Judge types (locked spec §4.5)
+// L3' — Judge types (locked spec §4.5, M4 task contract)
 // ---------------------------------------------------------------------------
 
+/**
+ * Two-tier judge verdict — matches the task-contract shape consumed by
+ * the JudgeCache and emitted by judge(). The shape was tightened in M4
+ * from the original spec sketch ({gridHash, component, viewport, clean,
+ * violations, model, cachedAt}) to a flatter form that's easier to
+ * serialise and round-trip through the cache.
+ *
+ * Canonical definition lives in `L3_judge/cache.ts`; this re-export
+ * exists so other layers can `import type { JudgeVerdict } from '../types'`
+ * without reaching into L3_judge/.
+ */
 export type JudgeVerdict = {
-  gridHash: string
-  component: string
-  viewport: Viewport
-  clean: boolean
-  violations: Violation[]
-  model: string
-  cachedAt?: string
+  ok: boolean
+  issues?: { invariant: string; description: string }[]
+  judgedBy: 'haiku' | 'opus'
+  /** Unix milliseconds. */
+  judgedAt: number
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +115,13 @@ export type FailureRecord = {
   viewport: Viewport
   violations: Violation[]
   asciiView: string
+  /**
+   * sha256(asciiView). Populated by L2 sweep and L3 fuzz; consumed by
+   * L3' judge to build the cache key. Optional for backward compat with
+   * any legacy fixtures that pre-date the M4 contract; new producers
+   * MUST populate it.
+   */
+  gridHash?: string
   stdinSequence?: string[]
   timestamp: string
 }
@@ -205,12 +221,21 @@ export type FuzzResult = {
 }
 
 export type JudgeOpts = {
-  reJudge?: boolean
+  failures: ReadonlyArray<FailureRecord>
+  apiKey: string
+  cacheRoot: string
+  /** Default 200; env override INK_EXPLORER_MAX_HAIKU. */
+  maxHaiku?: number
+  /** Default 20; env override INK_EXPLORER_MAX_OPUS. */
+  maxOpus?: number
+  /** Skip cache lookup; always re-judge. CLI flag --re-judge. */
+  forceReJudge?: boolean
 }
 
 export type JudgeResult = {
   verdicts: JudgeVerdict[]
-  apiCallsMade: number
+  /** Per-tier budget exhaustion flags. */
+  budgetHit: { haiku: boolean; opus: boolean }
 }
 
 export type RepairOpts = {

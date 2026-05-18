@@ -61,9 +61,10 @@ export async function runExploreCli(argv: string[]): Promise<number> {
     async sweep() {
       const { formatSummary, buildRunRows } = await import('./sweep/reporter')
 
-      // Parse --fixture-root=<dir>, --out=<dir>, --judge (no-op in M2)
+      // Parse --fixture-root=<dir>, --out=<dir>, --no-judge
       const fixtureRootArg = argv.find(a => a.startsWith('--fixture-root='))
       const outArg = argv.find(a => a.startsWith('--out='))
+      const noJudge = argv.includes('--no-judge')
 
       const fixtureRoot = fixtureRootArg
         ? fixtureRootArg.slice('--fixture-root='.length)
@@ -74,6 +75,7 @@ export async function runExploreCli(argv: string[]): Promise<number> {
         fixturesGlob: fixtureRoot,
         cwd: process.cwd(),
         out,
+        judge: !noJudge,
       })
 
       // Print summary table
@@ -126,7 +128,48 @@ export async function runExploreCli(argv: string[]): Promise<number> {
       return 1
     },
     async judge() {
-      await judge({})
+      // Parse --re-judge (force cache invalidation) and --dump=<path>
+      // (judge a single failure record JSON file directly).
+      const forceReJudge = argv.includes('--re-judge')
+      const dumpArg = argv.find(a => a.startsWith('--dump='))
+      const outArg = argv.find(a => a.startsWith('--out='))
+
+      const apiKey = process.env.ANTHROPIC_API_KEY ?? ''
+      if (!apiKey) {
+        process.stderr.write('explore judge: ANTHROPIC_API_KEY not set\n')
+        return 1
+      }
+
+      const explorerBase = outArg
+        ? outArg.slice('--out='.length)
+        : process.env.INK_EXPLORER_BASE ?? `${process.cwd()}/.ink-explorer`
+      const cacheRoot = `${explorerBase}/judge-cache`
+
+      let failures: Array<import('./types').FailureRecord> = []
+      if (dumpArg) {
+        const fs = await import('node:fs')
+        const dumpPath = dumpArg.slice('--dump='.length)
+        try {
+          const raw = fs.readFileSync(dumpPath, 'utf8')
+          const parsed = JSON.parse(raw)
+          failures = Array.isArray(parsed) ? parsed : [parsed]
+        } catch (err) {
+          process.stderr.write(
+            `explore judge: failed to read --dump=${dumpPath}: ${(err as Error).message}\n`,
+          )
+          return 1
+        }
+      }
+
+      const result = await judge({
+        failures,
+        apiKey,
+        cacheRoot,
+        forceReJudge,
+      })
+      process.stdout.write(
+        `[judge] verdicts=${result.verdicts.length} budgetHit.haiku=${result.budgetHit.haiku} budgetHit.opus=${result.budgetHit.opus}\n`,
+      )
       return 0
     },
     async repair() {

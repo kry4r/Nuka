@@ -30,8 +30,20 @@ describe('explorer skeleton stubs', () => {
     await expect(fuzz({})).rejects.toThrow(/must supply target/)
   })
 
-  it('judge rejects with /not implemented/', async () => {
-    await expect(judge({} as never)).rejects.toThrow(/not implemented/)
+  it('judge resolves on empty failures (M4 implemented — no longer a stub)', async () => {
+    // judge is fully implemented in M4; empty failures + cacheRoot under
+    // os.tmpdir resolves to {verdicts:[], budgetHit:{haiku:false,opus:false}}
+    // without any API calls.
+    const { tmpdir } = await import('node:os')
+    const path = await import('node:path')
+    const cacheRoot = path.join(tmpdir(), `judge-skeleton-${process.pid}-${Date.now()}`)
+    const result = await judge({
+      failures: [],
+      apiKey: 'sk-test',
+      cacheRoot,
+    })
+    expect(result.verdicts).toEqual([])
+    expect(result.budgetHit).toEqual({ haiku: false, opus: false })
   })
 
   it('repair rejects with /not implemented/', async () => {
