@@ -231,6 +231,100 @@ export async function maybeAutoCompact(
   }
 }
 
+import type { Session } from '../session/types'
+
+/**
+ * Session-aware options that mirror the legacy `AutoCompactOpts` shape so
+ * call sites can migrate with a one-line type swap. Internally this is
+ * folded down to the pure `AutoCompactConfig`.
+ *
+ * - `autoThreshold` * `contextWindow` defines the trigger boundary
+ *   measured against `session.totalUsage.inputTokens + outputTokens`.
+ *   Below the boundary, no compaction happens.
+ * - `targetTokens` is the pure-orchestrator's iterative-prune target
+ *   AFTER the fold. Defaults to `contextWindow * (autoThreshold * 0.5)`
+ *   when omitted — half of the trigger, matching the legacy "keepTurns"
+ *   intuition of "shrink well below threshold so we don't immediately
+ *   re-compact on the next turn".
+ */
+export interface AutoCompactSessionAwareOpts {
+  autoThreshold: number
+  contextWindow: number
+  targetTokens?: number
+  preserveRecent?: number
+  summarize?: (messages: Message[]) => Promise<string>
+}
+
+/** Result of a session-aware compaction pass. */
+export interface CompactSessionAwareResult {
+  compacted: boolean
+  before: number
+  after: number
+  reason?: 'below-threshold' | 'vetoed-by-hook' | 'nothing-to-compact'
+}
+
+/**
+ * Session-aware wrapper around {@link maybeAutoCompact}. The single
+ * production entry point for auto-compaction after the 2026-05-18
+ * unification. Reads the trigger from `session.totalUsage`, delegates
+ * the structural fold to the pure orchestrator, and writes the
+ * resulting `messages` + `updatedAt` back onto the session in place.
+ *
+ * Mutates `session.messages` and `session.updatedAt` only when the
+ * orchestrator returns `compacted: true`. `session.totalUsage` is left
+ * unchanged on purpose: the StatusBar / CostBar reads cumulative usage
+ * from it, and the next provider call's `inputTokens` will reflect the
+ * shorter prompt automatically (this matches the legacy
+ * `compact/auto.ts` semantics, which were correct).
+ */
+export async function compactSessionAware(
+  session: Session,
+  opts: AutoCompactSessionAwareOpts,
+  deps: { hookRegistry?: HookRegistry; signal?: AbortSignal } = {},
+): Promise<CompactSessionAwareResult> {
+  const usageTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
+  const trigger = Math.floor(opts.contextWindow * opts.autoThreshold)
+  if (usageTokens <= trigger) {
+    return {
+      compacted: false,
+      reason: 'below-threshold',
+      before: usageTokens,
+      after: usageTokens,
+    }
+  }
+
+  const target = opts.targetTokens ?? Math.floor(opts.contextWindow * opts.autoThreshold * 0.5)
+  const config: AutoCompactConfig = {
+    triggerTokens: trigger,
+    targetTokens: target,
+    sessionId: session.id,
+  }
+  if (opts.preserveRecent !== undefined) config.preserveRecent = opts.preserveRecent
+  if (opts.summarize) config.summarize = opts.summarize
+
+  const result = await maybeAutoCompact(session.messages, config, deps)
+  if (!result.compacted) {
+    return {
+      compacted: false,
+      reason: result.reason,
+      before: usageTokens,
+      after: usageTokens,
+    }
+  }
+
+  // Swap the transcript in place. `appendMessage` replaces the array
+  // reference on every append, so assigning here keeps React/Ink
+  // consumers consistent with the rest of the loop.
+  session.messages = result.messages
+  session.updatedAt = Date.now()
+
+  return {
+    compacted: true,
+    before: result.before.estimatedTokens,
+    after: result.after.estimatedTokens,
+  }
+}
+
 type CompactionPartition = {
   systems: Message[]
   middle: Message[]
