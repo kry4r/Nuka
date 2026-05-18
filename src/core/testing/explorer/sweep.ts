@@ -1,16 +1,6 @@
 // src/core/testing/explorer/sweep.ts
 //
-// L2 Sweep verb — M2 implementation placeholder.
-// See locked spec §4.3 for the full design.
+// Re-export from the real sweep implementation (M2).
+// The actual logic lives in sweep/sweep.ts to keep file sizes under budget.
 
-import type { SweepOpts, SweepResult } from './types'
-
-/**
- * Run fixtures × default viewport matrix → L1 invariants → Judge.
- * Writes failure dumps and returns a summary.
- *
- * @throws {Error} not implemented (M2)
- */
-export async function sweep(_opts: SweepOpts): Promise<SweepResult> {
-  throw new Error('not implemented (M2)')
-}
+export { sweep } from './sweep/sweep'

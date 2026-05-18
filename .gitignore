@@ -14,3 +14,5 @@ coverage/
 /.ink-explorer/
 # ink-ui-explorer test scratch dir (interrupted test runs)
 /.tmp-ink-explorer-test/
+/.tmp-sweep-test/
+/.tmp-fixture-loader-test/

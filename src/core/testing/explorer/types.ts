@@ -155,12 +155,17 @@ export type CaptureResult = {
 
 export type SweepOpts = {
   fixturesGlob?: string
-  noJudge?: boolean
+  viewports?: Viewport[]
+  cwd?: string
+  out?: string
+  judge?: boolean
 }
 
 export type SweepResult = {
-  failures: FailureRecord[]
-  total: number
+  records: FailureRecord[]
+  totalRuns: number
+  passed: number
+  failed: number
 }
 
 export type FuzzOpts = {
