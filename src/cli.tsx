@@ -200,6 +200,31 @@ if (testPlanIdx !== -1) {
       process.exit(1)
     }
   })()
+} else if (argv[0] === 'explore') {
+  // ---------------------------------------------------------------------------
+  // nuka explore <verb> [options]
+  //
+  // M0 — explorer module skeleton.  The explorer bundle is lazy-loaded from
+  // dist/explorer.js (T3) so it never enters dist/cli.js.  In dev mode
+  // (tsx src/cli.tsx) the dist file does not exist; the catch path falls back
+  // to the in-tree TypeScript source, mirroring the --test-plan pattern above.
+  // ---------------------------------------------------------------------------
+  ;(async () => {
+    try {
+      let mod: typeof import('./core/testing/explorer/index')
+      const distUrl = new URL('./explorer.js', import.meta.url).href
+      try {
+        mod = (await import(distUrl)) as typeof import('./core/testing/explorer/index')
+      } catch {
+        const srcUrl = new URL('./core/testing/explorer/index.ts', import.meta.url).href
+        mod = (await import(srcUrl)) as typeof import('./core/testing/explorer/index')
+      }
+      process.exit(await mod.runExploreCli(argv.slice(1)))
+    } catch (err) {
+      process.stderr.write(`explore failed: ${(err as Error).message}\n`)
+      process.exit(1)
+    }
+  })()
 } else if (argv[0] === 'doctor') {
   // nuka doctor — environment diagnostics
   ;(async () => {
