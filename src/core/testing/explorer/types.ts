@@ -246,11 +246,26 @@ export type JudgeResult = {
 }
 
 export type RepairOpts = {
+  /** Failure id (matches `<id>.md` under .ink-explorer/failures/) OR
+   *  an absolute path to a dump file. */
   failureId: string
+  /** Project root used to resolve .ink-explorer/, fixture paths, and the
+   *  subagent's read/edit/grep tools. */
+  cwd?: string
+  /** Anthropic API key — required when no mock client is injected. */
+  apiKey?: string
+  /** Turn budget for the Opus subagent (default 20). */
+  maxTurns?: number
+  /** Wall-clock budget in ms for the Opus subagent (default 300000). */
+  timeoutMs?: number
+  /** Output directory for the promoted regression fixture. Defaults to
+   *  `<cwd>/test/ui-auto/fixtures`. */
+  fixtureOutDir?: string
 }
 
 export type RepairResult = {
   promoted: boolean
   fixturePath?: string
   summary: string
+  status?: 'verified' | 'exhausted' | 'timeout'
 }
