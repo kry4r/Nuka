@@ -10,7 +10,7 @@ import { makeUserMessage, makeToolMessage, emptyAssistant, makeSystemMessage } f
 import { buildSystemPrompt } from './systemPrompt'
 import { addUsage } from '../session/telemetry'
 import { appendMessage } from '../session/session'
-import type { AssistantMessage, ContentBlock, Message } from '../message/types'
+import type { AssistantMessage, ContentBlock, ImageContentBlock, Message } from '../message/types'
 import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
 import { activeToolsForMany } from '../skill/activation'
@@ -260,8 +260,22 @@ function applyToAssistant(m: AssistantMessage, ev: ProviderEvent): void {
   }
 }
 
+/**
+ * Input to `runAgent`.
+ *
+ * `text` is the user's prompt (skill matching + hooks consume this). The
+ * optional `images` array carries provider-bound image attachments resolved
+ * by `inlineReferencesIntoText`; they ride on the structured user-message
+ * `content` channel, NOT the text prompt. Text-only callers can keep
+ * passing `{ text }`.
+ */
+export type RunAgentInput = {
+  text: string
+  images?: readonly ImageContentBlock[]
+}
+
 export async function* runAgent(
-  input: { text: string },
+  input: RunAgentInput,
   session: Session,
   deps: RunAgentDeps,
   signal: AbortSignal,
@@ -312,7 +326,11 @@ export async function* runAgent(
       )
     }
   }
-  appendMessage(session, makeUserMessage(input), deps.persist)
+  appendMessage(
+    session,
+    makeUserMessage({ text: input.text, images: input.images }),
+    deps.persist,
+  )
 
   // M2.9: Un-defer tools whose searchHint keywords appear in the first user message.
   // Matching happens once (on this message) and the result persists for the session.
