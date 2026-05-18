@@ -4,6 +4,7 @@ import { Box, Static } from 'ink'
 import { MessageRow } from './MessageRow'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
 import type { Message } from '../../core/message/types'
+import { shouldPrologueGoStatic } from './staticGating'
 
 // Tail-N applies only to the LIVE area now — the Static stream prints to the
 // real terminal scrollback (recoverable via mouse-wheel) and does not need
@@ -165,7 +166,7 @@ export function Messages(props: {
   // conversation. While the session is pure-prologue (no messages, no
   // stream), the prologue stays in the live area so it can re-render when
   // cwd/branch/model change.
-  const prologueGoesStatic = !!props.prologue && (total > 0 || props.streaming !== null)
+  const prologueGoesStatic = shouldPrologueGoStatic({ prologue: props.prologue, total, streaming: props.streaming })
   const staticItems: StaticItem[] = []
   if (prologueGoesStatic) {
     staticItems.push({ kind: 'prologue', key: 'prologue', node: props.prologue })

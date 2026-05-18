@@ -27,6 +27,7 @@
 import React from 'react'
 import { Text } from 'ink'
 import { getLayoutMode } from '../../../src/tui/Welcome/layout'
+import { shouldPrologueGoStatic } from '../../../src/tui/Messages/staticGating'
 import type { FixtureDef } from '../../../src/core/testing/explorer/types'
 
 const fixture: FixtureDef = {
@@ -78,8 +79,9 @@ const fixture: FixtureDef = {
         // Simulate bumpMessages() — total incremented from 0 to 1
         const total = 1
 
-        // Current formula (bug): immediately goes static
-        const prologueGoesStaticBug = !!prologue && (total > 0 || streaming !== null)
+        // Use the real gate from staticGating.ts so M9/repair flipping
+        // the logic here will also flip this fixture.
+        const prologueGoesStaticBug = shouldPrologueGoStatic({ prologue, total, streaming })
 
         if (prologueGoesStaticBug) {
           throw new Error(
