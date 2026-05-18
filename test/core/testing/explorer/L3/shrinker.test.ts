@@ -73,11 +73,19 @@ describe('shrink — determinism', () => {
   })
 
   it('respects maxIters bound without infinite loop', () => {
+    type T = string
     const input = build200WithSingleX()
-    // With a tiny budget the shrinker should still terminate and return
-    // some sequence that still reproduces (predicate true on output).
-    const shrunk = shrink(input, containsX, { maxIters: 5 })
-    expect(containsX(shrunk)).toBe(true)
-    expect(shrunk.length).toBeLessThanOrEqual(input.length)
+    // With a tiny budget the shrinker terminates and still reproduces.
+    // Guard call (predicate(sequence)) is NOT tracked in `iters`, but IS
+    // counted by our wrapper. Phase 1 uses at most maxIters=5 predicate
+    // calls (each increments iters). Phase 2 never runs (iters hits maxIters).
+    // Total wrapper calls: 1 guard + 5 phase-1 = 6.
+    let calls = 0
+    const counted = (s: T[]) => { calls++; return containsX(s) }
+    const shrunk = shrink(input, counted, { maxIters: 5 })
+    // 1 guard + up to 5 phase-1 iterations
+    expect(calls).toBeLessThanOrEqual(6)
+    expect(shrunk.length).toBeLessThan(input.length)  // proves work happened
+    expect(containsX(shrunk)).toBe(true)               // still reproduces
   })
 })

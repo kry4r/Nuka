@@ -25,7 +25,6 @@ import { AnsiGrid } from './L0/grid'
 import { runAll } from './L1/index'
 import { VIEWPORT_PROFILES } from './sweep/viewportMatrix'
 import { StdinFuzzer, type Keystroke } from './L3/stdinFuzzer'
-import { shrink } from './L3/shrinker'
 import type { FixtureDef, FuzzOpts, FuzzResult, Viewport } from './types'
 
 // file-local: _fixtureDef backdoor for tests (same pattern as capture/sweep)

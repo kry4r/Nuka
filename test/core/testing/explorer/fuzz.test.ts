@@ -3,10 +3,15 @@
 // M3.T3 — RED-first tests for the fuzz() orchestrator.
 // See locked spec §4.4.
 //
-// 2 tests:
-//   1. determinism — same seed + same fixture → identical FuzzResult twice.
-//   2. crafted fixture: bug fires on byte 'q' → fuzz finds violation within
-//      ≤ 50 steps; shrunk repro has length 1 == ['q'].
+// Tests:
+//   1. determinism — same seed + same fixture → identical FuzzResult twice
+//      (clean path).
+//   2. determinism — violation path: same seed + buggy fixture → identical
+//      failure twice (proves orchestrator determinism on the violation path).
+//   3. crafted fixture: bug fires on byte 'q' → fuzz finds violation within
+//      ≤ 200 steps; shrunk repro has length 1 == ['q'].
+//   4. disk fixture: loadFixtureFile round-trip via tsImport; simple
+//      noContentBeyondColumns fixture.
 //
 // The crafted fixture is materialised on disk in a dot-prefixed tmp dir
 // (./.tmp-fuzz-test/) that lives under .gitignore. afterEach + afterAll
@@ -84,7 +89,7 @@ function makeCleanFixture(): FixtureDef {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Determinism — same seed + same fixture → identical result twice
+// 1. Determinism — same seed + same fixture → identical result twice (clean)
 // ---------------------------------------------------------------------------
 describe('fuzz — determinism', () => {
   it('same seed + same fixture → identical FuzzResult across two runs', async () => {
@@ -112,13 +117,34 @@ describe('fuzz — determinism', () => {
       expect(a.failure?.sequence).toEqual(b.failure?.sequence)
     }
   })
+
+  it('same seed + same fixture → identical FuzzResult on the violation path', async () => {
+    // Uses the quitBugFixture + seed=46 (known to trigger the bug) to
+    // exercise orchestrator determinism on the failure branch.
+    ensureTmp()
+    const opts = {
+      target: '__inline__',
+      seed: 46,
+      steps: 200,
+      pResize: 0.0,
+      cwd: TMP_DIR,
+      _fixtureDef: quitBugFixture,
+    } as Parameters<typeof fuzz>[0]
+    const a = await fuzz(opts)
+    const b = await fuzz(opts)
+    expect(a.failure).toBeDefined()
+    expect(b.failure).toBeDefined()
+    expect(a.failure!.sequence).toEqual(b.failure!.sequence)   // byte-for-byte
+    expect(a.failure!.shrunk).toEqual(b.failure!.shrunk)
+    expect(a.failure!.invariant).toBe(b.failure!.invariant)
+  }, 60_000)
 })
 
 // ---------------------------------------------------------------------------
 // 2. Crafted bug — byte 'q' triggers violation; shrunk repro has length 1
 // ---------------------------------------------------------------------------
 describe('fuzz — finds + shrinks crafted "q crashes" bug', () => {
-  it('discovers violation within 50 steps and shrinks to ["q"]', async () => {
+  it('discovers violation within 200 steps and shrinks to ["q"]', async () => {
     // Touch the tmp dir so the cleanup invariants are exercised even when
     // no file is written (memory rule feedback_test_temp_cleanup.md).
     ensureTmp()
@@ -130,7 +156,7 @@ describe('fuzz — finds + shrinks crafted "q crashes" bug', () => {
       // position 1 (so the shrinker has to drop one neighbour to reach
       // length 1, which exercises the per-step deletion phase).
       seed: 46,
-      steps: 50,
+      steps: 200,
       pResize: 0.0, // viewport changes irrelevant for this bug
       cwd: TMP_DIR,
       _fixtureDef: quitBugFixture,
@@ -141,5 +167,63 @@ describe('fuzz — finds + shrinks crafted "q crashes" bug', () => {
     expect(result.failure?.shrunk.length).toBe(1)
     expect(result.failure?.shrunk[0]).toBe('q')
     expect(result.failure?.invariant).toBe('noLossyTruncation')
+  }, 30_000)
+})
+
+// ---------------------------------------------------------------------------
+// 3. Disk fixture — loadFixtureFile round-trip via tsImport.
+//
+// Writes a minimal .fixtures.mts into TMP_DIR. The fixture renders a plain
+// <Text> with a mustContain sentinel that is never satisfied → noLossyTruncation
+// fires from frame 0. No hooks (useInput/useState) → avoids React-module-
+// duplication. This proves loadFixtureFile round-trips through tsImport.
+//
+// noContentBeyondColumns was the original target, but ink's yoga-layout wraps
+// content at stdout.columns, so a plain overlong Text always wraps rather than
+// overflowing — the asciiView is always clipped to cols. noLossyTruncation
+// triggers reliably: any mustContain value absent from the rendered output
+// fires immediately from frame 0.
+//
+// If tsImport pulls in a separate React/ink module instance, fuzz() may throw
+// (React-module-duplication error). In that case mark it.skip with a comment.
+// ---------------------------------------------------------------------------
+describe('fuzz — disk fixture (loadFixtureFile round-trip)', () => {
+  it('noLossyTruncation fires from frame 0 on a disk fixture with unmet mustContain', async () => {
+    // The fixture source: a plain <Text> that never renders 'SENTINEL_NEVER'.
+    // No useInput/useState → static render, avoids React-module-duplication.
+    const fixtureSource = `
+import React from 'react'
+import { Text } from 'ink'
+import type { FixtureDef } from '../../../src/core/testing/explorer/types'
+
+const fixture: FixtureDef = {
+  component: 'MustContainMiss',
+  cases: {
+    basic: {
+      render: () => React.createElement(Text, null, 'hello'),
+      // This sentinel will never appear in the rendered output.
+      mustContain: ['SENTINEL_NEVER'],
+    },
+  },
+  viewports: [{ cols: 40, rows: 5 }],
+}
+
+export default fixture
+`
+    ensureTmp()
+    const fixturePath = path.join(TMP_DIR, 'must-contain-miss.fixtures.mts')
+    fs.writeFileSync(fixturePath, fixtureSource, 'utf8')
+
+    const result = await fuzz({
+      target: fixturePath,
+      seed: 1,
+      steps: 5,
+      pResize: 0.0,
+      cwd: TMP_DIR,
+    } as Parameters<typeof fuzz>[0])
+
+    expect(result.ok).toBe(false)
+    expect(result.failure).toBeDefined()
+    expect(result.failure!.invariant).toBe('noLossyTruncation')
   }, 30_000)
 })

@@ -8,6 +8,7 @@ import { Text, Static } from 'ink'
 
 import { AnsiGrid } from '../../../../../src/core/testing/explorer/L0/grid'
 import { renderWithViewport } from '../../../../../src/core/testing/explorer/L0/render'
+import { FakeStdout } from '../../../../../src/core/testing/explorer/L0/viewport'
 
 // Will fail until staticTap.ts is created
 import { staticTap } from '../../../../../src/core/testing/explorer/L0/staticTap'
@@ -62,6 +63,48 @@ describe('AnsiGrid.parse', () => {
     const g2 = AnsiGrid.parse(text, { cols: 30, rows: 2 })
     expect(g1.hash).toBe(g2.hash)
     expect(g1.hash).toMatch(/^[a-f0-9]{64}$/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// FakeStdout looksLikeRedraw heuristic — regression guard for ESC[G routing.
+//
+// The `looksLikeRedraw` heuristic in viewport.ts classifies a write as a
+// live-frame rerender (→ liveBuffer) when it contains cursor-positioning
+// escapes (ESC[G, ESC[2K, ESC[<n>A …). This guards against a future refactor
+// accidentally routing such writes to staticBuffer instead.
+//
+// Read viewport.ts to understand the classifier:
+//   * `looksLikeRedraw = CURSOR_MOVE_RE.test(str)` where
+//     CURSOR_MOVE_RE = /\u001b\[(?:\d*[ABCDGJKfH]|\d*;\d*[fH]|2K)/
+//   * A mixed write (cursor-positioning + printable) → liveBuffer always.
+//   * A plain-text write during _beforeCursorHide=true → staticBuffer.
+// ---------------------------------------------------------------------------
+describe('FakeStdout — looksLikeRedraw routing', () => {
+  it('plain-text write during BSR transaction (_beforeCursorHide) lands in staticBuffer', () => {
+    const stdout = new FakeStdout(40, 10)
+    // Open BSR transaction → _beforeCursorHide = true
+    stdout.write('\u001b[?2026h')
+    // Plain-text write (no cursor-positioning escapes) → should go to staticBuffer
+    stdout.write('hello static\n')
+    expect(stdout.staticBuffer).toContain('hello static')
+    expect(stdout.liveBuffer).toBe('')
+  })
+
+  it('write containing ESC[G (cursor-to-col-1) + content routes to liveBuffer, not staticBuffer', () => {
+    // This is the looksLikeRedraw regression test. ink emits ESC[G as part of
+    // its in-place rerender path (e.g., "[2K[1A[2K[GBROKEN\n"). Even during a
+    // BSR transaction (_beforeCursorHide=true), the ESC[G mixed write must
+    // land in liveBuffer — not staticBuffer — because the classifier correctly
+    // identifies it as a live-frame redraw.
+    const stdout = new FakeStdout(40, 10)
+    // Open BSR transaction → _beforeCursorHide = true
+    stdout.write('\u001b[?2026h')
+    // Mixed write: cursor-to-col-1 (ESC[G) + printable content
+    stdout.write('\u001b[GBROKEN-CONTENT\n')
+    // looksLikeRedraw=true → liveBuffer, NOT staticBuffer
+    expect(stdout.liveBuffer).toContain('BROKEN-CONTENT')
+    expect(stdout.staticBuffer).not.toContain('BROKEN-CONTENT')
   })
 })
 

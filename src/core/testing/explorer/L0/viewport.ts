@@ -60,6 +60,7 @@ export class FakeStdout extends Writable {
       // Reset liveBuffer so the next live-frame write *overwrites* the
       // previous frame. Static commits (already routed to staticBuffer)
       // are untouched.
+      // reset: each transaction overwrites; frames() returns latest, not history
       this.liveBuffer = ''
     }
 
