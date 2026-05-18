@@ -3,6 +3,7 @@ import type { ProviderResolver } from '../core/provider/resolver'
 import type { Config } from '../core/config/schema'
 import type { CostTracker } from '../core/cost/tracker'
 import type { TaskManager } from '../core/tasks/manager'
+import type { HookRegistry } from '../core/hooks/registry'
 
 export type DialogDescriptor =
   | { kind: 'model-picker' }
@@ -37,6 +38,12 @@ export type SlashContext = {
   costTracker?: CostTracker
   /** Phase 10 §4.3 — optional; wired by cli.tsx when the task system is enabled. */
   taskManager?: TaskManager
+  /**
+   * 2026-05-18 — in-process hook registry. Forwarded into `LocalAgentSpec`
+   * by `/task run` so background task lifecycle fires reach user handlers.
+   * Absent in headless / fixture contexts.
+   */
+  hookRegistry?: HookRegistry
 }
 
 export interface SlashCommand {
