@@ -116,6 +116,7 @@ import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { makeCoordinateAgentsTool } from './core/tools/coordinator/coordinateAgentsTool'
+import type { Tool as ToolType } from './core/tools/types'
 import { dispatchAgent } from './core/agents/dispatch'
 import { resolveAgentDef } from './core/agents/loader'
 import { loadSubagentsFromDir, defaultSubagentDirs } from './core/agents/subagentLoader'
@@ -1147,7 +1148,7 @@ async function runInteractive(): Promise<void> {
         registry: tools,
         providerResolver: providers,
         permission,
-      }) as any,
+      }) as unknown as ToolType,
     )
   }
 
