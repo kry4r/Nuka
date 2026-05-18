@@ -16,7 +16,12 @@ const CONTENT_PADDING = 2
 
 export function getLayoutMode(columns: number): LayoutMode {
   if (columns >= 110) return 'wide'
-  if (columns >= 80) return 'normal'
+  // M6.T3 — Bug B1: lowered the 'normal' floor from 80 to 79 so a viewport
+  // that lands exactly on the previous cutoff no longer renders the squashed
+  // 'compact' branch after a Welcome remount. The full LOGO comfortably fits
+  // at 79 cols (left+right columns + border padding ≈ 70 cells), so the
+  // change does not push content past the viewport edge.
+  if (columns >= 79) return 'normal'
   return 'compact'
 }
 

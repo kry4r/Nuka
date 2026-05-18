@@ -34,6 +34,20 @@ import type { RecentEntry } from '../../core/session/recent'
 
 const LEFT_PANEL_MAX_WIDTH = 50
 
+// M6.T3 — Bug B1: stabilize the layout mode across a Welcome remount frame.
+// When ModelPicker.onSave triggers closeSubmenu → bumpMessages → Welcome
+// re-mount, useTerminalSize's first paint reads whatever process.stdout
+// reports right now. If SIGWINCH fired during the modal's lifetime and
+// the resize listener was unmounted (because Welcome was), the snapshot
+// can be a stale narrow value, flashing the compact LOGO for a frame.
+// We mitigate by:
+//   1. Reading process.stdout.columns directly on the very first paint
+//      (bypassing the React-state initial value), and
+//   2. Caching the most-recent successful mode in a module-scope ref so
+//      a remount with a stale snapshot can fall back to the prior mode
+//      until the next real resize event reconciles the value.
+let lastKnownLayoutMode: ReturnType<typeof getLayoutMode> | null = null
+
 export type WelcomeProps = {
   cwd: string
   gitBranch: { branch: string; dirty: boolean } | null
@@ -52,9 +66,35 @@ export type WelcomeProps = {
 export function Welcome(props: WelcomeProps): React.JSX.Element {
   const { cwd, gitBranch, model, version, updates = [], recent = [], username } = props
   const { columns: termCols } = useTerminalSize()
-  const columns = props.columnsOverride ?? termCols
+  // Prefer process.stdout.columns over the hook's cached snapshot when
+  // they disagree — the hook's state is updated by the 'resize' event,
+  // which fires on the NEXT tick after SIGWINCH. A remount frame can
+  // read termCols before that event lands, so we reconcile with the
+  // live stdout value to avoid the stale-narrow flash.
+  const liveCols = process.stdout.columns
+  const reconciledCols =
+    typeof liveCols === 'number' && liveCols !== termCols ? liveCols : termCols
+  const columns = props.columnsOverride ?? reconciledCols ?? 80
 
-  const layoutMode = getLayoutMode(columns)
+  // Compute the candidate mode. The module-scope cache only kicks in
+  // when:
+  //   * no override is set (real terminals, not tests), AND
+  //   * the candidate is 'compact', AND
+  //   * the last-known mode was non-compact, AND
+  //   * the columns value is within 2 of the compact cutoff (i.e. this
+  //     looks like a stale-snapshot remount, not a genuine terminal
+  //     resize down to compact).
+  // The narrow guard keeps Welcome tests deterministic — a test that
+  // explicitly drives columnsOverride={70} still renders compact.
+  const candidateMode = getLayoutMode(columns)
+  const lookLikesStaleRemount =
+    props.columnsOverride === undefined &&
+    candidateMode === 'compact' &&
+    lastKnownLayoutMode !== null &&
+    lastKnownLayoutMode !== 'compact' &&
+    columns >= 76 && columns < 80
+  const layoutMode = lookLikesStaleRemount ? lastKnownLayoutMode! : candidateMode
+  if (props.columnsOverride === undefined) lastKnownLayoutMode = layoutMode
   const branchSegment = gitBranch
     ? `${gitBranch.branch}${gitBranch.dirty ? ' *' : ''}`
     : '(not a git repo)'
