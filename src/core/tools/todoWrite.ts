@@ -14,7 +14,13 @@ export function createTodoStore(): TodoState {
 export function makeTodoWriteTool(store: TodoState): Tool<{ items: Todo[] }> {
   return defineTool<{ items: Todo[] }>({
     name: 'TodoWrite',
-    description: 'Replace the session todo list. Input is the complete new list of { title, status } items.',
+    description:
+      'Replace the session todo list. Input is the complete new list of { title, status } items.\n\n' +
+      '**When NOT to use:**\n' +
+      '- For trivial conversational inputs like greetings ("hello", "hi").\n' +
+      '- For single-step tasks that can be completed in one tool call.\n' +
+      '- For purely informational replies that require no follow-up.\n' +
+      '- When the user has not asked for a multi-step plan.',
     parameters: {
       type: 'object',
       required: ['items'],
