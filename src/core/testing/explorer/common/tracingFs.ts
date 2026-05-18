@@ -89,6 +89,11 @@ export function writeFailureDump(
   if (rec.gridHash) {
     lines.push(`- **gridHash:** ${rec.gridHash}`)
   }
+  // M5.T4: fixturePath lets the repair subagent know what to re-mount via
+  // the verify tool. Optional for legacy M2 dumps that pre-date M5.
+  if (rec.fixturePath) {
+    lines.push(`- **fixturePath:** ${rec.fixturePath}`)
+  }
   lines.push(``)
   lines.push(`## Violations`)
   lines.push(``)

@@ -179,8 +179,39 @@ export async function runExploreCli(argv: string[]): Promise<number> {
       return 0
     },
     async repair() {
-      await repair({ failureId: argv[1] ?? '' })
-      return 0
+      // Parse positional <id-or-path> and --dump=<path> (mirrors judge).
+      const dumpArg = argv.find(a => a.startsWith('--dump='))
+      const positional = argv[1] && !argv[1].startsWith('--') ? argv[1] : undefined
+      const failureId = dumpArg
+        ? dumpArg.slice('--dump='.length)
+        : positional ?? ''
+
+      if (!failureId) {
+        process.stderr.write(
+          'explore repair: <id-or-path> or --dump=<path> required\n',
+        )
+        return 2
+      }
+
+      const apiKey = process.env.ANTHROPIC_API_KEY ?? ''
+      const outArg = argv.find(a => a.startsWith('--out='))
+      const fixtureOutDir = outArg ? outArg.slice('--out='.length) : undefined
+
+      const result = await repair({
+        failureId,
+        cwd: process.cwd(),
+        apiKey,
+        fixtureOutDir,
+      })
+
+      process.stdout.write(
+        `[repair] status=${result.status ?? 'unknown'} promoted=${result.promoted}` +
+          (result.fixturePath ? ` fixture=${result.fixturePath}` : '') +
+          `\n${result.summary}\n`,
+      )
+
+      // Exit 0 on verified outcome (promoted), 1 otherwise.
+      return result.promoted && result.status === 'verified' ? 0 : 1
     },
   }
 

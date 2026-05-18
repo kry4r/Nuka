@@ -46,8 +46,11 @@ describe('explorer skeleton stubs', () => {
     expect(result.budgetHit).toEqual({ haiku: false, opus: false })
   })
 
-  it('repair rejects with /not implemented/', async () => {
-    await expect(repair({} as never)).rejects.toThrow(/not implemented/)
+  it('repair is no longer a stub (M5.T4)', async () => {
+    // Calling repair() with an empty opts object now exercises the real
+    // orchestrator. Without a valid failureId it surfaces a path/lookup
+    // error rather than the M0 "not implemented" sentinel.
+    await expect(repair({} as never)).rejects.toThrow()
   })
 
   it('runExploreCli([]) returns exit code 2 (usage)', async () => {

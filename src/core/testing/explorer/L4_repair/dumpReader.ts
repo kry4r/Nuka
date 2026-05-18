@@ -67,6 +67,7 @@ export function readDump(path: string): FailureRecord {
   }
   const viewport = parseViewport(viewportRaw)
   const gridHash = bullets.get('gridHash')
+  const fixturePath = bullets.get('fixturePath')
 
   // ----- 3. Section split -----
   // Find the indices of the section headings we care about. Sections are
@@ -122,6 +123,7 @@ export function readDump(path: string): FailureRecord {
     timestamp,
   }
   if (gridHash) rec.gridHash = gridHash
+  if (fixturePath) rec.fixturePath = fixturePath
   if (stdinSequence && stdinSequence.length > 0) rec.stdinSequence = stdinSequence
   return rec
 }
