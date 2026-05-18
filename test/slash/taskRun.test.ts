@@ -21,17 +21,20 @@ function makeCtx(home: string): { ctx: SlashContext; mgr: TaskManager; registry:
   const mgr = new TaskManager({ home })
   // Cast: the test only needs the fields TaskRunCommand reads.
   const ctx = {
-    sessions: {} as never,
+    sessions: {
+      active: () => ({ providerId: 'p', model: 'm', id: 'sess-1', messages: [], ts: 0 }),
+    } as never,
     providers: {
-      resolveActive: () => ({
+      resolveFor: (_session: unknown) => ({
         provider: {
+          id: 'p',
+          format: 'anthropic',
           stream: async function* () {
-            yield { type: 'text_delta', delta: 'hello from task' }
-            yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } }
+            yield { type: 'text_delta', text: 'hello from task' }
             return
           },
+          listRemoteModels: async () => [],
         } as never,
-        providerId: 'p',
         model: 'm',
       }),
     } as never,
