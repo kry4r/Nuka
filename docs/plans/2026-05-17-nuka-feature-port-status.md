@@ -58,7 +58,7 @@
 
 - **TTT**: Auto-compact 纯 orchestrator（Pure Message[] in/out，sibling 不替代 legacy session-aware auto.ts）
 - **UUU**: LSP query Tool 4 actions（**Nuka 已有完整 LSP stack**，加统一 surface）
-- **VVV**: autoCompact wired into loop.ts（`deps.autoCompactPure` + `NUKA_AUTOCOMPACT_MODE=pure` env，加性不动 legacy）
+- **VVV**: autoCompact wired into loop.ts（`deps.autoCompactPure` + `NUKA_AUTOCOMPACT_MODE=pure` env，加性不动 legacy）**[Resolved 2026-05-18]** — see `docs/plans/2026-05-18-autocompact-unification.md`
 - **WWW**: afterToolCall pipeline mode（**解决 LLL 组合性问题**，handlers 现在可串。`NUKA_HOOK_PIPELINE_MODE=pipeline` opt-in）
 - **XXX**: WebFetch hardening（39→394 LOC + 30 测试，私网 IP 过滤、redirect 后重校验、AbortSignal 超时）
 - **YYY**: Plan-mode tools first pass（**大发现：Nuka 已有 permission infra**，YYY 只 ship 独立 PlanModeState）
@@ -193,7 +193,7 @@
 | `NUKA_WORD_WRAP_WIDTH=<int>` | wordWrap 目标宽度 | 100 |
 | `NUKA_URL_EXTRACT_HOOK=1` | 启用 URL 抽取注解 | off |
 | `NUKA_HOOK_PIPELINE_MODE=pipeline` | afterToolCall 串联 | last-write-wins |
-| `NUKA_AUTOCOMPACT_MODE=pure` | Pure auto-compact | session（legacy） |
+| ~~`NUKA_AUTOCOMPACT_MODE=pure`~~ | ~~Pure auto-compact~~ | **[Removed 2026-05-18]** — unified; see `docs/plans/2026-05-18-autocompact-unification.md` |
 | `NUKA_CRON_SCHEDULER=1` | 启动 cron tick | off |
 | `NUKA_CRON_INJECT_PROMPTS=1` | Cron fire 注入 agent input | off |
 | `NUKA_RECENT_FILES_NO_PERSIST=1` | 关 recentFiles 持久化 | on（持久化） |
@@ -249,7 +249,7 @@ Turn 11 已扫荡现存残留：`promptContextReferences/types.ts` `'mcp_resourc
 
 ## 11. 已知 trade-off / 设计妥协
 
-1. **`compact/auto.ts`（session-aware legacy）和 `agent/autoCompact.ts`（pure VVV）共存** — pure path 是 `NUKA_AUTOCOMPACT_MODE=pure` opt-in，没替代 legacy。两条 path 互相加性，长期应统一
+1. ~~**`compact/auto.ts`（session-aware legacy）和 `agent/autoCompact.ts`（pure VVV）共存**~~ — **[Resolved 2026-05-18]** 统一为单一 `compactSessionAware` wrapper；`compact/auto.ts` 已删，`NUKA_AUTOCOMPACT_MODE` env var 已移除。See `docs/plans/2026-05-18-autocompact-unification.md`.
 2. ~~**afterToolCall pipeline 是 opt-in，默认 last-write-wins**~~ — **已翻转 (Turn 11)**: pipeline 是新默认，`NUKA_HOOK_PIPELINE_MODE=last-write-wins` 是 opt-out
 3. **`tasks/run-agent.ts` 不 fire lifecycle** — RRR 发现该 path 是 content-agnostic 不持有 provider/session，无 production caller 之前不修
 4. **Cron `lastFiredAt` 内存追踪后再 persist** — HHHH 落地了持久化，但 scheduler 还是先内存再写盘；非问题但值得记录

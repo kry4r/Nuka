@@ -69,7 +69,7 @@ No provider configured? Nuka boots offline — perfect for trying the TUI, plugi
 | **Lifecycle events** | 7 fire points: `sessionStart` / `sessionEnd` / `promptSubmit` / `afterTurn` / `beforeAutoCompact` / `afterAssistantMessage` (with `replaceText` mutation) / `shellHookExecuted` |
 | **Plan mode** | `EnterPlanMode` → `PermissionHint='ask'` → state flip → `PermissionChecker` gating + TUI badge with dedicated `variant: 'planMode'` dialog |
 | **Cron** | Scheduler tick (`NUKA_CRON_SCHEDULER=1`) + `lastFiredAt` persistence + REPL prompt injection on fire |
-| **AutoCompact** | Pure orchestrator (`NUKA_AUTOCOMPACT_MODE=pure`) with `{skip:true}` veto hook |
+| **AutoCompact** | Pure orchestrator + session-aware wrapper, `{skip:true}` veto hook |
 | **AwaySummary** | Idle watcher + LLM recap + persistent TUI banner; first keystroke dismisses |
 | **Worktree** | `EnterWorktree` swaps `cwd` for all subsequent tool calls; sub-agents inherit by default |
 | **LSP** | 7 actions: definition / references / hover / documentSymbols / workspaceSymbol / implementation / callHierarchy |
@@ -265,7 +265,6 @@ enterprise → user (~/.nuka/config.yaml) → project (.nuka/) → local (.nuka/
 | `NUKA_URL_EXTRACT_HOOK=1` | Annotate tool results with extracted URLs |
 | `NUKA_WHITESPACE_HOOK=1` | Normalize whitespace in assistant messages |
 | `NUKA_APPLY_DIFF_ALLOWED_ROOTS=<paths>` | Restrict ApplyDiff to allowlist (comma-separated) |
-| `NUKA_AUTOCOMPACT_MODE=pure` | Use pure auto-compact orchestrator |
 | `NUKA_CRON_SCHEDULER=1` | Start cron tick loop in REPL |
 | `NUKA_CRON_INJECT_PROMPTS=1` | Inject cron-fired prompts into agent input |
 | `NUKA_OUTPUT_STYLE=<name>` | Activate an output style from `.nuka/output-styles/` |
