@@ -8,15 +8,11 @@ export type PrologueGateInput = {
   total: number
   streaming: unknown
   /**
-   * M6.T3 — sticky bit owned by Messages.tsx (useRef): true once a
-   * streaming message has appeared at least once in the session. Guards
-   * the static-flip against transient `null → !null → null` flickers
-   * that otherwise push the prologue into Static for a single frame.
-   *
-   * Optional + defaults to false so legacy callers (including the
-   * Bug B2 fixture) keep compiling. When omitted, the gate degrades to
-   * "only flip when there is a real message OR an active stream",
-   * which fixes Bug B2 by itself.
+   * Retained for back-compat; no longer used by the gate logic.
+   * The simplified gate flips solely on total > 0 (real messages in
+   * session.messages) — streaming-only state is insufficient because
+   * a streaming flicker with no real messages should not push the
+   * prologue into Static permanently.
    */
   hasEverStreamed?: boolean
 }
@@ -25,24 +21,26 @@ export type PrologueGateInput = {
  * Returns true when the prologue should move from the live area into Ink's
  * Static channel (i.e. scroll off-screen with the conversation).
  *
- * M6.T3 fix: require both
- *   - (total > 0 || streaming !== null), AND
- *   - (streaming !== null || hasEverStreamed)
- * so a transient stream flicker (streaming flaps null → !null → null
- * within one frame) cannot push the prologue into Static when nothing
- * has actually been streamed yet. The legacy behavior also fired on
- * any bumpMessages() that incremented total — that's now blocked too,
- * because total > 0 without an actual stream history keeps the
- * prologue in the live area.
+ * Gate: flip iff there is at least one real message in items (total > 0).
+ *
+ * This is both necessary (the live area needs room for messages) and
+ * sufficient (a streaming-only state with no real messages does not
+ * warrant a permanent prologue eviction, since Static is append-only and
+ * the prologue can never return to live once pushed).
+ *
+ * The previous M6.T3 formula required hasEverStreamed in addition to
+ * total > 0, which blocked the flip when a slash command produced a
+ * real message (total 0→1) but no streaming had occurred. That broke
+ * the /plan harness test and the 05-plan-mode-lockout sample plan.
+ * The root cause was a misidentification of bumpMessages() as the
+ * mechanism incrementing total — bumpMessages() only bumps a render
+ * tick, never session.messages.length, so total > 0 already requires
+ * a real appendMessage() call.
  */
 export function shouldPrologueGoStatic({
   prologue,
   total,
-  streaming,
-  hasEverStreamed = false,
 }: PrologueGateInput): boolean {
   if (!prologue) return false
-  const hasContent = total > 0 || streaming !== null
-  const everStreamed = streaming !== null || hasEverStreamed
-  return hasContent && everStreamed
+  return total > 0
 }
