@@ -128,6 +128,10 @@ describe('flexGrowBounded', () => {
     )
     await new Promise(r => setImmediate(r))
     const grid = handle.grid()
+    // First: confirm that flexGrow=1 truly inflated the box to fill rows=100.
+    // This is the actual scenario being guarded — the box occupies the full
+    // terminal height, not just its natural content height.
+    expect(grid.rows).toBeGreaterThanOrEqual(100)
     // Check against a viewport of rows=10 — the box inflates to 100 > 10
     const smallCtx: InvariantCtx = {
       viewport: { cols: 40, rows: 10 },
