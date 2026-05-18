@@ -130,7 +130,7 @@ import { CostTracker } from './core/cost/tracker'
 import { defaultCostPath, readCostFile, writeCostFile } from './core/cost/persist'
 import { installCostExitHook } from './core/cost/costHook'
 import { defaultCostHistoryPath } from './core/cost/costHistory'
-import { loadMemory, appendMemory } from './core/memdir/index'
+import { loadMemory, loadTeamMemory, appendMemory } from './core/memdir/index'
 import { findRelevant, tokenize } from './core/memdir/relevance'
 import { synthMemoryEntry } from './core/memdir/synth'
 import type { MemoryEntry } from './core/memdir/parser'
@@ -1218,6 +1218,13 @@ async function runInteractive(): Promise<void> {
   // turn so newly synth'd entries appear without a CLI restart.
   let memoryCache: MemoryEntry[] = await loadMemory(cwd).catch(() => [])
 
+  // 2026-05-18 — team memory tier (config.teamId opt-in). Best-effort
+  // load; failures fall through to empty so missing/corrupt team files
+  // don't block startup. Refreshed alongside `memoryCache` on each turn.
+  let teamMemoryCache: MemoryEntry[] = config.teamId
+    ? await loadTeamMemory(config.teamId, cwd).catch(() => [])
+    : []
+
   // Phase 13 M2 — load updates + recent sessions for the Welcome screen.
   // Both are best-effort: failures silently return [].
   const [welcomeUpdates, welcomeRecent]: [UpdateEntry[], RecentEntry[]] =
@@ -1237,6 +1244,9 @@ async function runInteractive(): Promise<void> {
       systemPromptInput: () => ({
         cwd, platform, shell, nodeVersion, gitBranch, skills,
         memory: findRelevant(memoryCache, tokenize(input.text), 5),
+        teamMemory: config.teamId
+          ? findRelevant(teamMemoryCache, tokenize(input.text), 5)
+          : undefined,
         outputStyle: resolveActiveOutputStyleNow(),
       }),
       skills,
@@ -1267,6 +1277,11 @@ async function runInteractive(): Promise<void> {
       if (!entry) return null
       await appendMemory(cwd, entry)
       memoryCache = await loadMemory(cwd).catch(() => memoryCache)
+      if (config.teamId) {
+        teamMemoryCache = await loadTeamMemory(config.teamId, cwd).catch(
+          () => teamMemoryCache,
+        )
+      }
       return entry
     } catch {
       return null

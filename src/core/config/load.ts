@@ -230,6 +230,8 @@ export async function loadConfig(opts: {
     notices: projectCfg.notices ?? globalCfg.notices,
     effort: projectCfg.effort ?? globalCfg.effort,
     locked: projectCfg.locked ?? globalCfg.locked,
+    // 2026-05-18 — team-memory scope identifier; project wins when set.
+    teamId: projectCfg.teamId ?? globalCfg.teamId,
   }
 
   const envActive = process.env.NUKA_ACTIVE_PROVIDER_ID

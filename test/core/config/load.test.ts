@@ -96,6 +96,7 @@ recap:
       notices: 'notices:\n  emergency:\n    tip: sentinel\n',
       effort: 'effort: high\n',
       locked: 'locked: ["providers.x.apiKey"]\n',
+      teamId: 'teamId: sentinel-team\n',
     }
 
     const skip = new Set(['providers', 'active'])
