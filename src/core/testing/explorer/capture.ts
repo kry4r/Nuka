@@ -16,8 +16,9 @@ import { renderWithViewport } from './L0/render'
 import { AnsiGrid } from './L0/grid'
 import { runAll } from './L1/index'
 
-// Extended opts — allows passing a pre-loaded fixture def for testing
-export type CaptureOptsExtended = CaptureOpts & {
+// file-local: extends CaptureOpts with the _fixtureDef test backdoor; do not export
+// Callers that need to pass _fixtureDef should cast via `as Parameters<typeof capture>[0]`.
+type CaptureOptsExtended = CaptureOpts & {
   _fixtureDef?: FixtureDef
 }
 
