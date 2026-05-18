@@ -36,7 +36,14 @@ export type BundledSkillDefinition = {
   description?: string
   when?: SkillFrontmatter['when']
   requires?: string[]
-  body: string
+  /** Static body. Mutually exclusive with `buildBody`, but `buildBody` wins. */
+  body?: string
+  /**
+   * Dynamic body factory; called once at registration time. The bridge
+   * for Nuka-Code's dynamic `getPromptForCommand(args, ctx)` — resolved
+   * eagerly so the registry remains a flat `Skill[]`.
+   */
+  buildBody?: () => string
   path?: string
 }
 
@@ -48,14 +55,23 @@ const bundledSkills: Skill[] = []
  * the agent loop begins. Idempotent on `name`: a second registration
  * with the same name replaces the first (matching the project-overrides-
  * global semantics in `loader.ts:loadSkills`).
+ *
+ * Either `body` or `buildBody` must be supplied. When both are present,
+ * `buildBody` wins and is invoked exactly once during this call.
  */
 export function registerBundledSkill(def: BundledSkillDefinition): void {
+  const body = def.buildBody ? def.buildBody() : def.body
+  if (typeof body !== 'string') {
+    throw new Error(
+      `registerBundledSkill(${def.name}): must provide body or buildBody`,
+    )
+  }
   const skill: Skill = {
     name: def.name,
     ...(def.description !== undefined ? { description: def.description } : {}),
     when: def.when ?? 'on-session-start',
     ...(def.requires !== undefined ? { requires: def.requires } : {}),
-    body: def.body,
+    body,
     source: 'global',
     path: def.path ?? `<bundled>:${def.name}`,
   }
