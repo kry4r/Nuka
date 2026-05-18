@@ -7,6 +7,12 @@ import type {
   ParsedBinding,
 } from '../../../src/core/keybindings/types'
 import { KEYBINDING_CONTEXTS, KEYBINDING_ACTIONS } from '../../../src/core/keybindings/types'
+import {
+  buildResolver,
+  readUserBindings,
+  DEFAULT_BINDINGS,
+  KEYBINDING_ACTIONS as KEYBINDING_ACTIONS_BARREL,
+} from '../../../src/core/keybindings'
 
 describe('keybinding types', () => {
   it('KEYBINDING_CONTEXTS includes Chat and Global', () => {
@@ -41,5 +47,14 @@ describe('keybinding types', () => {
     const _ctx: KeybindingContext = 'Chat'
     const _act: KeybindingAction = 'chat:submit'
     expect(b.action).toBe('chat:submit')
+  })
+})
+
+describe('keybindings index barrel', () => {
+  it('re-exports the public surface', () => {
+    expect(typeof buildResolver).toBe('function')
+    expect(typeof readUserBindings).toBe('function')
+    expect(Array.isArray(DEFAULT_BINDINGS)).toBe(true)
+    expect(Array.isArray(KEYBINDING_ACTIONS_BARREL)).toBe(true)
   })
 })
