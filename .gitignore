@@ -10,3 +10,5 @@ coverage/
 .worktrees/
 # Project-scope Nuka config may contain API keys — never commit
 .nuka/
+# ink-ui-explorer transient run state (failures, captures, judge-cache, runs)
+/.ink-explorer/
