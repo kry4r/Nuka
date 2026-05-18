@@ -128,6 +128,8 @@ import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } 
 // existing dynamic-import pattern used by `nuka doctor` (Phase P2 #12).
 import { CostTracker } from './core/cost/tracker'
 import { defaultCostPath, readCostFile, writeCostFile } from './core/cost/persist'
+import { installCostExitHook } from './core/cost/costHook'
+import { defaultCostHistoryPath } from './core/cost/costHistory'
 import { loadMemory, appendMemory } from './core/memdir/index'
 import { findRelevant, tokenize } from './core/memdir/relevance'
 import { synthMemoryEntry } from './core/memdir/synth'
@@ -931,6 +933,15 @@ async function runInteractive(): Promise<void> {
   } catch {
     // ignore — start with empty tracker on read failure
   }
+  // B1 — fold session entries into the long-lived daily-totals file
+  // (`~/.nuka/cost-history.json`) when the process exits. Synchronous by
+  // necessity (process.on('exit') doesn't await Promises). Safe to install
+  // unconditionally — when the tracker is empty at exit the handler no-ops.
+  // We intentionally leave the handler installed across the SIGINT graceful
+  // path: writeCostFile in that block writes the per-entry log (cost.json),
+  // not the history file. process.exit(0) fires the 'exit' event so the
+  // daily fold still runs once on either path.
+  installCostExitHook(costTracker, defaultCostHistoryPath())
 
   // Wire plugins that are ready (have config or don't need it)
   const pendingPlugins = plugins.filter(p => p.needsUserConfig)
