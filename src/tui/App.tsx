@@ -10,6 +10,8 @@ import { useIdlePoke } from './hooks/useIdlePoke'
 import { useAwayRecap } from './hooks/useAwayRecap'
 import { AwaySummaryCard } from './Recap/AwaySummaryCard'
 import { CronMissedBanner } from './Status/CronMissedBanner'
+import { CostBanner } from './Status/CostBanner'
+import { isCostDisplayEnabled } from '../core/cost/displayEnabled'
 import { EmergencyTipBanner } from './Status/EmergencyTipBanner'
 import { StatusPanel } from './Status/StatusPanel'
 import { SubmenuFrame } from './Submenu/SubmenuFrame'
@@ -776,6 +778,10 @@ export function App(props: AppProps): React.JSX.Element {
   // EmergencyTip uses the same auto-dismiss policy as CronMissed: once any
   // turn lands the tip has been seen and further re-renders are nagging.
   const emergencyTipDismissed = session.messages.length > 0
+  // B1 — env-opt-in real-time cost row. Gate resolves once per render so
+  // toggling NUKA_COST_DISPLAY mid-session takes effect on the next paint
+  // without forcing a remount.
+  const costDisplayOn = isCostDisplayEnabled()
   const prologueNode = useMemo(
     () => (
       <Welcome
@@ -925,6 +931,19 @@ export function App(props: AppProps): React.JSX.Element {
           accumulates at least one message (see `cronBannerDismissed`).
           Gated like AwaySummaryCard: hidden while an inline submenu owns
           the prompt slot so it doesn't fight the dialog for vertical space. */}
+      {/* B1 — env-opt-in CostBanner row. Sits between EmergencyTip and
+          CronMissed in source order; null when NUKA_COST_DISPLAY!=1, when
+          props.costTracker is absent, or when the active session has no
+          recorded turns. The legacy `<StatusPanel cost=... />` below still
+          renders for non-opted users — the banner is additive. */}
+      {!submenuInline && promptVisible && (
+        <CostBanner
+          enabled={costDisplayOn}
+          tracker={props.costTracker}
+          sessionId={session.id}
+          model={session.model}
+        />
+      )}
       {!submenuInline && promptVisible && (
         <CronMissedBanner notice={cronMissed} dismissed={cronBannerDismissed} />
       )}
