@@ -90,6 +90,27 @@ const fixture: FixtureDef = {
         }
       },
     },
+    'b3-prologue-flips-when-real-message-exists': {
+      // Positive companion to b2: lock the contract that the gate DOES
+      // flip when a real message has been appended. Without this case,
+      // a regression that made the gate always return false would still
+      // pass b2 (which only asserts `total=0 ⇒ false`). M6 reviewer #2
+      // flagged this tautology — this case pins the positive direction.
+      render: () => React.createElement(Text, null, 'messages-static-positive-probe'),
+      assert: async () => {
+        const prologue = {} // truthy
+        // Real message exists (appendMessage was called) — gate must flip.
+        const flipped = shouldPrologueGoStatic({ prologue, total: 1, streaming: null })
+        if (!flipped) {
+          throw new Error(
+            `Bug B3 (regression): prologueGoesStatic did NOT flip when ` +
+            `total=1 (a real message was appended).\n` +
+            `The gate is too conservative — prologue would stay in live ` +
+            `area forever, pushing real messages off-screen.`,
+          )
+        }
+      },
+    },
   },
 } satisfies FixtureDef
 
