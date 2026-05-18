@@ -15,10 +15,8 @@ import type { Skill } from '../skill/types'
 import { matchKeywordSkills } from '../skill/activator'
 import { activeToolsForMany } from '../skill/activation'
 import { createProgressPump } from './progressPump'
-import type { AutoCompactOpts } from '../compact/auto'
-import { maybeAutoCompact } from '../compact/auto'
-import type { AutoCompactConfig as AutoCompactPureConfig } from './autoCompact'
-import { maybeAutoCompact as maybeAutoCompactPure } from './autoCompact'
+import type { AutoCompactSessionAwareOpts } from './autoCompact'
+import { compactSessionAware } from './autoCompact'
 import { validateWithJsonSchema } from '../tools/validate'
 import { serializeContentBlocks } from '../tools/content'
 import type { HookEntry } from '../hooks/types'
@@ -28,7 +26,6 @@ import {
   firePromptSubmit,
   fireAfterTurn,
   fireAfterAssistantMessage,
-  fireBeforeAutoCompact,
   extractReplaceText,
   applyReplaceTextToAssistant,
 } from '../hooks/lifecycle'
@@ -62,26 +59,6 @@ export function applyCoordinatorFilter<T extends { name: string }>(tools: T[], s
   return tools.filter(t => COORDINATOR_INTERNAL_TOOLS.has(t.name))
 }
 
-/**
- * Iter VVV — gate for the pure auto-compact path.
- *
- * Pure mode is opt-in via either:
- *   1. `deps.autoCompactPure.mode === 'pure'` (explicit config), or
- *   2. `NUKA_AUTOCOMPACT_MODE=pure` in the environment (debugging /
- *      feature-flagged rollout).
- *
- * The legacy session-aware `deps.autoCompact` path is unaffected by this
- * gate — both paths can coexist in config, but only the pure path is
- * conditional. When `autoCompactPure` is absent, the gate is always
- * closed regardless of the env var, preserving backward compatibility.
- */
-export function isPureAutoCompactEnabled(deps: Pick<RunAgentDeps, 'autoCompactPure'>): boolean {
-  if (!deps.autoCompactPure) return false
-  if (deps.autoCompactPure.mode === 'pure') return true
-  if (process.env['NUKA_AUTOCOMPACT_MODE'] === 'pure') return true
-  return false
-}
-
 export type RunAgentDeps = {
   provider: ProviderResolver
   tools: ToolRegistry
@@ -89,29 +66,13 @@ export type RunAgentDeps = {
   systemPromptInput?: () => Parameters<typeof buildSystemPrompt>[0]
   skills?: Skill[]
   persist?: (session: Session, msg: Message) => void
-  autoCompact?: AutoCompactOpts
   /**
-   * Iter VVV — opt-in pure-orchestrator auto-compact path. Sibling to
-   * `autoCompact` (the legacy session-aware path). When provided AND
-   * pure-mode is enabled, the loop calls `maybeAutoCompactPure` after the
-   * legacy path on turn-end and swaps `session.messages` if the
-   * orchestrator returns a compacted transcript.
-   *
-   * Pure-mode is enabled when either:
-   *   - this `autoCompactPure` field is set, AND
-   *   - `mode === 'pure'` (default 'session', which is a no-op for this
-   *     new path) OR `NUKA_AUTOCOMPACT_MODE=pure` is set in the environment.
-   *
-   * The pure path is fully additive: the legacy `autoCompact` path runs
-   * unchanged when configured, and the new path is only consulted when
-   * explicitly opted into. The two are intentionally independent — pick
-   * one or the other depending on whether you want the provider-driven
-   * summary (legacy) or the deterministic structural fold (pure).
+   * 2026-05-18 unification — single auto-compact entry point. When
+   * provided, the agent loop calls `compactSessionAware(session, opts)`
+   * after each turn-end. The pure orchestrator handles its own
+   * threshold gate, hook veto, and structural fold.
    */
-  autoCompactPure?: {
-    mode?: 'session' | 'pure'
-    config: AutoCompactPureConfig
-  }
+  autoCompact?: AutoCompactSessionAwareOpts
   hooks?: HookEntry[]
   /**
    * Practical Iter JJJ — in-process HookRegistry. When provided, the agent
@@ -477,65 +438,23 @@ export async function* runAgent(
         )
       }
       if (deps.autoCompact) {
-        // beforeAutoCompact hook — veto cancels compaction
+        // Shell-hook veto fires first (preserves shell-hook parity with the
+        // pre-unification legacy path). The in-process hookRegistry veto is
+        // handled inside compactSessionAware → maybeAutoCompact.
         let skipCompact = false
         if (deps.hooks && deps.hooks.length > 0) {
           const beforeTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
           const veto = await runHooks(deps.hooks, 'beforeAutoCompact', { event: 'beforeAutoCompact', tokensBefore: beforeTokens }, { registry: deps.hookRegistry })
           if (veto.cancel) skipCompact = true
         }
-        if (!skipCompact && deps.hookRegistry) {
-          const beforeTokens = session.totalUsage.inputTokens + session.totalUsage.outputTokens
-          const veto = await fireBeforeAutoCompact(
-            deps.hookRegistry,
-            {
-              sessionId: session.id,
-              tokensBefore: beforeTokens,
-              threshold: deps.autoCompact.autoThreshold,
-              contextWindow: deps.autoCompact.contextWindow,
-            },
-            { signal },
-          )
-          if (veto.skipped) skipCompact = true
-        }
         if (!skipCompact) {
-          const result = await maybeAutoCompact(session, deps.autoCompact)
+          const result = await compactSessionAware(
+            session,
+            deps.autoCompact,
+            { hookRegistry: deps.hookRegistry, signal },
+          )
           if (result.compacted) {
             yield { type: 'auto_compacted', before: result.before, after: result.after }
-          }
-        }
-      }
-      // Iter VVV — pure-orchestrator path. Sibling to the legacy
-      // session-aware compaction above. Runs only when explicitly opted
-      // into via `deps.autoCompactPure` AND either `mode === 'pure'` is set
-      // or `NUKA_AUTOCOMPACT_MODE=pure` is in the environment. Otherwise
-      // this block is inert (backward-compat for the legacy session path).
-      //
-      // The orchestrator handles its own threshold gate, hook veto, and
-      // signal abort — we just thread the registry/signal through and
-      // swap the transcript in place when it actually compacts. The
-      // `hookRegistry` here is the SAME one used by the legacy path's
-      // `fireBeforeAutoCompact` call above, so a single user handler
-      // covers both code paths (deduplication is the consumer's problem
-      // since both modes are opt-in and never run simultaneously in
-      // production).
-      if (isPureAutoCompactEnabled(deps)) {
-        const pure = deps.autoCompactPure!
-        const result = await maybeAutoCompactPure(
-          session.messages,
-          { ...pure.config, sessionId: pure.config.sessionId ?? session.id },
-          { hookRegistry: deps.hookRegistry, signal },
-        )
-        if (result.compacted) {
-          // Swap the transcript in place. `appendMessage` replaces the
-          // array reference on every append, so reassigning here keeps
-          // React/Ink consumers consistent with the rest of the loop.
-          session.messages = result.messages
-          session.updatedAt = Date.now()
-          yield {
-            type: 'auto_compacted',
-            before: result.before.estimatedTokens,
-            after: result.after.estimatedTokens,
           }
         }
       }
