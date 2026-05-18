@@ -57,10 +57,34 @@ export async function runExploreCli(argv: string[]): Promise<number> {
       })
       return 0
     },
+
     async sweep() {
-      await sweep({})
-      return 0
+      const { formatSummary, buildRunRows } = await import('./sweep/reporter')
+
+      // Parse --fixture-root=<dir>, --out=<dir>, --judge (no-op in M2)
+      const fixtureRootArg = argv.find(a => a.startsWith('--fixture-root='))
+      const outArg = argv.find(a => a.startsWith('--out='))
+
+      const fixtureRoot = fixtureRootArg
+        ? fixtureRootArg.slice('--fixture-root='.length)
+        : undefined
+      const out = outArg ? outArg.slice('--out='.length) : undefined
+
+      const result = await sweep({
+        fixturesGlob: fixtureRoot,
+        cwd: process.cwd(),
+        out,
+      })
+
+      // Print summary table
+      const rows = buildRunRows(result)
+      const summary = formatSummary(result, rows)
+      process.stdout.write(summary)
+
+      // Exit 1 if any failures
+      return result.failed > 0 ? 1 : 0
     },
+
     async fuzz() {
       await fuzz({})
       return 0

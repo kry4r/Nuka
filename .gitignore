@@ -16,3 +16,4 @@ coverage/
 /.tmp-ink-explorer-test/
 /.tmp-sweep-test/
 /.tmp-fixture-loader-test/
+/.tmp-explore-sweep-cli-test/
