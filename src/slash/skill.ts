@@ -1,6 +1,6 @@
 import os from 'node:os'
 import type { SlashCommand, SlashResult } from './types'
-import { loadSkills } from '../core/skill/loader'
+import { loadAllSkills } from '../core/skill/loadDir'
 
 export const SkillCommand: SlashCommand = {
   name: 'skill',
@@ -9,7 +9,7 @@ export const SkillCommand: SlashCommand = {
   usage: '/skill',
   examples: ['/skill'],
   async run(): Promise<SlashResult> {
-    const skills = await loadSkills({ home: os.homedir(), cwd: process.cwd() })
+    const skills = await loadAllSkills({ home: os.homedir(), cwd: process.cwd() })
     if (skills.length === 0) {
       return { type: 'text', text: 'No skills loaded. Drop markdown files under ~/.nuka/skills/ or in a plugin.' }
     }

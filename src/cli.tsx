@@ -104,7 +104,8 @@ import type { AutoCompactSessionAwareOpts } from './core/agent/autoCompact'
 import { globalConfigPath } from './core/config/paths'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
-import { loadSkills } from './core/skill/loader'
+import { loadAllSkills } from './core/skill/loadDir'
+import { initBundledSkills } from './core/skill/bundled/index'
 import { loadOutputStyles } from './core/outputStyles/loader'
 import { selectActiveStyleName, resolveActiveOutputStyle } from './core/outputStyles/resolve'
 import { makeSkillTool } from './core/skill/skillTool'
@@ -413,7 +414,11 @@ function parsePluginDirs(rawArgv: string[]): string[] {
 async function runInteractive(): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig({ home: os.homedir(), cwd })
-  const skills = await loadSkills({ home: os.homedir(), cwd })
+  // Register the bundled (in-process) tier-1 skills once at bootstrap.
+  // `loadAllSkills` reads the same registry and merges disk skills on
+  // top so disk continues to override bundled by name.
+  initBundledSkills()
+  const skills = await loadAllSkills({ home: os.homedir(), cwd })
   // User-defined output styles from `.nuka/output-styles/*.md`. Best-
   // effort load: scan failures fall back to an empty list so a broken
   // directory never blocks startup. Resolution to the active style
