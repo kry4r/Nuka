@@ -38,20 +38,23 @@ class MockStdin extends EventEmitter {
 // ---------------------------------------------------------------------------
 function splitFrames(buf: string): string[] {
   if (!buf) return []
-  // In debug:true mode each write() call in ink appends a single rendered
-  // frame.  Frames are separated by '\n\n' (double newline) or just accumulated
-  // — treat the entire buffer as a collection of writes.
-  // For simplicity we split on double-newline boundaries and return non-empty.
-  const parts = buf.split('\n\n')
+  // In debug:false mode, ink writes each frame as a plain-text string.
+  // Multiple frames accumulate in liveBuffer separated by newlines.
+  // Each frame string already ends with '\n'; we split and filter empty.
+  const stripped = stripAnsi(buf)
   const frames: string[] = []
+  // Split on newline sequences — each non-empty portion is a frame "snapshot"
+  // For our purposes the whole buffer content is the last frame's text.
+  // Use \n\n as boundary (ink renders a double-newline between frames when
+  // multiple repaints occur) with single-newline fallback.
+  const parts = stripped.split('\n\n')
   for (const part of parts) {
-    const stripped = stripAnsi(part).trim()
-    if (stripped) frames.push(stripped)
+    const t = part.trim()
+    if (t) frames.push(t)
   }
-  // Fallback: if no double-newline boundaries, treat whole buffer as one frame
   if (frames.length === 0) {
-    const stripped = stripAnsi(buf).trim()
-    if (stripped) frames.push(stripped)
+    const t = stripped.trim()
+    if (t) frames.push(t)
   }
   return frames
 }
@@ -82,14 +85,14 @@ export function renderWithViewport(
     stdinAny.setRawMode = () => process.stdin
   }
 
-  // Use ink's render() with debug:true so writes are plain text (no escape codes
-  // for cursor positioning).  This mirrors what ink-testing-library does.
+  // Use ink's render() with debug:false (production mode) so we get real ANSI
+  // output and can intercept Static commits via FakeStdout._inStaticWindow.
   const inst = inkRender(node, {
     stdout: stdout as unknown as NodeJS.WriteStream,
     stderr: stderr as unknown as NodeJS.WriteStream,
     stdin: stdin as unknown as NodeJS.ReadStream,
     exitOnCtrlC: false,
-    debug: true,
+    debug: false,
   })
 
   let currentViewport = { ...viewport }
