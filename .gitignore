@@ -18,3 +18,5 @@ coverage/
 /.tmp-fixture-loader-test/
 /.tmp-explore-sweep-cli-test/
 /.tmp-fuzz-test/
+/.tmp-judge-cache-test/
+/.tmp-judge-test/
