@@ -6,7 +6,13 @@ import type {
   ProviderEvent,
   ToolSpec,
 } from './types'
-import type { Message, StopReason, ToolContentBlock } from '../message/types'
+import type {
+  ContentBlock,
+  ImageContentBlock,
+  Message,
+  StopReason,
+  ToolContentBlock,
+} from '../message/types'
 import { fetchRemoteModels } from './remoteModels'
 
 type OpenAIOpts = {
@@ -148,31 +154,60 @@ function normalizeFinish(r: string | null): StopReason {
   }
 }
 
+type OpenAIPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+function imageBlockToOpenAIPart(b: ImageContentBlock): OpenAIPart {
+  if (b.dataBase64 !== undefined) {
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${b.mediaType};base64,${b.dataBase64}` },
+    }
+  }
+  if (b.url !== undefined) {
+    return { type: 'image_url', image_url: { url: b.url } }
+  }
+  return { type: 'text', text: '[image: (no data)]' }
+}
+
+function userContentForOpenAI(blocks: ContentBlock[]): string | OpenAIPart[] {
+  const hasImage = blocks.some(b => b.type === 'image')
+  if (!hasImage) {
+    return blocks
+      .filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+  }
+  const parts: OpenAIPart[] = []
+  for (const b of blocks) {
+    if (b.type === 'text') parts.push({ type: 'text', text: b.text })
+    else if (b.type === 'image') parts.push(imageBlockToOpenAIPart(b))
+  }
+  return parts
+}
+
 function toOpenAIMessages(system: string, messages: Message[]): unknown[] {
-  const out: any[] = [{ role: 'system', content: system }]
+  const out: unknown[] = [{ role: 'system', content: system }]
   for (const m of messages) {
     if (m.role === 'system') continue
     if (m.role === 'user') {
-      const text = m.content
-        .filter((b: any) => b.type === 'text')
-        .map((b: any) => b.text)
-        .join('')
-      out.push({ role: 'user', content: text })
+      out.push({ role: 'user', content: userContentForOpenAI(m.content) })
     } else if (m.role === 'assistant') {
       const text = m.content
-        .filter((b: any) => b.type === 'text')
-        .map((b: any) => b.text)
+        .filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
+        .map(b => b.text)
         .join('')
       const toolCalls = m.content
-        .filter((b: any) => b.type === 'tool_use')
-        .map((b: any) => ({
+        .filter((b): b is Extract<ContentBlock, { type: 'tool_use' }> => b.type === 'tool_use')
+        .map(b => ({
           id: b.id,
           type: 'function',
           function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
         }))
       out.push({
         role: 'assistant',
-        content: text || null,
+        content: text.length > 0 ? text : null,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
       })
     } else if (m.role === 'tool') {
@@ -187,6 +222,9 @@ function toOpenAIMessages(system: string, messages: Message[]): unknown[] {
   }
   return out
 }
+
+/** Test-only re-export. Not part of the public provider API. */
+export const __test_toOpenAIMessages = toOpenAIMessages
 
 /**
  * Serialize tool ContentBlock[] for OpenAI (text-only).
