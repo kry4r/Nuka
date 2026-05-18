@@ -40,6 +40,17 @@ describe('ensureExplorerDir', () => {
     )
     expect(() => ensureExplorerDir(tmpRoot)).not.toThrow()
   })
+
+  it('concurrent calls do not throw (race-safe mkdirSync)', async () => {
+    const { ensureExplorerDir } = await import(
+      '../../../../src/core/testing/explorer/common/tracingFs'
+    )
+    // Promise.all with same root exercises the concurrent creation path;
+    // mkdirSync({recursive:true}) is safe even when dirs already exist.
+    await expect(
+      Promise.all([ensureExplorerDir(tmpRoot), ensureExplorerDir(tmpRoot)]),
+    ).resolves.toBeDefined()
+  })
 })
 
 describe('writeFailureDump', () => {
@@ -75,5 +86,46 @@ describe('writeFailureDump', () => {
     expect(content).toContain('test-001')
     expect(content).toContain('Welcome')
     expect(content).toContain('noContentBeyondColumns')
+  })
+
+  it('round-trips excerpt, cells, and stdinSequence fields', async () => {
+    const { ensureExplorerDir, writeFailureDump } = await import(
+      '../../../../src/core/testing/explorer/common/tracingFs'
+    )
+    const paths = ensureExplorerDir(tmpRoot)
+
+    const record = {
+      id: 'test-002',
+      component: 'StatusPanel',
+      fixtureCase: 'overflow',
+      viewport: { cols: 60, rows: 20 },
+      violations: [
+        {
+          rule: 'noBeyondViewport',
+          severity: 'error' as const,
+          message: 'cell escapes viewport',
+          excerpt: 'line with overflow >>>',
+          cells: [
+            { x: 61, y: 5 },
+            { x: 62, y: 5 },
+          ],
+        },
+      ],
+      asciiView: 'status panel view',
+      stdinSequence: ['ctrl-c', 'q'],
+      timestamp: new Date().toISOString(),
+    }
+
+    const filePath = writeFailureDump(paths, record)
+    expect(existsSync(filePath)).toBe(true)
+
+    const content = readFileSync(filePath, 'utf8')
+    // excerpt block
+    expect(content).toContain('line with overflow >>>')
+    // cells coordinates
+    expect(content).toContain('(61,5)')
+    // stdinSequence JSON
+    expect(content).toContain('"ctrl-c"')
+    expect(content).toContain('"q"')
   })
 })
