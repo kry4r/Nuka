@@ -122,6 +122,13 @@ export type FailureRecord = {
    * MUST populate it.
    */
   gridHash?: string
+  /**
+   * Absolute path of the source fixture file (`*.fixtures.tsx`) that
+   * produced this failure. Optional for backward compat with M2 dumps
+   * that pre-date the M5 repair flow; M5 repair populates it so the
+   * subagent can re-mount via verify().
+   */
+  fixturePath?: string
   stdinSequence?: string[]
   timestamp: string
 }
