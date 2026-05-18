@@ -239,6 +239,12 @@ export type AppProps = {
   agentInFlight?: number
   /** Phase 10 §4.3 — singleton task manager surfaced via SlashContext + HUD. */
   taskManager?: TaskManager
+  /**
+   * 2026-05-18 — in-process hook registry forwarded into SlashContext so
+   * `/task run` can thread it into LocalAgentSpec for lifecycle fires.
+   * Optional — absent in legacy tests / programmatic embeds.
+   */
+  hookRegistry?: import('../core/hooks/registry').HookRegistry
   /** Phase 12 M3 — todo store from createTodoStore(); mutated in-place by TodoWrite tool. */
   todoStore?: TodoState
   /** Phase 12 M4 — read-only list of loaded plugins for SettingsSubmenu PluginsForm. */
@@ -442,6 +448,7 @@ export function App(props: AppProps): React.JSX.Element {
         config: props.config,
         costTracker: props.costTracker,
         taskManager: props.taskManager,
+        hookRegistry: props.hookRegistry,
       })
       if (res.type === 'exit') { props.onExit(); exit() }
       else if (res.type === 'dialog') {

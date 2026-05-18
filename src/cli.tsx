@@ -36,6 +36,7 @@ import { VimCommand } from './slash/vim'
 import { DoctorCommand } from './slash/doctor'
 import { RewindCommand } from './slash/rewind'
 import { TasksCommand } from './slash/tasks'
+import { TaskRunCommand } from './slash/taskRun'
 import { TaskManager } from './core/tasks/manager'
 import { ThemeCommand } from './slash/theme'
 import { StatsCommand } from './slash/stats'
@@ -848,7 +849,7 @@ async function runInteractive(): Promise<void> {
     ExitCommand, HelpCommand, ClearCommand, NewCommand, ForkCommand, BtwCommand,
     CostCommand, ModelCommand, EffortCommand, SettingsCommand, ConfigCommand, CompactCommand, ResumeCommand,
     MemdirCommand, VimCommand, DoctorCommand,
-    RewindCommand, TasksCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
+    RewindCommand, TasksCommand, TaskRunCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
     StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
@@ -1324,6 +1325,7 @@ async function runInteractive(): Promise<void> {
       sessionPluginCount={plugins.filter(p => p.source === 'session').length}
       costTracker={costTracker}
       taskManager={taskManager}
+      hookRegistry={hookRegistry}
       todoStore={todoStore}
       loadedPlugins={plugins.map(p => ({ name: p.manifest.name, description: p.manifest.description }))}
       loadedSkills={skills.map(s => ({ name: s.name, description: s.description }))}
