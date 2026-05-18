@@ -49,3 +49,21 @@ describe('ConfigSchema', () => {
     expect(parsed.providers[0].pricing?.['gpt-5'].input).toBe(2.5)
   })
 })
+
+describe('ConfigSchema teamId', () => {
+  it('accepts an optional teamId string', () => {
+    const parsed = ConfigSchema.parse({ providers: [], active: { providerId: '' }, teamId: 'acme-prod' })
+    expect(parsed.teamId).toBe('acme-prod')
+  })
+
+  it('omits teamId when absent', () => {
+    const parsed = ConfigSchema.parse({ providers: [], active: { providerId: '' } })
+    expect(parsed.teamId).toBeUndefined()
+  })
+
+  it('rejects an empty-string teamId', () => {
+    expect(() =>
+      ConfigSchema.parse({ providers: [], active: { providerId: '' }, teamId: '' }),
+    ).toThrow()
+  })
+})

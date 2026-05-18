@@ -207,5 +207,14 @@ export const ConfigSchema = z.object({
    * e.g. ["providers.openai.apiKey"]
    */
   locked: z.array(z.string()).optional(),
+  /**
+   * 2026-05-18 — team-memory scope. When set, the agent loads team
+   * memory entries from `~/.nuka/team-memory/<teamId>/<sha1(cwd)>/MEMORY.md`
+   * in addition to the per-cwd project memory. Plain string by design:
+   * the value is treated as an opaque identifier and only ever
+   * interpolated into a filesystem path via the `teamMemoryPath`
+   * helper (which sanitizes / containment-checks the result).
+   */
+  teamId: z.string().min(1).optional(),
 })
 export type Config = z.infer<typeof ConfigSchema>
