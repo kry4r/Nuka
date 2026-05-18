@@ -1,0 +1,78 @@
+# GitHub Actions CI for Nuka.
+#
+# Single job, ubuntu-latest, Node 22. Steps:
+#   1. checkout
+#   2. setup-node + npm cache (keyed on package-lock.json)
+#   3. npm ci
+#   4. npx tsc --noEmit (root + test tsconfig, via the `typecheck` script)
+#   5. npx vitest run --reporter=verbose (full suite — Plan 1 confirmed the
+#      three former "baseline pre-fail" tests pass on Linux Node 22, so
+#      no `--exclude` patterns are necessary)
+#   6. dedicated bundle-size assertion — the test/build/bundle-size.test.ts
+#      already runs `npm run build` and asserts dist/cli.js <= 720 KB,
+#      but we re-check with a tiny inline node snippet so CI logs
+#      surface a clean "BUNDLE OK <bytes>" line and the ceiling
+#      breach is easy to grep.
+#
+# macOS / Windows are intentionally NOT in the matrix yet. Plan 1's
+# plugin/loader realpath fix is platform-symmetric on Linux but the
+# darwin verification is independent — add `macos-latest` to the matrix
+# only after a manual macOS run confirms 0 regressions.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck + test + bundle-size
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (root + test tsconfig)
+        run: npm run typecheck
+
+      - name: Vitest (full suite, verbose)
+        run: npx vitest run --reporter=verbose
+        env:
+          NUKA_RECENT_FILES_NO_PERSIST: '1'
+
+      - name: Bundle-size guard (explicit assertion in CI log)
+        run: |
+          node --input-type=module -e "
+          import { statSync } from 'node:fs';
+          import { join } from 'node:path';
+          const CEILING = 720 * 1024;
+          const cliJs = join(process.cwd(), 'dist', 'cli.js');
+          const size = statSync(cliJs).size;
+          if (size > CEILING) {
+            console.error('BUNDLE FAIL ' + size + ' > ' + CEILING + ' bytes');
+            process.exit(1);
+          }
+          console.log('BUNDLE OK ' + size + ' / ' + CEILING + ' bytes');
+          "
