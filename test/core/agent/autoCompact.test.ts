@@ -403,3 +403,89 @@ describe('maybeAutoCompact — tool messages', () => {
     expect(result.messages.slice(-3)).toEqual(messages.slice(-3))
   })
 })
+
+// ─── compactSessionAware ───────────────────────────────────────────────────
+import { compactSessionAware } from '../../../src/core/agent/autoCompact'
+import type { Session } from '../../../src/core/session/types'
+import { PermissionCache } from '../../../src/core/permission/cache'
+import { MessageQueue } from '../../../src/core/session/queue'
+
+function makeSession(messages: Message[]): Session {
+  return {
+    id: 'sess-1',
+    providerId: 'p',
+    model: 'm',
+    messages,
+    totalUsage: { inputTokens: 100_000, outputTokens: 50_000 },
+    permissionCache: new PermissionCache(),
+    queue: new MessageQueue(),
+    mode: 'normal',
+    createdAt: 1,
+    updatedAt: 1,
+    unDeferredToolNames: new Set(),
+  }
+}
+
+describe('compactSessionAware', () => {
+  it('returns compacted=false below threshold and leaves session untouched', async () => {
+    const s = makeSession([
+      { role: 'user', content: [{ type: 'text', text: 'short' }], id: 'm1' } as Message,
+    ])
+    s.totalUsage = { inputTokens: 10, outputTokens: 5 }
+    const before = s.messages
+    const out = await compactSessionAware(s, {
+      autoThreshold: 0.8,
+      contextWindow: 200_000,
+    })
+    expect(out.compacted).toBe(false)
+    expect(s.messages).toBe(before)
+    expect(s.updatedAt).toBe(1)  // unchanged
+  })
+
+  it('compacts and writes new messages + updatedAt when over threshold', async () => {
+    const bigText = 'x'.repeat(20_000)
+    const msgs: Message[] = []
+    for (let i = 0; i < 30; i++) {
+      msgs.push({ role: 'user', content: [{ type: 'text', text: bigText }], id: `u${i}` } as Message)
+      msgs.push({ role: 'assistant', content: [{ type: 'text', text: bigText }], id: `a${i}` } as Message)
+    }
+    const s = makeSession(msgs)
+    s.totalUsage = { inputTokens: 200_000, outputTokens: 100_000 }
+    const before = s.messages
+    const beforeUpdatedAt = s.updatedAt
+    const out = await compactSessionAware(s, {
+      autoThreshold: 0.5,
+      contextWindow: 200_000,
+      targetTokens: 20_000,
+    })
+    expect(out.compacted).toBe(true)
+    expect(s.messages).not.toBe(before)
+    expect(s.messages.length).toBeLessThan(before.length)
+    expect(s.updatedAt).toBeGreaterThan(beforeUpdatedAt)
+    // totalUsage is intentionally NOT zeroed — the next provider call's
+    // inputTokens reflects the shorter prompt, mirroring legacy behaviour.
+    expect(s.totalUsage.inputTokens).toBe(200_000)
+  })
+
+  it('preserves session metadata (id, providerId, mode, queue, permissionCache)', async () => {
+    const msgs: Message[] = []
+    const big = 'y'.repeat(10_000)
+    for (let i = 0; i < 20; i++) {
+      msgs.push({ role: 'user', content: [{ type: 'text', text: big }], id: `u${i}` } as Message)
+    }
+    const s = makeSession(msgs)
+    s.totalUsage = { inputTokens: 150_000, outputTokens: 60_000 }
+    const origQueue = s.queue
+    const origCache = s.permissionCache
+    await compactSessionAware(s, {
+      autoThreshold: 0.5,
+      contextWindow: 200_000,
+      targetTokens: 10_000,
+    })
+    expect(s.id).toBe('sess-1')
+    expect(s.providerId).toBe('p')
+    expect(s.mode).toBe('normal')
+    expect(s.queue).toBe(origQueue)
+    expect(s.permissionCache).toBe(origCache)
+  })
+})
