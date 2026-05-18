@@ -8,9 +8,9 @@
 // exits 0 at HEAD while the fixtures stay red — M9 (repair) flips them
 // to it() when the underlying bugs are fixed.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 import path from 'path'
-import { glob } from 'tinyglobby'
+import fs from 'fs'
 import type { FixtureDef, FixtureCase, Viewport } from '../../src/core/testing/explorer/types'
 import { renderWithViewport } from '../../src/core/testing/explorer/L0/render'
 import { runAll } from '../../src/core/testing/explorer/L1/index'
@@ -19,9 +19,13 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures')
 const DEFAULT_VIEWPORT: Viewport = { cols: 80, rows: 24 }
 
 async function loadFixtures(): Promise<Array<{ file: string; def: FixtureDef }>> {
-  const files = await glob('**/*.fixtures.tsx', { cwd: FIXTURES_DIR, absolute: true })
+  const dirents = fs.readdirSync(FIXTURES_DIR, { withFileTypes: true })
+  const files = dirents
+    .filter(d => d.isFile() && d.name.endsWith('.fixtures.tsx'))
+    .map(d => path.join(FIXTURES_DIR, d.name))
+    .sort()
   const defs: Array<{ file: string; def: FixtureDef }> = []
-  for (const file of files.sort()) {
+  for (const file of files) {
     const mod = await import(file) as { default: FixtureDef }
     if (mod.default) {
       defs.push({ file, def: mod.default })
@@ -67,10 +71,15 @@ async function runFixtureCase(
 // ---------------------------------------------------------------------------
 
 describe('ui-auto fixtures', () => {
+  let fixtures: Array<{ file: string; def: FixtureDef }> = []
+
+  beforeAll(async () => {
+    fixtures = await loadFixtures()
+  })
+
   // Bug A fixtures — currently RED at HEAD (no "When NOT to use" in description,
   // no TodoWrite section in systemPrompt). Marked it.fails() so vitest exits 0.
   it.fails('regression-bug-a: tool-description-has-when-not-to-use', async () => {
-    const fixtures = await loadFixtures()
     const bugA = fixtures.find(f => f.file.includes('regression-bug-a'))
     expect(bugA, 'regression-bug-a fixture not found').toBeDefined()
     const c = bugA!.def.cases['tool-description-has-when-not-to-use']
@@ -79,7 +88,6 @@ describe('ui-auto fixtures', () => {
   })
 
   it.fails('regression-bug-a: system-prompt-has-todowrite-section', async () => {
-    const fixtures = await loadFixtures()
     const bugA = fixtures.find(f => f.file.includes('regression-bug-a'))
     expect(bugA, 'regression-bug-a fixture not found').toBeDefined()
     const c = bugA!.def.cases['system-prompt-has-todowrite-section']
@@ -89,7 +97,6 @@ describe('ui-auto fixtures', () => {
 
   // Bug B fixtures — currently RED at HEAD.
   it.fails('regression-bug-b: b1-layout-mode-at-79-cols', async () => {
-    const fixtures = await loadFixtures()
     const bugB = fixtures.find(f => f.file.includes('regression-bug-b'))
     expect(bugB, 'regression-bug-b fixture not found').toBeDefined()
     const c = bugB!.def.cases['b1-layout-mode-at-79-cols']
@@ -98,7 +105,6 @@ describe('ui-auto fixtures', () => {
   })
 
   it.fails('regression-bug-b: b2-prologue-not-in-static-when-total-gt-0', async () => {
-    const fixtures = await loadFixtures()
     const bugB = fixtures.find(f => f.file.includes('regression-bug-b'))
     expect(bugB, 'regression-bug-b fixture not found').toBeDefined()
     const c = bugB!.def.cases['b2-prologue-not-in-static-when-total-gt-0']
