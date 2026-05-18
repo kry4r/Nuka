@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import os from 'node:os'
 import { loadPlugins } from '../../../src/core/plugin/loader'
@@ -7,7 +7,15 @@ import { loadPlugins } from '../../../src/core/plugin/loader'
 let home: string
 
 beforeEach(async () => {
-  home = await mkdtemp(join(os.tmpdir(), 'nuka-plugins-'))
+  const raw = await mkdtemp(join(os.tmpdir(), 'nuka-plugins-'))
+  // On macOS `os.tmpdir()` returns `/var/folders/...` while
+  // `realpath` resolves it to `/private/var/folders/...` (because
+  // `/var` is a symlink to `/private/var`). `loadPlugins` calls
+  // `realpath` on every directory it scans, so the returned
+  // `rootDir` is always canonical. Resolving `home` once here keeps
+  // every `join(home, ...)` assertion on the same canonical side
+  // without sprinkling platform branches through individual tests.
+  home = await realpath(raw)
 })
 
 afterEach(async () => {
