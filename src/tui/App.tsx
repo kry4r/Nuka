@@ -24,7 +24,10 @@ import { recentAssistantMessages } from '../slash/rewind'
 import { saveConfigPatch } from '../core/config/save'
 import { appendMessage } from '../core/session/session'
 import { SessionPicker } from './dialogs/SessionPicker'
-import type { SessionMeta } from '../core/session/store'
+import type { SessionMeta, SessionStore } from '../core/session/store'
+import { SessionList } from './History/SessionList'
+import { HistoryStore } from '../core/session/history/store'
+import type { HistoryListEntry, SessionId } from '../core/session/history/types'
 import type { LoadedPlugin, PluginUserConfigField } from '../core/plugin/manifest'
 import type { SessionManager } from '../core/session/manager'
 import type { ProviderResolver } from '../core/provider/resolver'
@@ -96,6 +99,8 @@ export type SubmenuDescriptor =
   | { kind: 'model-picker' }
   | { kind: 'effort-picker' }
   | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
+  // B4 — full session history browser (replaces session-picker for /history).
+  | { kind: 'history-list'; entries: HistoryListEntry[] | 'loading' }
   | { kind: 'onboarding-wizard' }
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
@@ -220,6 +225,13 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
 
 export type AppProps = {
   sessions: SessionManager
+  /**
+   * B4 — optional persistent session store. When present, the `/history`
+   * dialog can list and delete past sessions. Absent when
+   * NUKA_SESSION_PERSIST is unset; the `/history` slash short-circuits
+   * before the dialog opens in that case.
+   */
+  store?: SessionStore
   slash: SlashRegistry
   providers: ProviderResolver
   config: Config
@@ -470,6 +482,23 @@ export function App(props: AppProps): React.JSX.Element {
           dispatchUI({
             type: 'update-submenu',
             submenu: { kind: 'session-picker', metas },
+          })
+        } else if (res.dialog.kind === 'history-list') {
+          // B4 — /history. The slash command already verified persistence is
+          // enabled before returning this dialog, so `props.store` should
+          // be present. Guard anyway for the test-harness case.
+          if (!props.store) {
+            return
+          }
+          dispatchUI({
+            type: 'open-submenu',
+            submenu: { kind: 'history-list', entries: 'loading' },
+          })
+          const history = new HistoryStore({ store: props.store })
+          const entries = await history.list()
+          dispatchUI({
+            type: 'update-submenu',
+            submenu: { kind: 'history-list', entries },
           })
         } else {
           dispatchUI({
@@ -1184,6 +1213,31 @@ export function App(props: AppProps): React.JSX.Element {
               const resumed = await props.sessions.resume(id)
               setSession(resumed)
               stream.reset()
+            }}
+            onCancel={closeSubmenu}
+          />
+        </SubmenuFrame>
+      )}
+      {/* B4 — /history full-screen browser */}
+      {submenuFull && submenu?.kind === 'history-list' && (
+        <SubmenuFrame mode="full" title="History" focused>
+          <SessionList
+            entries={submenu.entries === 'loading' ? [] : submenu.entries}
+            loading={submenu.entries === 'loading'}
+            onResume={async (id: SessionId) => {
+              closeSubmenu()
+              const resumed = await props.sessions.resume(id)
+              setSession(resumed)
+              stream.reset()
+            }}
+            onDelete={async (id: SessionId) => {
+              if (!props.store) return
+              const history = new HistoryStore({ store: props.store })
+              await history.delete(id)
+              // re-load list
+              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries: 'loading' } })
+              const entries = await history.list()
+              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries } })
             }}
             onCancel={closeSubmenu}
           />

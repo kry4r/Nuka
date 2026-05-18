@@ -1343,6 +1343,7 @@ async function runInteractive(): Promise<void> {
   render(
     <App
       sessions={sessions}
+      store={store}
       slash={slash}
       providers={providers}
       config={config}
