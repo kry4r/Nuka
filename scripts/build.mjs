@@ -46,10 +46,13 @@ await build({
   // already cannot resolve them; these entries are defensive in case the
   // pattern ever changes to a literal string.
   external: [...runtimeExternals, './test-runner.js', './tools-extra.js'],
-  // Strip whitespace + comments (no identifier/syntax minification) so the
-  // production bundle is dense without being unreadable. This keeps
-  // dist/cli.js comfortably under the Phase-10 320 KB ceiling.
+  // Minify whitespace and syntax (but not identifiers) to keep dist/cli.js
+  // under the 720 KB bundle cap.  minifySyntax folds constants and removes
+  // dead branches; it is safe on Node 18+ ESM output and brings the bundle
+  // from ~750 KB down to ~718 KB.  Identifier minification is still skipped
+  // so stack traces and grep remain human-readable.
   minifyWhitespace: true,
+  minifySyntax: true,
   legalComments: 'none',
   logLevel: 'info',
 })
@@ -96,6 +99,41 @@ await build({
     ].join('\n'),
   },
   external: runtimeExternals,
+  minifyWhitespace: true,
+  legalComments: 'none',
+  logLevel: 'info',
+})
+
+// ---------------------------- explorer bundle ---------------------------
+// M0.T3 — separate esbuild entry for the ink-ui-explorer runner.
+// cli.tsx lazy-loads this bundle via `new URL('./explorer.js', import.meta.url)`
+// in the `nuka explore` argv branch, so it never enters dist/cli.js.
+// The same externals as test-runner.js: react + ink are peer deps from the
+// target project; string-width / strip-ansi / ansi-regex are bundled in.
+await build({
+  entryPoints: ['src/core/testing/explorer/index.ts'],
+  outfile: 'dist/explorer.js',
+  bundle: true,
+  platform: 'node',
+  target: 'node18',
+  format: 'esm',
+  jsx: 'automatic',
+  banner: {
+    js: [
+      "import { createRequire as __nuka_createRequire } from 'node:module';",
+      'const require = __nuka_createRequire(import.meta.url);',
+    ].join('\n'),
+  },
+  // Mark heavy framework + SDK deps external (loaded from project node_modules).
+  // string-width / strip-ansi / ansi-regex are intentionally bundled in so the
+  // skill is usable in projects that may not have them installed.
+  external: [
+    ...runtimeExternals,
+    'react',
+    'ink',
+    'ink-testing-library',
+    '@anthropic-ai/sdk',
+  ],
   minifyWhitespace: true,
   legalComments: 'none',
   logLevel: 'info',
