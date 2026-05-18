@@ -83,6 +83,15 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
     '  - Prefer Edit for targeted changes; Write when creating new files.',
     '  - Announce destructive shell commands before executing them.',
     '  - Report results briefly; let the user review diffs and outputs.',
+    '',
+    'TodoWrite usage:',
+    '  - Use TodoWrite only for multi-step tasks that benefit from explicit',
+    '    progress tracking across several tool calls.',
+    '  - Do NOT call TodoWrite for trivial conversational turns (e.g. the user',
+    '    typing "hello", "hi", or a single-line question).',
+    '  - Do NOT call TodoWrite when the work fits in one tool call or is purely',
+    '    informational; reply directly instead.',
+    '  - When in doubt, prefer no TodoWrite — the user can always ask for one.',
   ]
 
   if (input.skills && input.skills.length > 0) {
