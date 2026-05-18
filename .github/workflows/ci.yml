@@ -9,8 +9,9 @@
 #      three former "baseline pre-fail" tests pass on Linux Node 22, so
 #      no `--exclude` patterns are necessary)
 #   6. dedicated bundle-size assertion — the test/build/bundle-size.test.ts
-#      already runs `npm run build` and asserts dist/cli.js <= 720 KB,
-#      but we re-check with a tiny inline node snippet so CI logs
+#      already runs `npm run build` and asserts dist/cli.js <= 744 KB
+#      (CLI_BUNDLE_CEILING_BYTES in test/build/_constants.ts), but we
+#      re-check with a tiny inline node snippet so CI logs
 #      surface a clean "BUNDLE OK <bytes>" line and the ceiling
 #      breach is easy to grep.
 #
