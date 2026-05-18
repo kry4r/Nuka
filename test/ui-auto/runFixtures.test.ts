@@ -94,20 +94,40 @@ describe('ui-auto fixtures', () => {
     await runFixtureCase(c!)
   })
 
-  // Bug B fixtures — currently RED at HEAD.
-  it.fails('regression-bug-b: b1-layout-mode-at-79-cols', async () => {
-    const bugB = fixtures.find(f => f.file.includes('regression-bug-b'))
+  // Bug B fixtures — flipped GREEN at M6.T3.
+  it('regression-bug-b: b1-layout-mode-at-79-cols', async () => {
+    const bugB = fixtures.find(f => f.file === path.join(FIXTURES_DIR, 'regression-bug-b.fixtures.tsx'))
     expect(bugB, 'regression-bug-b fixture not found').toBeDefined()
     const c = bugB!.def.cases['b1-layout-mode-at-79-cols']
     expect(c, 'case not found').toBeDefined()
     await runFixtureCase(c!, { cols: 79, rows: 24 })
   })
 
-  it.fails('regression-bug-b: b2-prologue-not-in-static-when-total-gt-0', async () => {
-    const bugB = fixtures.find(f => f.file.includes('regression-bug-b'))
+  it('regression-bug-b: b2-prologue-not-in-static-when-total-gt-0', async () => {
+    const bugB = fixtures.find(f => f.file === path.join(FIXTURES_DIR, 'regression-bug-b.fixtures.tsx'))
     expect(bugB, 'regression-bug-b fixture not found').toBeDefined()
     const c = bugB!.def.cases['b2-prologue-not-in-static-when-total-gt-0']
     expect(c, 'case not found').toBeDefined()
     await runFixtureCase(c!)
   })
+
+  // M6.T3 — Bug B fixed across all 7 viewport profiles (per plan §595).
+  const SEVEN_PROFILES: Viewport[] = [
+    { cols: 60, rows: 30 },
+    { cols: 70, rows: 30 },
+    { cols: 79, rows: 24 },
+    { cols: 100, rows: 30 },
+    { cols: 100, rows: 50 },
+    { cols: 120, rows: 30 },
+    { cols: 140, rows: 60 },
+  ]
+  for (const vp of SEVEN_PROFILES) {
+    it(`regression-bug-b: b2 across viewport ${vp.cols}x${vp.rows}`, async () => {
+      const bugB = fixtures.find(f => f.file === path.join(FIXTURES_DIR, 'regression-bug-b.fixtures.tsx'))
+      expect(bugB, 'regression-bug-b fixture not found').toBeDefined()
+      const c = bugB!.def.cases['b2-prologue-not-in-static-when-total-gt-0']
+      expect(c, 'case not found').toBeDefined()
+      await runFixtureCase(c!, vp)
+    })
+  }
 })

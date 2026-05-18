@@ -166,7 +166,20 @@ export function Messages(props: {
   // conversation. While the session is pure-prologue (no messages, no
   // stream), the prologue stays in the live area so it can re-render when
   // cwd/branch/model change.
-  const prologueGoesStatic = shouldPrologueGoStatic({ prologue: props.prologue, total, streaming: props.streaming })
+  //
+  // M6.T3 — sticky `hasEverStreamed`: a useRef bit that latches true the
+  // first time props.streaming is non-null. Guards the static-flip
+  // against transient `streaming: null → !null → null` flickers within
+  // one render frame, which used to push the prologue into Static and
+  // leave the live area blank after ModelPicker.onSave().
+  const hasEverStreamedRef = React.useRef(false)
+  if (props.streaming !== null) hasEverStreamedRef.current = true
+  const prologueGoesStatic = shouldPrologueGoStatic({
+    prologue: props.prologue,
+    total,
+    streaming: props.streaming,
+    hasEverStreamed: hasEverStreamedRef.current,
+  })
   const staticItems: StaticItem[] = []
   if (prologueGoesStatic) {
     staticItems.push({ kind: 'prologue', key: 'prologue', node: props.prologue })
