@@ -78,11 +78,11 @@ describe('staticTap', () => {
     await new Promise(r => setImmediate(r))
     await new Promise(r => setImmediate(r))
 
-    // staticTap should have collected the prologue line
-    const tapped = staticTap(handle)
-    // The prologue text should appear somewhere — either in staticWrites or
-    // the tap result should have detected it
-    expect(tapped.staticLines.length + handle.staticWrites().length).toBeGreaterThan(0)
+    // staticTap should have collected the prologue line into staticWrites
+    staticTap(handle)
+    expect(handle.staticWrites().length).toBeGreaterThanOrEqual(1)
+    // The live frame must not re-render Static content (it has scrolled off)
+    expect(handle.lastFrame() ?? '').not.toContain('prologue-line')
     handle.unmount()
   })
 })
