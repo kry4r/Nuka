@@ -1,9 +1,9 @@
 // src/tui/Tasks/SubagentDetail.tsx
 import * as React from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../../core/theme/context'
+import { truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette } from '../theme'
-import { useTerminalSize } from '../hooks/useTerminalSize'
 
 type Props = {
   taskId: string; agentName: string; teamName: string; status: string
@@ -20,7 +20,8 @@ type Props = {
 
 export function SubagentDetail(p: Props): React.ReactNode {
   const theme = useTheme()
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const primaryColor = theme.colors.primary ?? defaultPalette.primary
   const fgMutedColor = theme.colors.fgMuted ?? defaultPalette.fgMuted
   const warnColor = theme.colors.warn ?? defaultPalette.warn
@@ -34,10 +35,10 @@ export function SubagentDetail(p: Props): React.ReactNode {
   const innerPlanWidth = Math.max(8, boxWidth - 4)
   const innerPlanCap = Math.max(1, innerPlanWidth - 4)
 
-  // Defensive hard-cut: split on \n, slice unbreakable lines so wrap="wrap"
-  // can't push glyphs past the right border on URL-style content.
+  // Defensive hard-cut: split on \n, trim unbreakable lines so wrap="wrap"
+  // can't push wide glyphs past the right border on URL-style content.
   const safePlan = (s: string, cap: number): string =>
-    s.split('\n').map(line => (line.length > cap && !/\s/.test(line)) ? line.slice(0, cap) : line).join('\n')
+    s.split('\n').map(line => !/\s/.test(line) ? truncateByWidth(line, cap) : line).join('\n')
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={primaryColor} width={boxWidth}>
