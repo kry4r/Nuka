@@ -3,17 +3,15 @@
 // Iter-3 sweep: PermissionDialog summary row at narrow widths.
 //
 // Coverage rationale:
-//   PermissionDialog uses JSON.stringify(call.input) as the summary line and
-//   currently truncates it by .length, which undercounts CJK display width.
-//   A long CJK-heavy command should therefore overflow the viewport at narrow
-//   widths until the summary uses width-aware truncation.
+//   PermissionDialog renders JSON.stringify(call.input) as the summary line.
+//   A long CJK-heavy command should be width-truncated with a visible
+//   ellipsis at narrow widths, not clipped by code-unit length.
 
 import React from 'react'
 import { PermissionDialog } from '../../../src/tui/dialogs/PermissionDialog'
 import type { FixtureDef } from '../../../src/core/testing/explorer/types'
 
 const summaryCommand = '一'.repeat(40)
-const summaryText = JSON.stringify({ command: summaryCommand })
 
 const fixture: FixtureDef = {
   component: 'PermissionSummaryWidth',
@@ -23,7 +21,7 @@ const fixture: FixtureDef = {
     { cols: 79, rows: 24 },
   ],
   cases: {
-    'cjk-summary-overflows-when-width-uses-length': {
+    'cjk-summary-truncates-by-display-width': {
       render: () => (
         <PermissionDialog
           call={{
@@ -36,7 +34,7 @@ const fixture: FixtureDef = {
           onDecide={() => {}}
         />
       ),
-      mustContain: [summaryText, '…'],
+      mustContain: ['…'],
     },
   },
 }

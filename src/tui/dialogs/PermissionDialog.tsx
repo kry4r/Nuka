@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { defaultPalette as P } from '../theme'
 import { useTerminalSize } from '../hooks/useTerminalSize'
+import { truncateByWidth } from '../../core/stringWidth'
 import type { PermissionCall, PermissionDecision } from '../../core/permission/types'
 import type { AnnotationBadge, PermissionVariant } from '../../core/permission/bridge'
 
@@ -96,9 +97,7 @@ export function PermissionDialog(props: {
   // show the full call and narrow ones don't wrap. 4 cols of chrome.
   const summaryWidth = Math.max(20, columns - 4)
   const summaryRaw = JSON.stringify(props.call.input)
-  const inputSummary = summaryRaw.length > summaryWidth
-    ? summaryRaw.slice(0, summaryWidth - 1) + '…'
-    : summaryRaw
+  const inputSummary = truncateByWidth(summaryRaw, summaryWidth)
   const badges = props.annotationBadges ?? []
 
   // Border / accent colour: planMode borrows the same `warn` orange that
