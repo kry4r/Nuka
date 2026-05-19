@@ -8,6 +8,7 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import stringWidth from 'string-width'
+import { padToWidth } from '../../core/stringWidth'
 import { defaultPalette as P } from '../theme'
 
 export type FeedLine = {
@@ -109,7 +110,7 @@ export function Feed({ config, actualWidth }: FeedProps): React.JSX.Element {
             {maxTimestampWidth > 0 && (
               <>
                 <Text dimColor>
-                  {(line.timestamp ?? '').padEnd(maxTimestampWidth)}
+                  {padToWidth(line.timestamp ?? '', maxTimestampWidth)}
                 </Text>
                 {'  '}
               </>
