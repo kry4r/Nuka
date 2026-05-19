@@ -22,9 +22,9 @@
 //             Reverts back to view automatically.
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { useColors } from '../../../core/theme/context'
-import { useTerminalSize } from '../../hooks/useTerminalSize'
+import { truncateByWidth } from '../../../core/stringWidth'
 
 export type FieldType = 'text' | 'password' | 'select' | 'toggle' | 'list'
 
@@ -70,7 +70,8 @@ function maskValue(v: string): string {
 
 export function Field(props: FieldProps): React.JSX.Element {
   const colors = useColors()
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<string>(typeof props.value === 'string' ? props.value : '')
   // Internal cursor for `list` field type, indexes into props.choices.
@@ -230,7 +231,7 @@ export function Field(props: FieldProps): React.JSX.Element {
           return (
             <Box key={choice + i} width={rowWidth}>
               <Box flexShrink={0}>
-                <Text color={lineColor} wrap="truncate-end">{sigil}{box} {choice.length > choiceCellMax ? choice.slice(0, choiceCellMax) : choice}</Text>
+                <Text color={lineColor} wrap="truncate-end">{sigil}{box} {truncateByWidth(choice, choiceCellMax)}</Text>
               </Box>
               {desc && (
                 <Box marginLeft={1} flexShrink={1}>
