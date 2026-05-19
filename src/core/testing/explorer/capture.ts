@@ -11,10 +11,12 @@
 
 import fs from 'fs'
 import path from 'path'
+import { pathToFileURL } from 'node:url'
 import type { CaptureOpts, CaptureResult, FixtureDef, Viewport } from './types'
 import { renderWithViewport } from './L0/render'
 import { AnsiGrid } from './L0/grid'
 import { runAll } from './L1/index'
+import { ensureTsxRegistered } from './sweep/fixtureLoader'
 
 // file-local: extends CaptureOpts with the _fixtureDef test backdoor; do not export
 // Callers that need to pass _fixtureDef should cast via `as Parameters<typeof capture>[0]`.
@@ -46,7 +48,8 @@ export async function capture(opts: CaptureOptsExtended): Promise<CaptureResult>
   if (_fixtureDef) {
     fixtureDef = _fixtureDef
   } else {
-    const mod = await import(fixturePath) as { default?: FixtureDef } | FixtureDef
+    await ensureTsxRegistered()
+    const mod = await import(pathToFileURL(fixturePath).href) as { default?: FixtureDef } | FixtureDef
     fixtureDef = ('default' in mod && mod.default ? mod.default : mod) as FixtureDef
   }
 

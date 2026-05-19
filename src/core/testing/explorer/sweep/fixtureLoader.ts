@@ -61,7 +61,7 @@ function validateFixtureDef(raw: unknown, filePath: string): FixtureDef {
 // standard module cache deduplicates Ink (and React) across the explorer and every
 // fixture, fixing the StdoutContext-instance mismatch.
 let tsxRegistered = false
-async function ensureTsxRegistered(): Promise<void> {
+export async function ensureTsxRegistered(): Promise<void> {
   if (tsxRegistered) return
   try {
     const tsx = await import('tsx/esm/api')
