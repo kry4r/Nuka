@@ -23,3 +23,4 @@ coverage/
 /.tmp-verify-test/
 /.tmp-subagent-test/
 /.tmp-repair-test/
+/.tmp-test-skills-bin/
