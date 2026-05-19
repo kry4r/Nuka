@@ -14,6 +14,7 @@
     "dev": "tsx src/cli.tsx",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "pretest": "node scripts/install-skills.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src test --ext .ts,.tsx"

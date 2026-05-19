@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ink-ui-explorer — thin shim delegating to the `nuka` CLI's `explore` verb.
+#
+# Requires `nuka` on PATH. In development: `npm link` inside the Nuka repo.
+# In CI: `npm install -g nuka` or use `npx nuka`.
+exec nuka explore "$@"

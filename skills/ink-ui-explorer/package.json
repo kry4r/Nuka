@@ -1,0 +1,14 @@
+{
+  "name": "ink-ui-explorer",
+  "version": "0.1.0",
+  "description": "Autonomous UI-Error Explorer for Ink TUIs",
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "ink": "^6.8.0"
+  },
+  "dependencies": {
+    "string-width": "^8.2.0",
+    "strip-ansi": "^7.2.0",
+    "ansi-regex": "^6.2.2"
+  }
+}
