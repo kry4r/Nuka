@@ -2,10 +2,13 @@
 //
 // Discovers and loads FixtureDef files from a root directory.
 // Glob: **/*.fixtures.tsx (recursive readdirSync, no tinyglobby — M1 patch constraint).
-// Dynamic import uses tsImport (tsx/esm api) so .tsx loads in dist/explorer.js runtime.
+// Dynamic import uses a one-shot tsx.register() so all fixture imports share the same
+// Node ESM module cache, keeping a single Ink instance (and its StdoutContext) across
+// the explorer process and every loaded fixture.
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { FixtureDef, Viewport } from '../types'
 import { VIEWPORT_PROFILES } from './viewportMatrix'
 
@@ -53,10 +56,28 @@ function validateFixtureDef(raw: unknown, filePath: string): FixtureDef {
   return raw as FixtureDef
 }
 
+// Module-scope state — tsx is registered exactly once per process.
+// After register(), Node's native ESM loader handles .tsx via tsx's hook and the
+// standard module cache deduplicates Ink (and React) across the explorer and every
+// fixture, fixing the StdoutContext-instance mismatch.
+let tsxRegistered = false
+async function ensureTsxRegistered(): Promise<void> {
+  if (tsxRegistered) return
+  try {
+    const tsx = await import('tsx/esm/api')
+    if (typeof tsx.register === 'function') {
+      tsx.register() // global, no namespace — shares the ESM module cache
+    }
+  } catch {
+    // Not installed or environment already supports .tsx imports (e.g. vitest).
+  }
+  tsxRegistered = true
+}
+
 /**
  * Load all *.fixtures.tsx files under `root`.
- * Uses tsImport (tsx esm api) for .tsx support at runtime (dist/explorer.js).
- * Vitest tests can use direct import() since vitest already transforms tsx.
+ * Uses a one-shot tsx.register() so that all fixtures share the same Node ESM
+ * module graph as the explorer, ensuring a single Ink instance and StdoutContext.
  *
  * @param root  Directory to scan (default: test/ui-auto/fixtures relative to cwd)
  */
@@ -64,21 +85,12 @@ export async function loadFixtures(root?: string): Promise<LoadedFixture[]> {
   const fixtureRoot = root ?? path.join(process.cwd(), 'test', 'ui-auto', 'fixtures')
   const paths = collectFixturePaths(fixtureRoot)
 
+  await ensureTsxRegistered()
+
   const results: LoadedFixture[] = []
   for (const p of paths) {
-    let raw: unknown
-    try {
-      // Use tsImport so .tsx files load correctly from dist/explorer.js runtime.
-      // tsImport falls back gracefully in a tsx-aware environment (vitest).
-      const { tsImport } = await import('tsx/esm/api')
-      const mod = await tsImport(p, import.meta.url) as { default?: FixtureDef } | FixtureDef
-      raw = 'default' in (mod as object) ? (mod as { default?: FixtureDef }).default : mod
-    } catch {
-      // tsImport unavailable (pure vitest context where tsx/esm is not registered
-      // but import() natively handles .tsx via vite transform)
-      const mod = await import(p) as { default?: FixtureDef } | FixtureDef
-      raw = 'default' in (mod as object) ? (mod as { default?: FixtureDef }).default : mod
-    }
+    const mod = await import(pathToFileURL(p).href) as { default?: FixtureDef } | FixtureDef
+    const raw = 'default' in (mod as object) ? (mod as { default?: FixtureDef }).default : mod
 
     const fixture = validateFixtureDef(raw, p)
     results.push({ path: p, fixture })
