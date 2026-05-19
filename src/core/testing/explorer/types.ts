@@ -29,6 +29,19 @@ export type Box = {
   w: number
   h: number
   style: 'single' | 'double' | 'round' | 'bold'
+  /**
+   * Whether each side of the detected box is verified as continuous box chars.
+   * `top` and `left` are always true by construction (the scan walked those
+   * edges).  `right` and `bottom` are verified post-hoc via a ≥50% interior
+   * box-char check, which lets noBorderBleed skip phantom narrow boxes whose
+   * "right" or "bottom" edge is actually interior content.
+   */
+  verifiedSides: {
+    top: boolean
+    right: boolean
+    bottom: boolean
+    left: boolean
+  }
 }
 
 /** A fully-parsed ANSI terminal grid for one rendered frame. */

@@ -18,53 +18,65 @@ export function noBorderBleed(grid: AnsiGrid, ctx: InvariantCtx): Violation[] {
   const violations: Violation[] = []
 
   for (const box of grid.boxes) {
-    const { x, y, w, h } = box
+    const { x, y, w, h, verifiedSides } = box
 
-    // Check top and bottom edges
-    for (let c = x; c < x + w; c++) {
-      const top = grid.cells[y]?.[c]?.char ?? ''
-      const bot = grid.cells[y + h - 1]?.[c]?.char ?? ''
-      if (!isBoxChar(top)) {
-        violations.push({
-          rule: 'noBorderBleed',
-          severity: 'error',
-          cells: [{ x: c, y }],
-          excerpt: top || ' ',
-          message: `Border bleed at top edge (${c},${y}): '${top}' is not a box char`,
-        })
+    // Check top edge (always verified by construction)
+    if (verifiedSides.top) {
+      for (let c = x; c < x + w; c++) {
+        const top = grid.cells[y]?.[c]?.char ?? ''
+        if (!isBoxChar(top)) {
+          violations.push({
+            rule: 'noBorderBleed',
+            severity: 'error',
+            cells: [{ x: c, y }],
+            excerpt: top || ' ',
+            message: `Border bleed at top edge (${c},${y}): '${top}' is not a box char`,
+          })
+        }
       }
-      if (h > 1 && !isBoxChar(bot)) {
-        violations.push({
-          rule: 'noBorderBleed',
-          severity: 'error',
-          cells: [{ x: c, y: y + h - 1 }],
-          excerpt: bot || ' ',
-          message: `Border bleed at bottom edge (${c},${y + h - 1}): '${bot}' is not a box char`,
-        })
+    }
+
+    // Check bottom edge (only if verified as continuous box chars)
+    if (h > 1 && verifiedSides.bottom) {
+      for (let c = x; c < x + w; c++) {
+        const bot = grid.cells[y + h - 1]?.[c]?.char ?? ''
+        if (!isBoxChar(bot)) {
+          violations.push({
+            rule: 'noBorderBleed',
+            severity: 'error',
+            cells: [{ x: c, y: y + h - 1 }],
+            excerpt: bot || ' ',
+            message: `Border bleed at bottom edge (${c},${y + h - 1}): '${bot}' is not a box char`,
+          })
+        }
       }
     }
 
     // Check left and right edges (excluding corners already checked)
     for (let r = y + 1; r < y + h - 1; r++) {
-      const left  = grid.cells[r]?.[x]?.char ?? ''
-      const right = grid.cells[r]?.[x + w - 1]?.char ?? ''
-      if (!isBoxChar(left)) {
-        violations.push({
-          rule: 'noBorderBleed',
-          severity: 'error',
-          cells: [{ x, y: r }],
-          excerpt: left || ' ',
-          message: `Border bleed at left edge (${x},${r}): '${left}' is not a box char`,
-        })
+      if (verifiedSides.left) {
+        const left = grid.cells[r]?.[x]?.char ?? ''
+        if (!isBoxChar(left)) {
+          violations.push({
+            rule: 'noBorderBleed',
+            severity: 'error',
+            cells: [{ x, y: r }],
+            excerpt: left || ' ',
+            message: `Border bleed at left edge (${x},${r}): '${left}' is not a box char`,
+          })
+        }
       }
-      if (w > 1 && !isBoxChar(right)) {
-        violations.push({
-          rule: 'noBorderBleed',
-          severity: 'error',
-          cells: [{ x: x + w - 1, y: r }],
-          excerpt: right || ' ',
-          message: `Border bleed at right edge (${x + w - 1},${r}): '${right}' is not a box char`,
-        })
+      if (w > 1 && verifiedSides.right) {
+        const right = grid.cells[r]?.[x + w - 1]?.char ?? ''
+        if (!isBoxChar(right)) {
+          violations.push({
+            rule: 'noBorderBleed',
+            severity: 'error',
+            cells: [{ x: x + w - 1, y: r }],
+            excerpt: right || ' ',
+            message: `Border bleed at right edge (${x + w - 1},${r}): '${right}' is not a box char`,
+          })
+        }
       }
     }
   }

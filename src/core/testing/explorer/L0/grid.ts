@@ -136,6 +136,16 @@ function detectBoxStyle(tl: string): BoxStyle | null {
   return null
 }
 
+// Expected top-right and bottom-right corner characters by box style.
+// A candidate Box has a verified right edge only when its TR cell is the
+// style-matched top-right corner (not merely any box char such as `─`).
+// Likewise for the bottom edge via BR.  This discriminates phantom narrow
+// boxes (whose TR/BR are edge chars from the real outer border) from genuine
+// boxes whose TR/BR are proper corners.
+const TR_BY_STYLE: Record<string, string> = { single: '┐', round: '╮', bold: '┓', double: '╗' }
+const BL_BY_STYLE: Record<string, string> = { single: '└', round: '╰', bold: '┗', double: '╚' }
+const BR_BY_STYLE: Record<string, string> = { single: '┘', round: '╯', bold: '┛', double: '╝' }
+
 function detectBoxesClean(cells: Cell[][], cols: number, rows: number): Box[] {
   const boxes: Box[] = []
   const getChar = (r: number, c: number): string => cells[r]?.[c]?.char ?? ' '
@@ -162,7 +172,17 @@ function detectBoxesClean(cells: Cell[][], cols: number, rows: number): Box[] {
       const br = getChar(r + h - 1, c + w - 1)
       const bl = getChar(r + h - 1, c)
       if (isBoxChar(br) && isBoxChar(bl)) {
-        boxes.push({ x: c, y: r, w, h, style })
+        // A side is "verified" when its far corner is the style-matched corner
+        // character (not just any box char).  Phantom narrow boxes arise when
+        // the scan stops early and the far corner cell is actually an edge char
+        // (e.g. `─`) from the real outer border — those are not real corners.
+        const verifiedRight  = tr === TR_BY_STYLE[style] && br === BR_BY_STYLE[style]
+        const verifiedBottom = bl === BL_BY_STYLE[style] && br === BR_BY_STYLE[style]
+
+        boxes.push({
+          x: c, y: r, w, h, style,
+          verifiedSides: { top: true, right: verifiedRight, bottom: verifiedBottom, left: true },
+        })
       }
     }
   }
