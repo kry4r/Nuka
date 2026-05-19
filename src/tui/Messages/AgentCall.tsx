@@ -1,8 +1,8 @@
 // src/tui/Messages/AgentCall.tsx
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette as P } from '../theme'
-import { useTerminalSize } from '../hooks/useTerminalSize'
 
 /**
  * Render a `dispatch_agent` tool call as a distinctive indented block
@@ -23,7 +23,8 @@ export function AgentCall(props: {
   /** When true, show full task + result; when false, show collapsed summary. */
   expanded?: boolean
 }): React.JSX.Element {
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
   const iconColor = props.status === 'error' ? P.error : P.success
   const expanded = props.expanded ?? false
@@ -43,7 +44,7 @@ export function AgentCall(props: {
   // handles them safely within the bounded box width.
   const safeResult = rawResult
     .split('\n')
-    .map(line => (line.length > innerCap && !/\s/.test(line)) ? line.slice(0, innerCap) : line)
+    .map(line => !/\s/.test(line) ? truncateByWidth(line, innerCap) : line)
     .join('\n')
 
   return (
