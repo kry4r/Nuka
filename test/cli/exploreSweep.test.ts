@@ -17,6 +17,7 @@ import { runExploreCli } from '../../src/core/testing/explorer/index'
 const TMP_ROOT = path.join(__dirname, '../../.tmp-explore-sweep-cli-test')
 const CLEAN_FIXTURES_DIR = path.join(TMP_ROOT, 'clean-fixtures')
 const FAILING_FIXTURES_DIR = path.join(TMP_ROOT, 'failing-fixtures')
+const SNAPSHOT_FIXTURES_DIR = path.join(TMP_ROOT, 'snapshot-fixtures')
 const OUT_DIR = path.join(TMP_ROOT, '.ink-explorer')
 
 function cleanTmp() {
@@ -33,6 +34,7 @@ function cleanTmp() {
 beforeAll(() => {
   fs.mkdirSync(CLEAN_FIXTURES_DIR, { recursive: true })
   fs.mkdirSync(FAILING_FIXTURES_DIR, { recursive: true })
+  fs.mkdirSync(SNAPSHOT_FIXTURES_DIR, { recursive: true })
   fs.mkdirSync(OUT_DIR, { recursive: true })
 })
 
@@ -177,5 +179,54 @@ export default fixture
     expect(output).toMatch(/failed|FAIL/i)
     // rc should be 1 because one case fails
     expect(rc).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Default CLI sweeps skip intentionally-red snapshot fixtures
+// ---------------------------------------------------------------------------
+describe('exploreSweep CLI — snapshot quarantine', () => {
+  it('skips intentional snapshot fixtures unless explicitly included', async () => {
+    const fixturePath = path.join(SNAPSHOT_FIXTURES_DIR, 'snapshot-red.fixtures.tsx')
+    const fixtureContent = `
+import React from 'react'
+import { Text } from 'ink'
+const fixture = {
+  component: 'CLISnapshotRed',
+  sweepMode: 'explicit-only',
+  cases: {
+    'intentionally-red': {
+      render: () => React.createElement(Text, null, 'snapshot body'),
+      mustContain: ['missing-snapshot-marker'],
+    },
+  },
+  viewports: [{ cols: 80, rows: 10 }],
+}
+export default fixture
+`
+    fs.writeFileSync(fixturePath, fixtureContent, 'utf8')
+
+    const lines: string[] = []
+    const origWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      if (typeof chunk === 'string') lines.push(chunk)
+      return true
+    }) as typeof process.stdout.write
+
+    let rc: number
+    try {
+      rc = await runExploreCli([
+        'sweep',
+        `--fixture-root=${SNAPSHOT_FIXTURES_DIR}`,
+        `--out=${OUT_DIR}`,
+      ])
+    } finally {
+      process.stdout.write = origWrite
+    }
+
+    expect(rc).toBe(0)
+    const output = lines.join('')
+    expect(output).not.toContain('CLISnapshotRed')
+    expect(output).toMatch(/0 failed/)
   })
 })
