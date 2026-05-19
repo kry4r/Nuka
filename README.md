@@ -324,6 +324,7 @@ Built across 14 autonomous `/loop` evolution turns (2026-05). Plan-doc: `docs/pl
 - **300+ new tests** across the evolution series
 - **MCP residue purged** (zero functional references)
 - **strict TS** / **zero new deps** / **additive over replacement**
+- **ink-ui-explorer shipped** (Phase 9.5) — L0/L1/L2/L3/L4 explorer verbs + skill packaging; see `docs/superpowers/index.md`
 
 ## Contributing
 
