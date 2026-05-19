@@ -16,22 +16,34 @@ import os from 'node:os'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '..')
 const SRC_ROOT = path.join(REPO_ROOT, 'skills')
-const DEST_ROOT = path.join(os.homedir(), '.claude', 'skills')
+
+// Install into every detected agent platform that uses the SKILL.md convention.
+// ~/.claude/skills/  — Claude Code (always create if missing).
+// ~/.codex/skills/   — Codex CLI (only if ~/.codex exists; don't create the
+//                      parent, which would suggest Codex is installed when it isn't).
+const HOME = os.homedir()
+const TARGETS = [
+  { dest: path.join(HOME, '.claude', 'skills'), createParent: true },
+  { dest: path.join(HOME, '.codex',  'skills'), createParent: false },
+]
 
 if (!existsSync(SRC_ROOT)) {
   // Nothing to install — repo has no skill sources.
   process.exit(0)
 }
 
-mkdirSync(DEST_ROOT, { recursive: true })
+for (const { dest: DEST_ROOT, createParent } of TARGETS) {
+  if (!createParent && !existsSync(path.dirname(DEST_ROOT))) continue
+  mkdirSync(DEST_ROOT, { recursive: true })
 
-for (const entry of ['ink-ui-explorer']) {
-  const src = path.join(SRC_ROOT, entry)
-  if (!existsSync(src)) continue
-  const dest = path.join(DEST_ROOT, entry)
-  cpSync(src, dest, { recursive: true })
-  // Re-assert +x on bin/<entry> after copy (fs.cpSync should preserve mode,
-  // but make this resilient against future Node behavior changes).
-  const binPath = path.join(dest, 'bin', entry)
-  if (existsSync(binPath)) chmodSync(binPath, 0o755)
+  for (const entry of ['ink-ui-explorer']) {
+    const src = path.join(SRC_ROOT, entry)
+    if (!existsSync(src)) continue
+    const dest = path.join(DEST_ROOT, entry)
+    cpSync(src, dest, { recursive: true })
+    // Re-assert +x on bin/<entry> after copy (fs.cpSync should preserve mode,
+    // but make this resilient against future Node behavior changes).
+    const binPath = path.join(dest, 'bin', entry)
+    if (existsSync(binPath)) chmodSync(binPath, 0o755)
+  }
 }
