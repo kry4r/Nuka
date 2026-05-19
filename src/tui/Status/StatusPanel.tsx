@@ -24,10 +24,10 @@
 // custom format. Hideable via `statusBar.hidden`.
 
 import React, { useEffect, useState, useRef } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../../core/theme/context'
+import { truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette } from '../theme'
-import { useTerminalSize } from '../hooks/useTerminalSize'
 import type { StatusLineConfig } from '../../core/config/schema'
 import type { TaskManager } from '../../core/tasks/manager'
 import { execFirstLine, template, type StatusLineCtx } from './statusLine'
@@ -35,18 +35,6 @@ import { execFirstLine, template, type StatusLineCtx } from './statusLine'
 /** Strip CR/LF from a status output so embedded newlines never blow the row layout. */
 function stripNewlines(s: string): string {
   return String(s).replace(/[\r\n]+/g, ' ').trim()
-}
-
-/**
- * Truncate `s` to a maximum width, prepending an ellipsis when the value has
- * to be cut. Mirrors the local `shortenCwd` helper instead of pulling in a
- * heavy width-measurement dependency — model/provider strings in the dense
- * status row are ASCII in practice, so character length matches display
- * width. `max <= 1` returns the string verbatim.
- */
-function truncateLeftEllipsis(s: string, max: number): string {
-  if (max <= 1 || s.length <= max) return s
-  return '…' + s.slice(s.length - (max - 1))
 }
 
 export type StatusMode = 'idle' | 'running' | 'awaiting-user'
@@ -151,7 +139,8 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const warn = tColors.warn ?? defaultPalette.warn
   const error = tColors.error ?? defaultPalette.error
 
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = stdout?.columns ?? 80
   const layout = autoDegrade(props.layout, columns)
   const iconMode: IconMode = props.iconMode ?? 'icon'
 
@@ -240,9 +229,12 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   // the model name so the dense row never wraps.
   // Budget: ~one third of the terminal minus a small allowance for borders
   // and the " · provider" suffix.
-  const modelBudget = Math.max(8, Math.floor(columns / 3) - 4)
-  const displayModel = layout === 'dense'
-    ? truncateLeftEllipsis(props.model, modelBudget)
+  const modelSuffixBudget = props.providerId.length
+    + (props.effort ? ` · effort:${props.effort}`.length : 0)
+    + 3 // " · " separator before provider.
+  const modelBudget = Math.max(8, Math.floor(columns / 3) - modelSuffixBudget)
+  const displayModel = layout !== 'oneline'
+    ? truncateByWidth(props.model, modelBudget)
     : props.model
 
   const segments: Array<{ id: string; render: () => React.JSX.Element }> = [
