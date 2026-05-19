@@ -1,7 +1,7 @@
 // src/tui/Messages/AgentCall.tsx
 import React from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { truncateByWidth } from '../../core/stringWidth'
+import { stringWidth, truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette as P } from '../theme'
 
 /**
@@ -29,7 +29,14 @@ export function AgentCall(props: {
   const iconColor = props.status === 'error' ? P.error : P.success
   const expanded = props.expanded ?? false
 
-  const shortTask = props.task.length > 80 ? props.task.slice(0, 80) + '…' : props.task
+  // Header chrome: marginLeft(2) + "◆ " + "[agent] " + " icon".
+  const headerChromeWidth =
+    2 +
+    stringWidth('◆ ') +
+    stringWidth(`[${props.agent}] `) +
+    stringWidth(` ${icon}`)
+  const headerTaskCap = Math.max(1, columns - headerChromeWidth)
+  const shortTask = truncateByWidth(props.task, headerTaskCap)
   const shortResult = props.result && props.result.length > 120
     ? props.result.slice(0, 120) + '…'
     : props.result
