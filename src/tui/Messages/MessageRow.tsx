@@ -11,9 +11,7 @@ import { matchStyle, getRegistry } from '../../core/plugin/outputStyles'
 import type { OutputStyleProps } from '../../core/plugin/outputStyles'
 
 function summarize(input: unknown): string {
-  const s = JSON.stringify(input)
-  if (s.length <= 80) return s
-  return s.slice(0, 80) + '…'
+  return JSON.stringify(input) ?? ''
 }
 
 /**
@@ -164,6 +162,7 @@ export function MessageRow(props: {
                 )
               }
               const source = props.resolveToolSource?.(b.name)
+              const annotations = props.resolveToolAnnotations?.(b.name)
               const registry = getRegistry()
               const matchedStyle = matchStyle(b.name, source, [...registry])
 
@@ -174,7 +173,7 @@ export function MessageRow(props: {
                   argSummary={summarize(b.input)}
                   status="ok"
                   source={source}
-                  annotations={props.resolveToolAnnotations?.(b.name)}
+                  annotations={annotations}
                 />
               )
 

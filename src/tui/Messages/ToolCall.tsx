@@ -1,7 +1,7 @@
 // src/tui/Messages/ToolCall.tsx
 import React from 'react'
 import { Box, Text, useStdout } from 'ink'
-import { truncateByWidth } from '../../core/stringWidth'
+import { stringWidth, truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette as P } from '../theme'
 
 export function ToolCall(props: {
@@ -28,6 +28,14 @@ export function ToolCall(props: {
   // marginLeft=2 + 2 border chars = 4 chrome columns reserved.
   const boxWidth = Math.max(20, columns - 4)
   const innerCap = Math.max(1, boxWidth - 2)
+  const headerChromeWidth =
+    stringWidth('⏺ ') +
+    stringWidth(`${displayName} `) +
+    (props.annotations?.openWorld ? stringWidth('(network) ') : 0) +
+    (props.source && props.source !== 'builtin' ? stringWidth(`[${props.source}] `) : 0) +
+    stringWidth(` ${icon}`)
+  const argSummaryCap = Math.max(1, columns - headerChromeWidth)
+  const argSummary = truncateByWidth(props.argSummary, argSummaryCap)
 
   return (
     <Box flexDirection="column">
@@ -40,7 +48,7 @@ export function ToolCall(props: {
         {props.source && props.source !== 'builtin' && (
           <Text color={P.fgMuted}>[{props.source}] </Text>
         )}
-        <Text color={P.fgMuted}>{props.argSummary}</Text>
+        <Text color={P.fgMuted}>{argSummary}</Text>
         {props.durationMs != null && (
           <Text color={P.fgMuted}>  {(props.durationMs / 1000).toFixed(1)}s</Text>
         )}
