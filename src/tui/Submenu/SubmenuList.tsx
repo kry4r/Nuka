@@ -11,9 +11,9 @@
 // would exceed the terminal height.
 
 import React, { useEffect, useState } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { useColors } from '../../core/theme/context'
-import { useTerminalSize } from '../hooks/useTerminalSize'
+import { truncateByWidth } from '../../core/stringWidth'
 
 export type SubmenuListItem = {
   /** Stable key + display text. */
@@ -72,7 +72,8 @@ const MIN_WINDOW_SIZE = 3
 export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
   const colors = useColors()
   const focused = props.focused !== false
-  const { rows: terminalRows } = useTerminalSize()
+  const { stdout } = useStdout()
+  const terminalRows = process.stdout.rows ?? stdout?.rows ?? 24
 
   const total = props.items.length
   const initial = clamp(props.initialCursor ?? 0, 0, Math.max(0, total - 1))
@@ -146,7 +147,7 @@ export function SubmenuList(props: SubmenuListProps): React.JSX.Element {
   // Width budget for each row. Parent frame chrome (border + paddingX) is
   // approximately 4 cols; we reserve a bit more so descriptions never
   // collide with the value column.
-  const { columns } = useTerminalSize()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const FRAME_CHROME_COLS = 6
   const innerWidth = Math.max(20, columns - FRAME_CHROME_COLS)
   const LABEL_WIDTH = 14
@@ -213,13 +214,6 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n))
 }
 
-/**
- * Cap a value summary string at `max` characters with an ellipsis suffix.
- * Uses code-unit length only (no string-width dep); fine for ASCII / ANSI
- * status snippets we render in the value column.
- */
 function truncateValue(s: string, max: number): string {
-  if (s.length <= max) return s
-  if (max <= 1) return s.slice(0, max)
-  return s.slice(0, max - 1) + '…'
+  return truncateByWidth(s, max)
 }
