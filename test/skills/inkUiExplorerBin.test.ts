@@ -9,15 +9,17 @@
 //   2. Exec the installed shim with PATH=<tempdir>:<original PATH>.
 //   3. Assert exit code 2 and stdout contains the verb list.
 //
-// Temp dir: .tmp-test-skills-bin/<random>/ (dot-prefix → gitignore covered)
-// afterAll: remove the temp dir.
+// Temp dir: .tmp-test-skills-bin/<pid>/ (dot-prefix → gitignore covered)
+// Naming: process.pid is deterministic per vitest forked worker — vitest forks
+// pool runs each test file in its own worker, so no two workers share a pid.
+// Using pid avoids leaked random-named dirs on interrupted runs.
+// afterAll: remove TMP_ROOT entirely (force: true makes it a no-op if absent).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdirSync, writeFileSync, chmodSync, rmSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
-import crypto from 'node:crypto'
 
 const REPO_ROOT = path.resolve(__dirname, '../..')
 const SHIM = path.join(os.homedir(), '.claude', 'skills', 'ink-ui-explorer', 'bin', 'ink-ui-explorer')
@@ -28,7 +30,7 @@ const TMP_ROOT = path.join(REPO_ROOT, '.tmp-test-skills-bin')
 let tmpDir: string
 
 beforeAll(() => {
-  tmpDir = path.join(TMP_ROOT, crypto.randomBytes(6).toString('hex'))
+  tmpDir = path.join(TMP_ROOT, process.pid.toString())
   mkdirSync(tmpDir, { recursive: true })
 
   // Write a `nuka` shim that forwards to dist/cli.js
@@ -42,9 +44,8 @@ beforeAll(() => {
 })
 
 afterAll(() => {
-  if (tmpDir && existsSync(tmpDir)) {
-    rmSync(tmpDir, { recursive: true, force: true })
-  }
+  // Remove TMP_ROOT entirely — force: true makes this a no-op if already gone.
+  rmSync(TMP_ROOT, { recursive: true, force: true })
 })
 
 describe('ink-ui-explorer bin shim', () => {
