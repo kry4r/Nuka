@@ -47,25 +47,12 @@ class MockStdin extends EventEmitter {
 // ---------------------------------------------------------------------------
 function splitFrames(buf: string): string[] {
   if (!buf) return []
-  // In debug:false mode, ink writes each frame as a plain-text string.
-  // Multiple frames accumulate in liveBuffer separated by newlines.
-  // Each frame string already ends with '\n'; we split and filter empty.
+  // FakeStdout.liveBuffer is reset at the start of each synchronized-output
+  // transaction, so it already represents the latest frame. Keep internal
+  // blank rows intact; Ink components use them as vertical spacers.
   const stripped = stripAnsi(buf)
-  const frames: string[] = []
-  // Split on newline sequences — each non-empty portion is a frame "snapshot"
-  // For our purposes the whole buffer content is the last frame's text.
-  // Use \n\n as boundary (ink renders a double-newline between frames when
-  // multiple repaints occur) with single-newline fallback.
-  const parts = stripped.split('\n\n')
-  for (const part of parts) {
-    const t = part.trim()
-    if (t) frames.push(t)
-  }
-  if (frames.length === 0) {
-    const t = stripped.trim()
-    if (t) frames.push(t)
-  }
-  return frames
+  if (stripped.trim().length === 0) return []
+  return [stripped.replace(/\n+$/g, '')]
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
+import stringWidth from 'string-width'
 import type { ProviderConfig } from '../../core/config/schema'
 import { useColors } from '../../core/theme/context'
 import { useTerminalSize } from '../hooks/useTerminalSize'
@@ -8,6 +9,22 @@ import { Ratchet } from '../design-system/Ratchet'
 
 // Sliding window for the models list — same shape as SlashCard/CommandList.
 const MODEL_WINDOW = 12
+const PROVIDER_ROW_CHROME = 4
+
+function truncateToWidth(s: string, maxWidth: number): string {
+  if (maxWidth <= 0) return ''
+  if (stringWidth(s) <= maxWidth) return s
+  const budget = Math.max(1, maxWidth - 1)
+  let width = 0
+  let out = ''
+  for (const ch of Array.from(s)) {
+    const chWidth = stringWidth(ch)
+    if (width + chWidth > budget) break
+    width += chWidth
+    out += ch
+  }
+  return out + '…'
+}
 
 type Stage =
   | { kind: 'providers' }
@@ -169,24 +186,31 @@ export function ModelPicker(props: ModelPickerProps): React.JSX.Element {
   useInput(inputHandler)
 
   if (stage.kind === 'providers') {
+    const rowWidth = Math.max(20, columns - PROVIDER_ROW_CHROME)
     return (
       <Box flexDirection="column">
         <Text color={colors.fg}>Select provider:</Text>
         {props.providers.map((p, i) => {
           const selected = i === cursor
+          const providerLabel = truncateToWidth(p.name, Math.max(8, rowWidth - 6))
+          const baseUrlLabel = truncateToWidth(p.baseUrl, Math.max(8, rowWidth - 6 - stringWidth(providerLabel) - 2))
           return (
-            <Text key={p.id} color={selected ? colors.primary : colors.fg} bold={selected}>
-              {selected ? '›' : ' '} {p.name}  <Text color={colors.fgMuted}>{p.baseUrl}</Text>
-            </Text>
+            <Box key={p.id} width={rowWidth}>
+              <Text color={selected ? colors.primary : colors.fg} bold={selected} wrap="truncate-end">
+                {selected ? '›' : ' '} {providerLabel}  <Text color={colors.fgMuted}>{baseUrlLabel}</Text>
+              </Text>
+            </Box>
           )
         })}
         {(() => {
           const i = props.providers.length
           const selected = i === cursor
           return (
-            <Text color={selected ? colors.primary : colors.fg} bold={selected}>
-              {selected ? '›' : ' '} [+] Add provider…
-            </Text>
+            <Box width={rowWidth}>
+              <Text color={selected ? colors.primary : colors.fg} bold={selected} wrap="truncate-end">
+                {selected ? '›' : ' '} [+] Add provider…
+              </Text>
+            </Box>
           )
         })()}
         <Box marginTop={1}>
