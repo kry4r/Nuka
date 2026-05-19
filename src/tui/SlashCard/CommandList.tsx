@@ -13,15 +13,7 @@ import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
 import { useTerminalSize } from '../hooks/useTerminalSize'
 import type { SlashCommand } from '../../slash/types'
-
-// Char-count truncation with ellipsis. Slash command names + descriptions
-// are ASCII in practice, so wcwidth precision isn't needed here (and adding
-// `string-width` as a direct dep is rejected to keep the bundle under cap).
-function truncToWidth(s: string, max: number): string {
-  if (max <= 0) return ''
-  if (s.length <= max) return s
-  return s.slice(0, max - 1) + '…'
-}
+import { padToWidth, truncateByWidth } from '../../core/stringWidth'
 
 // Default visible window. The fix for the "missing /fork" bug is the
 // short-circuit below: when the rendered row count (heading + commands)
@@ -30,6 +22,7 @@ function truncToWidth(s: string, max: number): string {
 // chrome. The window itself stays at 10 — empirically stable in the
 // existing harness tests.
 const WINDOW_SIZE = 10
+const NAME_WIDTH = 14
 
 type Group = {
   label: string
@@ -62,7 +55,7 @@ export function CommandList(props: {
   const sel = Math.max(0, Math.min(selectedIndex, commands.length - 1))
 
   // Inner content width inside the SlashCard: terminal cols − 2 (border) − 2 (paddingX).
-  // Each command row also reserves: cursor(1) + space(1) + '/'(1) + name(14) + 2 spaces = 19.
+  // Each command row also reserves: cursor(1) + space(1) + '/'(1) + name(14 cells) + 2 spaces = 19.
   const innerWidth = Math.max(20, columns - 4)
   const descBudget = Math.max(8, innerWidth - 19)
 
@@ -126,10 +119,8 @@ export function CommandList(props: {
         }
         const selected = row.globalIdx === sel
         const rawName = row.cmd.name
-        // Truncate the name itself if longer than 14 chars (rare, but
-        // keeps the row grid stable for plugin-supplied long names).
-        const name = (rawName.length > 14 ? truncToWidth(rawName, 14) : rawName).padEnd(14)
-        const desc = truncToWidth(row.cmd.description ?? '', descBudget)
+        const name = padToWidth(truncateByWidth(rawName, NAME_WIDTH), NAME_WIDTH)
+        const desc = truncateByWidth(row.cmd.description ?? '', descBudget)
         return (
           <Box key={`cmd-${row.cmd.name}`} backgroundColor={selected ? P.primaryDeep : undefined}>
             <Text color={selected ? P.fg : P.fgMuted} wrap="truncate-end">
