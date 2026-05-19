@@ -1,8 +1,8 @@
 // src/tui/Messages/ToolCall.tsx
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
+import { truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette as P } from '../theme'
-import { useTerminalSize } from '../hooks/useTerminalSize'
 
 export function ToolCall(props: {
   name: string
@@ -13,7 +13,8 @@ export function ToolCall(props: {
   source?: 'builtin' | 'skill' | 'plugin'
   annotations?: { readOnly?: boolean; destructive?: boolean; openWorld?: boolean }
 }): React.JSX.Element {
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const icon = props.status === 'ok' ? '✓' : props.status === 'error' ? '✗' : '…'
   const iconColor = props.status === 'error' ? P.error : P.success
 
@@ -48,7 +49,7 @@ export function ToolCall(props: {
       {displayLines.length > 0 && (
         <Box flexDirection="column" marginLeft={2} width={boxWidth} borderStyle="round" borderColor={P.fgMuted}>
           {displayLines.map((line, i) => (
-            <Text key={i} color={P.fgMuted}>{line.slice(0, innerCap)}</Text>
+            <Text key={i} color={P.fgMuted}>{truncateByWidth(line, innerCap)}</Text>
           ))}
         </Box>
       )}
