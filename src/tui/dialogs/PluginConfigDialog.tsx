@@ -1,9 +1,9 @@
 // src/tui/dialogs/PluginConfigDialog.tsx
 import React, { useState, useRef } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import { defaultPalette as P } from '../theme'
+import { truncateByWidth } from '../../core/stringWidth'
 import type { LoadedPlugin, PluginUserConfigField } from '../../core/plugin/manifest'
-import { useTerminalSize } from '../hooks/useTerminalSize'
 
 export function PluginConfigDialog(props: {
   plugin: LoadedPlugin
@@ -83,7 +83,8 @@ export function PluginConfigDialog(props: {
 
   const pluginLabel = `${plugin.manifest.name}${plugin.manifest.version ? `@${plugin.manifest.version}` : ''}`
 
-  const { columns } = useTerminalSize()
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   // Outer chrome: border (2) + paddingX (2) = 4 cols.
   const boxWidth = Math.max(20, columns - 4)
   // Inside: subtract chrome (4) from outer width to get the content cap.
@@ -119,7 +120,7 @@ export function PluginConfigDialog(props: {
               </Box>
               <Box width={innerCap}>
                 <Text color={active ? P.primary : P.fgMuted} wrap="truncate-end">
-                  {'  '}{(values[f.name] ?? '').slice(0, valueCap)}{active ? '▌' : ''}
+                  {'  '}{truncateByWidth(values[f.name] ?? '', valueCap)}{active ? '▌' : ''}
                 </Text>
               </Box>
             </Box>
