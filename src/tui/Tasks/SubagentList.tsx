@@ -13,11 +13,18 @@
 // Overflow: items beyond `maxItems` are replaced with "  … +N more".
 
 import React from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useStdout } from 'ink'
 import type { Message } from '../../core/message/types'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
 import { useTheme } from '../../core/theme/context'
 import { defaultPalette as P } from '../theme'
+import { truncateByWidth } from '../../core/stringWidth'
+
+const TASK_LABEL_WIDTH = 60
+
+function truncateTaskLabel(task: string): string {
+  return truncateByWidth(task, TASK_LABEL_WIDTH + 1)
+}
 
 export type SubagentInfo = {
   id: string
@@ -45,7 +52,7 @@ export function findInFlightSubagents(messages: readonly Message[]): SubagentInf
         ) {
           const input = block.input as { agent?: string; task?: string } | undefined
           const label = input?.task
-            ? input.task.slice(0, 60) + (input.task.length > 60 ? '…' : '')
+            ? truncateTaskLabel(input.task)
             : input?.agent ?? block.id
           calls.push({ id: block.id, label })
         }
@@ -68,12 +75,15 @@ export type SubagentListProps = {
 }
 
 export function SubagentList({ messages, maxItems }: SubagentListProps): React.JSX.Element | null {
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const { colors } = useTheme()
   const inFlight = findInFlightSubagents(messages)
   if (inFlight.length === 0) return null
 
   const visible = inFlight.slice(0, maxItems)
   const overflow = inFlight.length - visible.length
+  const rowLabelWidth = Math.max(1, columns - 2)
 
   const titleColor  = colors.accentWarm ?? P.accentWarm
   const accentColor = colors.accentCool ?? P.accentCool
@@ -83,12 +93,15 @@ export function SubagentList({ messages, maxItems }: SubagentListProps): React.J
   return (
     <Box flexDirection="column">
       <Text color={titleColor} bold>Subagents</Text>
-      {visible.map(agent => (
-        <Box key={agent.id} flexDirection="row" gap={1}>
-          <Text color={accentColor}>▶</Text>
-          <Text color={fgColor}>{agent.label}</Text>
-        </Box>
-      ))}
+      {visible.map(agent => {
+        const label = truncateByWidth(agent.label, rowLabelWidth)
+        return (
+          <Box key={agent.id} flexDirection="row" gap={1}>
+            <Text color={accentColor}>▶</Text>
+            <Text color={fgColor}>{label}</Text>
+          </Box>
+        )
+      })}
       {overflow > 0 && (
         <Text color={fgMuted}>  … +{overflow} more</Text>
       )}
