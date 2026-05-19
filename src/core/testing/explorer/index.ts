@@ -82,6 +82,7 @@ export async function runExploreCli(argv: string[]): Promise<number> {
         cwd: process.cwd(),
         out,
         judge: judgeOpt,
+        includeExplicitOnly: false,
       })
 
       // Print summary table

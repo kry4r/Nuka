@@ -92,6 +92,12 @@ export type FixtureDef = {
   component: string
   cases: Record<string, FixtureCase>
   viewports?: 'default' | Viewport[]
+  /**
+   * Default fixtures participate in normal sweeps. `explicit-only` fixtures
+   * intentionally stay out of CLI/default sweeps and must be included by
+   * callers that are deliberately exercising a red snapshot.
+   */
+  sweepMode?: 'default' | 'explicit-only'
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +201,7 @@ export type SweepOpts = {
   cwd?: string
   out?: string
   judge?: boolean
+  includeExplicitOnly?: boolean
 }
 
 export type SweepResult = {

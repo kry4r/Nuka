@@ -22,6 +22,12 @@ type SweepOptsExtended = SweepOpts & {
   _judge?: typeof import('../judge').judge
 }
 
+// Legacy snapshots predate fixture-level sweepMode metadata, but they should
+// not keep normal CLI sweeps permanently red.
+const LEGACY_EXPLICIT_ONLY_COMPONENTS = new Set([
+  'BugB-Snapshot',
+])
+
 /**
  * Cartesian product sweep: every fixture × every case × every viewport.
  * Writes failure dumps to <out>/failures/ (or <cwd>/.ink-explorer/failures/).
@@ -35,6 +41,7 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
     _fixtures,
     viewports: viewportsOverride,
     fixturesGlob,
+    includeExplicitOnly = true,
   } = opts
 
   // `out` is the explorer base dir (e.g. .ink-explorer), matching capture.ts convention.
@@ -74,6 +81,12 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
   let failed = 0
 
   for (const { path: fixturePath, fixture } of fixtures) {
+    if (
+      !includeExplicitOnly &&
+      (fixture.sweepMode === 'explicit-only' || LEGACY_EXPLICIT_ONLY_COMPONENTS.has(fixture.component))
+    ) {
+      continue
+    }
     const viewports: Viewport[] = viewportsOverride ?? resolveViewports(fixture)
     const caseNames = Object.keys(fixture.cases)
 
