@@ -10,8 +10,9 @@
 // library` when multiple `useInput` callbacks mount/unmount during a test.
 
 import React, { useReducer, useEffect, useRef, useState } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdout } from 'ink'
 import stringWidth from 'string-width'
+import { truncateByWidth } from '../../core/stringWidth'
 import {
   reducer,
   initialState,
@@ -320,14 +321,14 @@ function CustomDetailsScreen(props: {
 }
 
 function ErrorScreen(props: { message: string }): React.JSX.Element {
-  const { columns } = useTerminalSize()
-  // Cap at first newline + 200 chars so a server-side stack trace doesn't
-  // blow out the frame; render multi-line in a paddingLeft={4} sub-box.
-  const capped = props.message.length > 200
-    ? props.message.slice(0, 200) + '…'
-    : props.message
-  const lines = capped.split('\n')
+  const { stdout } = useStdout()
+  const columns = process.stdout.columns ?? stdout?.columns ?? 80
   const lineWidth = Math.max(20, columns - 8)
+  // Cap each visible line by terminal cells so server-side stack traces and
+  // CJK-heavy errors do not push through the frame.
+  const lines = props.message
+    .split('\n')
+    .map(line => truncateByWidth(line, lineWidth))
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.error} paddingX={1}>
       <Text color={P.error} bold>Verification failed</Text>
