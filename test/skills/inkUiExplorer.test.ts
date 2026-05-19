@@ -106,10 +106,17 @@ describe('ink-ui-explorer SKILL.md', () => {
     }
   })
 
-  it('decision-rule table parses to at least 4 rows', () => {
+  it('decision-rule table parses to exactly 4 rows', () => {
+    // NOTE: SKILL.md currently has 4 decision-rule rows (capture, sweep, fuzz,
+    // repair). "judge" is intentionally omitted from this table: it has no
+    // human-facing natural-language trigger (judge is invoked internally by
+    // sweep, or explicitly by the user knowing the verb). Judge IS pinned in
+    // the frontmatter description test above (verb list) and in the bin shim
+    // help-output test. If a judge row is ever added to the decision table,
+    // update this assertion to === 5.
     const content = readFileSync(SKILL_MD, 'utf8')
     const rules = parseDecisionRuleTable(content)
-    expect(rules.length).toBeGreaterThanOrEqual(4)
+    expect(rules.length).toBe(4)
   })
 
   it('decision-rule table has a "capture" trigger', () => {
@@ -126,12 +133,23 @@ describe('ink-ui-explorer SKILL.md', () => {
     expect(sweepRule, 'should have a decision rule pointing to sweep').toBeDefined()
   })
 
+  it('decision-rule table has a "fuzz" trigger', () => {
+    const content = readFileSync(SKILL_MD, 'utf8')
+    const rules = parseDecisionRuleTable(content)
+    const fuzzRule = rules.find((r) => r.verb.toLowerCase().includes('fuzz'))
+    expect(fuzzRule, 'should have a decision rule pointing to fuzz').toBeDefined()
+  })
+
   it('decision-rule table has a "repair" trigger', () => {
     const content = readFileSync(SKILL_MD, 'utf8')
     const rules = parseDecisionRuleTable(content)
     const repairRule = rules.find((r) => r.verb.toLowerCase().includes('repair'))
     expect(repairRule, 'should have a decision rule pointing to repair').toBeDefined()
   })
+
+  // NOTE: "judge" is intentionally NOT pinned here — see comment in the
+  // "exactly 4 rows" test above. It IS asserted in the frontmatter description
+  // test (all 5 verbs) and in the bin shim help-output test.
 })
 
 describe('ink-ui-explorer package.json', () => {

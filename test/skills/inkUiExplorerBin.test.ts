@@ -72,8 +72,13 @@ describe('ink-ui-explorer bin shim', () => {
     expect(result.status).toBe(2)
 
     const combined = (result.stdout ?? '') + (result.stderr ?? '')
-    // Shim must have forwarded to `nuka explore` which prints the verb table
-    expect(combined).toMatch(/capture/)
-    expect(combined).toMatch(/sweep/)
+    // Shim must have forwarded to `nuka explore` which prints the verb table.
+    // All 5 verbs must appear in the help output — pinned individually so
+    // failure messages identify which verb is missing.
+    expect(combined).toMatch(/\bcapture\b/)
+    expect(combined).toMatch(/\bsweep\b/)
+    expect(combined).toMatch(/\bfuzz\b/)
+    expect(combined).toMatch(/\bjudge\b/)
+    expect(combined).toMatch(/\brepair\b/)
   })
 })
