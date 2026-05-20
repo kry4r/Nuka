@@ -97,6 +97,7 @@ export function renderWithViewport(
     frames: () => splitFrames(stdout.liveBuffer),
     lastFrame: () => lastSnapshot(stdout.liveBuffer),
     staticWrites: () => stdout.staticBuffer.split('\n').filter(Boolean),
+    cursorTraces: () => stdout.cursorEvents.slice(),
     grid: (frame?: string) =>
       AnsiGrid.parse(frame ?? lastSnapshot(stdout.liveBuffer), currentViewport),
     stdin: { write: (s: string) => stdin.write(s) },

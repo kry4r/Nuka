@@ -111,6 +111,7 @@ export async function sweep(opts: SweepOptsExtended): Promise<SweepResult> {
         const violations = runAll(grid, {
           viewport,
           staticWrites: handle.staticWrites(),
+          cursorTraces: handle.cursorTraces(),
           fixtureCase,
         })
 

@@ -11,6 +11,7 @@ import { noStaticWrites } from './noStaticWrites'
 import { flexGrowBounded } from './flexGrowBounded'
 import { noOverlapBetweenZones } from './noOverlapBetweenZones'
 import { noLossyTruncation } from './noLossyTruncation'
+import { nativeCursorDeclared } from './nativeCursorDeclared'
 
 export type InvariantFn = (grid: AnsiGrid, ctx: InvariantCtx) => Violation[]
 
@@ -21,6 +22,7 @@ export const invariants: Record<string, InvariantFn> = {
   flexGrowBounded,
   noOverlapBetweenZones,
   noLossyTruncation,
+  nativeCursorDeclared,
 }
 
 /**

@@ -89,6 +89,7 @@ function firstViolationRule(
   const violations = runAll(grid, {
     viewport,
     staticWrites: handle.staticWrites(),
+    cursorTraces: handle.cursorTraces(),
     fixtureCase,
   })
   return violations[0]?.rule ?? null

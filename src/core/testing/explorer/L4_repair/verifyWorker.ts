@@ -68,7 +68,7 @@ async function run(): Promise<void> {
   const selfUrl = import.meta.url
   const isDist = selfUrl.endsWith('.js') || selfUrl.includes('/dist/')
 
-  let renderWithViewport: (node: unknown, viewport: Viewport) => ReturnType<typeof import('../L0/render').renderWithViewport>
+  let renderWithViewport: typeof import('../L0/render').renderWithViewport
   let AnsiGrid: typeof import('../L0/grid').AnsiGrid
   let runAll: typeof import('../L1/index').runAll
 
@@ -124,7 +124,7 @@ async function run(): Promise<void> {
     return
   }
 
-  const handle = renderWithViewport(fixtureCase.render() as Parameters<typeof renderWithViewport>[0], viewport)
+  const handle = renderWithViewport(fixtureCase.render(), viewport)
   await new Promise<void>((r) => setImmediate(r))
 
   let result: WorkerOutput
@@ -134,6 +134,7 @@ async function run(): Promise<void> {
     const violations = runAll(grid, {
       viewport,
       staticWrites: handle.staticWrites(),
+      cursorTraces: handle.cursorTraces(),
       fixtureCase,
     })
     if (violations.length === 0) {

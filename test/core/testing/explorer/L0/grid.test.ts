@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import React from 'react'
-import { Text, Static } from 'ink'
+import { Text, Static, useCursor } from 'ink'
 
 import { AnsiGrid } from '../../../../../src/core/testing/explorer/L0/grid'
 import { renderWithViewport } from '../../../../../src/core/testing/explorer/L0/render'
@@ -106,7 +106,26 @@ describe('FakeStdout — looksLikeRedraw routing', () => {
     expect(stdout.liveBuffer).toContain('BROKEN-CONTENT')
     expect(stdout.staticBuffer).not.toContain('BROKEN-CONTENT')
   })
+
+  it('records positioned native cursor show escapes', () => {
+    const stdout = new FakeStdout(40, 10)
+    stdout.write('\u001b[3A\u001b[8G\u001b[?25h')
+
+    expect(stdout.cursorEvents).toEqual([
+      expect.objectContaining({
+        positioned: true,
+        x: 7,
+        up: 3,
+      }),
+    ])
+  })
 })
+
+function NativeCursorProbe(): React.JSX.Element {
+  const { setCursorPosition } = useCursor()
+  setCursorPosition({ x: 4, y: 0 })
+  return React.createElement(Text, null, 'cursor-probe')
+}
 
 describe('staticTap', () => {
   it('segregates Static items into staticBuffer when prologueGoesStatic is true', async () => {
@@ -132,6 +151,23 @@ describe('staticTap', () => {
     expect(handle.staticWrites().length).toBeGreaterThanOrEqual(1)
     // The live frame must not re-render Static content (it has scrolled off)
     expect(handle.lastFrame() ?? '').not.toContain('prologue-line')
+    handle.unmount()
+  })
+
+  it('exposes native cursor telemetry from renderWithViewport', async () => {
+    const handle = renderWithViewport(
+      React.createElement(NativeCursorProbe),
+      { cols: 40, rows: 10 },
+    )
+    await new Promise(r => setImmediate(r))
+    await new Promise(r => setImmediate(r))
+
+    expect(handle.cursorTraces()).toContainEqual(
+      expect.objectContaining({
+        positioned: true,
+        x: 4,
+      }),
+    )
     handle.unmount()
   })
 })

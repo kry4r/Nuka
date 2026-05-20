@@ -24,10 +24,14 @@
 // ESC[?2026l = disable synchronized output
 
 import { Writable } from 'stream'
+import type { CursorTrace } from '../types'
 
 const CURSOR_HIDE = '\u001b[?25l' // live-frame start marker
+const CURSOR_SHOW = '\u001b[?25h'
 const ANSI_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g
 const CURSOR_MOVE_RE = /\u001b\[(?:\d*[ABCDGJKfH]|\d*;\d*[fH]|2K)/
+const CURSOR_COLUMN_RE = /\u001b\[(\d*)G/g
+const CURSOR_UP_RE = /\u001b\[(\d*)A/g
 
 export class FakeStdout extends Writable {
   columns: number
@@ -36,6 +40,7 @@ export class FakeStdout extends Writable {
 
   liveBuffer = ''
   staticBuffer = ''
+  cursorEvents: CursorTrace[] = []
 
   /** True between BSR-enable and the first cursor-hide of a transaction. */
   private _beforeCursorHide = false
@@ -48,6 +53,7 @@ export class FakeStdout extends Writable {
 
   override _write(chunk: Buffer | string, _enc: string, cb: () => void): void {
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+    this.recordCursorTrace(str)
 
     if (str === CURSOR_HIDE) {
       this._beforeCursorHide = false
@@ -98,4 +104,23 @@ export class FakeStdout extends Writable {
 
   // ink checks for hasColors / isColorSupported — provide truthy shim
   hasColors(): boolean { return true }
+
+  private recordCursorTrace(str: string): void {
+    if (!str.includes(CURSOR_SHOW)) return
+
+    const beforeShow = str.slice(0, str.lastIndexOf(CURSOR_SHOW))
+    const columns = Array.from(beforeShow.matchAll(CURSOR_COLUMN_RE))
+    const ups = Array.from(beforeShow.matchAll(CURSOR_UP_RE))
+    const lastColumn = columns.at(-1)
+    const lastUp = ups.at(-1)
+    const x = lastColumn ? Math.max(0, Number(lastColumn[1] || '1') - 1) : undefined
+    const up = lastUp ? Number(lastUp[1] || '1') : undefined
+
+    this.cursorEvents.push({
+      raw: str,
+      positioned: x !== undefined,
+      ...(x !== undefined ? { x } : {}),
+      ...(up !== undefined ? { up } : {}),
+    })
+  }
 }

@@ -83,6 +83,7 @@ export async function capture(opts: CaptureOptsExtended): Promise<CaptureResult>
     const violations = runAll(grid, {
       viewport: vp,
       staticWrites: handle.staticWrites(),
+      cursorTraces: handle.cursorTraces(),
       fixtureCase,
     })
 

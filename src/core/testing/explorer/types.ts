@@ -58,6 +58,17 @@ export type AnsiGrid = {
 /** Terminal size as used by the viewport matrix. */
 export type Viewport = { cols: number; rows: number }
 
+/** Native terminal cursor telemetry captured from Ink's ANSI output. */
+export type CursorTrace = {
+  raw: string
+  /** True when the cursor show escape was paired with explicit positioning. */
+  positioned: boolean
+  /** Zero-based terminal column when ESC[<n>G was present. */
+  x?: number
+  /** Rows moved up from the bottom immediately before showing the cursor. */
+  up?: number
+}
+
 // ---------------------------------------------------------------------------
 // L1 — Invariant violation type (locked spec §4.2)
 // ---------------------------------------------------------------------------
@@ -82,6 +93,8 @@ export type FixtureCase = {
   expectedText?: string
   expectsHugContent?: boolean
   allowStatic?: boolean
+  /** Require a real positioned terminal cursor, not just rendered cursor text. */
+  requiresNativeCursor?: boolean
   zones?: Record<string, { x: number; y: number; w: number; h: number }>
   /** Custom assertion hook — receives the render handle after mount; can be async. */
   assert?: (handle: InkRenderHandle) => Promise<void> | void
@@ -161,6 +174,7 @@ export type InkRenderHandle = {
   frames(): string[]
   lastFrame(): string
   staticWrites(): string[]
+  cursorTraces(): CursorTrace[]
   grid(frame?: string): AnsiGrid
   stdin: { write(s: string): void }
   resize(cols: number, rows: number): void
@@ -175,6 +189,7 @@ export type InkRenderHandle = {
 export type InvariantCtx = {
   viewport: Viewport
   staticWrites: string[]
+  cursorTraces?: CursorTrace[]
   fixtureCase?: FixtureCase
 }
 
