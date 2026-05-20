@@ -1,6 +1,6 @@
 // src/tui/PromptInput/PromptInput.tsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Text, useInput, useStdout } from 'ink'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Box, Text, useCursor, useInput, useStdout, type DOMElement } from 'ink'
 import { homedir } from 'node:os'
 import stringWidth from 'string-width'
 import { defaultPalette as P } from '../theme'
@@ -53,6 +53,24 @@ export function truncateLeftToFit(s: string, maxWidth: number): string {
   return chars.slice(i).join('')
 }
 
+type Position = { x: number; y: number }
+
+function getAbsolutePosition(node: DOMElement | null): Position | null {
+  let current: DOMElement | undefined = node ?? undefined
+  let x = 0
+  let y = 0
+
+  while (current?.parentNode) {
+    const yogaNode = current.yogaNode
+    if (!yogaNode) return null
+    x += yogaNode.getComputedLeft()
+    y += yogaNode.getComputedTop()
+    current = current.parentNode
+  }
+
+  return { x, y }
+}
+
 export type PromptInputProps = {
   value: string
   onChange: (v: string) => void
@@ -93,6 +111,10 @@ export type PromptInputProps = {
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const history = useInputHistory()
+  const inputLineRef = useRef<DOMElement | null>(null)
+  const inputLinePositionRef = useRef<Position | null>(null)
+  const [inputLinePosition, setInputLinePosition] = useState<Position | null>(null)
+  const { setCursorPosition } = useCursor()
 
   // Env-gated user-overridable keybinding resolver. When NUKA_KEYBINDINGS is
   // unset (default) we leave `resolver` as null and the legacy hardcoded
@@ -559,6 +581,22 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const valueText = valueWidth > visibleBudget
     ? '…' + truncateLeftToFit(sanitizedValue, visibleBudget - 1)
     : sanitizedValue
+  const promptPrefixWidth = (props.vim ? 4 : 0) + stringWidth('> ')
+  const cursorColumn = promptPrefixWidth + stringWidth(valueText)
+
+  useLayoutEffect(() => {
+    const next = getAbsolutePosition(inputLineRef.current)
+    const prev = inputLinePositionRef.current
+    if (prev?.x === next?.x && prev?.y === next?.y) return
+    inputLinePositionRef.current = next
+    setInputLinePosition(next)
+  })
+
+  setCursorPosition(
+    showCursor && inputLinePosition
+      ? { x: inputLinePosition.x + cursorColumn, y: inputLinePosition.y }
+      : undefined,
+  )
 
   // Defensive guard: lower each option to its token and drop any whose
   // resolved kind is `mcp_resource`. mcp_resource isn't in
@@ -593,25 +631,23 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         paddingX={1}
         flexShrink={0}
       >
-        {props.vim && (
-          <Text color={vimMode === 'insert' ? P.fgMuted : P.warn} bold>
-            [{vimMode.toUpperCase().slice(0, 1)}]{' '}
-          </Text>
-        )}
-        <Text color={P.primary}>{'> '}</Text>
-        {isEmpty ? (
-          <>
-            {showCursor && <Text color={P.fg} inverse> </Text>}
-            <Text color={P.fgMuted}>{placeholder}</Text>
-          </>
-        ) : (
-          <>
+        <Box ref={inputLineRef} flexDirection="row" flexShrink={0}>
+          {props.vim && (
+            <Text color={vimMode === 'insert' ? P.fgMuted : P.warn} bold>
+              [{vimMode.toUpperCase().slice(0, 1)}]{' '}
+            </Text>
+          )}
+          <Text color={P.primary}>{'> '}</Text>
+          {isEmpty ? (
+            <>
+              {showCursor && <Text color={P.fg}> </Text>}
+              <Text color={P.fgMuted}>{placeholder}</Text>
+            </>
+          ) : (
             <Text color={P.fg} wrap="truncate-end">{valueText}</Text>
-            {showCursor && <Text color={P.fg} inverse> </Text>}
-          </>
-        )}
+          )}
+        </Box>
       </Box>
     </Box>
   )
 }
-

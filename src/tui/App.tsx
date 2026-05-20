@@ -861,14 +861,12 @@ export function App(props: AppProps): React.JSX.Element {
         keeps its natural height (flexShrink=0). */}
     <Box flexDirection="column" height={terminalRows}>
       {/* Conversation zone — soft layout region (no frame). Welcome rides
-          inside the <Static> stream (managed by Messages) as the first item
-          the moment any message lands, so it scrolls off-screen into the
-          terminal's native scrollback as the conversation accumulates rather
-          than competing with messages for vertical space.
+          in the live conversation only while the session is empty. Once real
+          turns exist, Messages keeps recent turns in the live viewport instead
+          of sending old content through Ink <Static> scrollback.
           Bug fix #9: overflow="hidden" so children that overflow the flex
           region are clipped, never pushing the bottom-anchored Prompt zone
-          off-screen. Messages clamps the LIVE area's tail via availableRows;
-          Static items are unbounded (terminal owns their scrollback). */}
+          off-screen. Messages clamps the live tail via availableRows. */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" minHeight={0}>
         {justCompacted && (
           <Text color={activeTheme.colors.fgMuted} dimColor>✻ context compacted — older turns summarized</Text>
