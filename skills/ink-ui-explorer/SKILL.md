@@ -41,6 +41,22 @@ Requires `nuka` on PATH (`npm link` in the Nuka repo, or `npm install -g nuka`).
 | User says "test it harder" / sweep was clean but user is suspicious | `fuzz` |
 | A failure dump exists (`.ink-explorer/failures/<id>.md`) | `repair <id>` |
 
+## Runtime-Blind-Spot Checks
+
+When a user reports an Ink UI bug after a clean sweep, verify these surfaces
+explicitly before trusting screenshots:
+
+- **Live transcript vs `<Static>` scrollback**: use production-mode
+  `renderWithViewport`/`staticTap`, not `ink-testing-library` debug output.
+  Debug mode concatenates static and dynamic output and can hide the real bug
+  where previous chat turns leave the live viewport.
+- **Native terminal cursor**: for focused inputs, require a positioned native
+  cursor event, not only a rendered inverse-space glyph. Add
+  `requiresNativeCursor: true` to relevant fixtures so the L1
+  `nativeCursorDeclared` invariant checks Ink cursor ANSI telemetry.
+- **Prompt/text fixtures**: when touching input components, run the default
+  sweep and include at least one fixture with `requiresNativeCursor: true`.
+
 ## PATH requirement
 
 The shim delegates to `nuka explore "$@"`. Ensure `nuka` is on PATH before
