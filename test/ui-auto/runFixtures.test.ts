@@ -17,6 +17,7 @@ import { runAll } from '../../src/core/testing/explorer/L1/index'
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures')
 const DEFAULT_VIEWPORT: Viewport = { cols: 80, rows: 24 }
+type CursorTraceHandle = { cursorTraces?: () => unknown[] }
 
 async function loadFixtures(): Promise<Array<{ file: string; def: FixtureDef }>> {
   const dirents = fs.readdirSync(FIXTURES_DIR, { withFileTypes: true })
@@ -49,8 +50,9 @@ async function runFixtureCase(
   const violations = runAll(grid, {
     viewport,
     staticWrites: handle.staticWrites(),
+    cursorTraces: (handle as CursorTraceHandle).cursorTraces?.() ?? [],
     fixtureCase,
-  })
+  } as Parameters<typeof runAll>[1])
 
   if (violations.some(v => v.severity === 'error')) {
     const msgs = violations

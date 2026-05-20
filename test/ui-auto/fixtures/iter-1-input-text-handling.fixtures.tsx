@@ -17,14 +17,16 @@
 
 import React from 'react'
 import { PromptInput } from '../../../src/tui/PromptInput/PromptInput'
-import type { FixtureDef } from '../../../src/core/testing/explorer/types'
+import type { FixtureCase, FixtureDef } from '../../../src/core/testing/explorer/types'
 
 const noop = () => {}
+const requiresNativeCursor = <T extends FixtureCase>(fixtureCase: T): T =>
+  ({ ...fixtureCase, requiresNativeCursor: true } as T)
 
 const fixture: FixtureDef = {
   component: 'PromptInputTextHandling',
   cases: {
-    'empty-with-placeholder': {
+    'empty-with-placeholder': requiresNativeCursor({
       render: () => (
         <PromptInput
           value=""
@@ -34,8 +36,8 @@ const fixture: FixtureDef = {
           placeholder="Ask anything…"
         />
       ),
-    },
-    'short-value': {
+    }),
+    'short-value': requiresNativeCursor({
       render: () => (
         <PromptInput
           value="hello world"
@@ -45,7 +47,7 @@ const fixture: FixtureDef = {
         />
       ),
       mustContain: ['hello world'],
-    },
+    }),
     'long-single-line-left-truncated': {
       // Value exceeds visibleBudget at all 7 viewports; the TAIL should
       // always be visible (left-truncation preserves tail). The last 12

@@ -93,3 +93,44 @@ describe('noLossyTruncation', () => {
     expect(truncViolations[0]?.message).toContain('/fork')
   })
 })
+
+// ---------------------------------------------------------------------------
+// nativeCursorDeclared
+// ---------------------------------------------------------------------------
+describe('nativeCursorDeclared', () => {
+  it('PASS: fixtures without cursor requirement are ignored', () => {
+    const fixtureCase: FixtureCase = {
+      render: () => { throw new Error('not called') },
+    }
+    const g = grid('plain output')
+    const violations = runAll(g, ctx({ fixtureCase }))
+    const cursorViolations = violations.filter(v => v.rule === 'nativeCursorDeclared')
+    expect(cursorViolations).toHaveLength(0)
+  })
+
+  it('PASS: a required positioned native cursor is accepted', () => {
+    const fixtureCase = {
+      render: () => { throw new Error('not called') },
+      requiresNativeCursor: true,
+    } as FixtureCase
+    const g = grid('prompt output')
+    const violations = runAll(g, ctx({
+      fixtureCase,
+      cursorTraces: [{ raw: '\u001b[2G\u001b[?25h', positioned: true, x: 1 }],
+    } as Partial<InvariantCtx>))
+    const cursorViolations = violations.filter(v => v.rule === 'nativeCursorDeclared')
+    expect(cursorViolations).toHaveLength(0)
+  })
+
+  it('FAIL: a required cursor with no positioned ANSI event is reported', () => {
+    const fixtureCase = {
+      render: () => { throw new Error('not called') },
+      requiresNativeCursor: true,
+    } as FixtureCase
+    const g = grid('prompt output')
+    const violations = runAll(g, ctx({ fixtureCase, cursorTraces: [] } as Partial<InvariantCtx>))
+    const cursorViolations = violations.filter(v => v.rule === 'nativeCursorDeclared')
+    expect(cursorViolations.length).toBeGreaterThan(0)
+    expect(cursorViolations[0]?.message).toMatch(/native terminal cursor/i)
+  })
+})
