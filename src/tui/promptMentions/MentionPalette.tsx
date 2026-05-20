@@ -25,6 +25,8 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { defaultPalette as P } from '../theme'
 import type { Palette } from '../theme'
+import { useTerminalSize } from '../hooks/useTerminalSize'
+import { truncateByWidth } from '../../core/stringWidth'
 import {
   PROMPT_MENTION_TYPES,
   type PromptMentionOption,
@@ -51,9 +53,11 @@ const DEFAULT_MAX_RESULTS = 10
 
 export function MentionPalette(props: MentionPaletteProps): React.JSX.Element {
   const p = props.palette ?? P
+  const { columns } = useTerminalSize()
   const types = props.types ?? PROMPT_MENTION_TYPES
   const cap = props.maxResults ?? DEFAULT_MAX_RESULTS
   const visible = props.options.slice(0, cap)
+  const previewWidth = Math.max(10, columns - 4)
 
   return (
     <Box
@@ -105,7 +109,9 @@ export function MentionPalette(props: MentionPaletteProps): React.JSX.Element {
       </Box>
       {props.preview ? (
         <Box marginTop={1}>
-          <Text color={p.fgFaint}>{props.preview}</Text>
+          <Text color={p.fgFaint} wrap="truncate-end">
+            {truncateByWidth(props.preview, previewWidth)}
+          </Text>
         </Box>
       ) : null}
     </Box>
