@@ -8,7 +8,7 @@
 // GNU coreutils and BSD; fs.cpSync is platform-neutral. The bin shim must
 // remain executable after copy, which fs.cpSync preserves (mode 0o755).
 
-import { cpSync, chmodSync, existsSync, mkdirSync } from 'node:fs'
+import { cpSync, chmodSync, existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -26,6 +26,7 @@ const TARGETS = [
   { dest: path.join(HOME, '.claude', 'skills'), createParent: true },
   { dest: path.join(HOME, '.codex',  'skills'), createParent: false },
 ]
+const PATH_BIN_DIR = path.join(HOME, '.nuka', 'bin')
 
 if (!existsSync(SRC_ROOT)) {
   // Nothing to install — repo has no skill sources.
@@ -46,4 +47,14 @@ for (const { dest: DEST_ROOT, createParent } of TARGETS) {
     const binPath = path.join(dest, 'bin', entry)
     if (existsSync(binPath)) chmodSync(binPath, 0o755)
   }
+}
+
+for (const entry of ['ink-ui-explorer']) {
+  const binPath = path.join(SRC_ROOT, entry, 'bin', entry)
+  if (!existsSync(binPath)) continue
+  mkdirSync(PATH_BIN_DIR, { recursive: true })
+  chmodSync(binPath, 0o755)
+  const linkPath = path.join(PATH_BIN_DIR, entry)
+  rmSync(linkPath, { force: true })
+  symlinkSync(binPath, linkPath)
 }

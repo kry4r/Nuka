@@ -5,7 +5,8 @@
   "description": "Avocado Agent — terminal AI coding assistant",
   "type": "module",
   "bin": {
-    "nuka": "dist/cli.js"
+    "nuka": "dist/cli.js",
+    "ink-ui-explorer": "skills/ink-ui-explorer/bin/ink-ui-explorer"
   },
   "engines": {
     "node": ">=18.0.0"
