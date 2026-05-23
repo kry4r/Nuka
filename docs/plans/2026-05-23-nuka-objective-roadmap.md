@@ -113,7 +113,11 @@ Checklist:
 - [x] Let `TaskOutput` / `wait_agent` recover completed local-agent output from sidecars.
   - Primary files: `src/core/tasks/outputTool.ts`, `src/cli.tsx`, `test/core/tasks/outputTool.test.ts`
   - Acceptance: when `agent_id` is not present in the in-memory task table, `TaskOutput` falls back to the newest matching local-agent sidecar and returns its `finalOutput` using the same task metadata text format; interactive `wait_agent` inherits this through the registered `TaskOutput` tool.
-- [ ] Decide the public API shape for `fork/send` before implementation.
+- [x] Decide the public API shape for `fork/send` before implementation.
+  - Decision: add `send_agent` as a user-facing alias for the current lightweight `resume_agent` semantics: `{ agent_id, message, context?, description? }` enqueues a new background `local_agent` execution under the same stable `agent_id`, with `message` normalized to the existing follow-up `prompt`.
+  - Decision: extend `spawn_agent` with explicit `fork_context?: boolean` rather than overloading missing `agent`; the first implementation may reject `fork_context: true` with a clear unsupported error until parent transcript capture is available.
+  - Decision: keep true fork/resume state separate from the alias: true fork must inherit parent transcript/system/tool context and eventually worktree state; true send must recover transcript when available, but can initially share `resume_agent` metadata fallback.
+  - Acceptance for first code iter: `send_agent` delegates to the same task metadata/path as `resume_agent`, preserves `agent_id`, accepts `message` instead of `prompt`, and is registered in CLI.
 - [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
