@@ -85,10 +85,8 @@ export function Messages(props: {
   const hiddenAbove = start
   const hiddenBelow = props.items.length - end
   const hasScroll = props.items.length > liveTail.length
-  const scrollHint: string | null = hasScroll
-    ? hiddenBelow > 0
-      ? `↑ ${hiddenAbove} older · ↓ ${hiddenBelow} newer`
-      : `↑ ${hiddenAbove} older`
+  const scrollHint = hasScroll
+    ? buildScrollHint(hiddenAbove, hiddenBelow, liveTail.length)
     : null
 
   return (
@@ -130,6 +128,13 @@ export function Messages(props: {
       </Box>
     </Box>
   )
+}
+
+function buildScrollHint(hiddenAbove: number, hiddenBelow: number, visible: number): string {
+  const parts = [`history: ${visible} visible`]
+  if (hiddenAbove > 0) parts.push(`${hiddenAbove} older`)
+  if (hiddenBelow > 0) parts.push(`${hiddenBelow} newer`)
+  return parts.join(' · ')
 }
 
 function MessageScrollHint(props: { text: string }): React.JSX.Element {

@@ -249,7 +249,9 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
 - [x] Make provider/model identity visible in one place with the configured provider name.
   - Evidence test: `npm test -- test/tui/Status.harness.test.tsx test/tui/planModeBadge.test.tsx test/ui-auto/humanTuiBaseline.test.ts test/tui/app.test.tsx`
   - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; statusline keeps `Xiaomi Mimo/mimo-v2-pro` visible at 70 columns and preserves context separators when truncating.
-- [ ] Make scroll state discoverable without instructional clutter.
+- [x] Make scroll state discoverable without instructional clutter.
+  - Evidence test: `npm test -- test/tui/Messages.static.test.tsx test/tui/app.test.tsx test/ui-auto/humanTuiBaseline.test.ts`
+  - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; long conversations now show a concise `history: 5 visible · 29 older` state summary with no PageUp/PgUp instructional text.
 - [ ] Simplify task/subagent panels so in-flight work is legible at a glance.
 - [ ] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.
 - [ ] Keep `stringWidth` / `truncateByWidth` in every width-sensitive path.

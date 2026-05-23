@@ -121,6 +121,27 @@ describe('Messages — live transcript', () => {
     }
   })
 
+  it('summarizes scroll state without keybinding instructions', async () => {
+    const items: Message[] = Array.from({ length: 12 }, (_, i) => (
+      userMsg(`u${i + 1}`, `scroll-state-${i + 1}`)
+    ))
+    const handle = renderWithViewport(
+      <Messages items={items} streaming={null} availableRows={6} />,
+      { cols: 80, rows: 18 },
+    )
+    try {
+      await flushInk()
+
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('history:')
+      expect(f).toContain('visible')
+      expect(f).toContain('older')
+      expect(f).not.toMatch(/PageUp|PageDown|PgUp|PgDn|press|use/i)
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('streaming message in flight stays in the live frame', async () => {
     const items: Message[] = [userMsg('u1', 'historical')]
     const streaming: Message = {
