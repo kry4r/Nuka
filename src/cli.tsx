@@ -1435,7 +1435,12 @@ async function runInteractive(): Promise<void> {
       }}
       compactSession={async (s) => {
         const { provider, model } = providers.resolveFor(s)
-        await compactSession(s, { provider, model, keepTurns: config.compact?.keepTurns ?? 3 })
+        await compactSession(s, {
+          provider,
+          model,
+          keepTurns: config.compact?.keepTurns ?? 3,
+          postCompactMicroCompact: microCompactOptionsFromConfig(config),
+        })
       }}
       cwd={cwd}
       gitBranch={gitBranch}

@@ -174,7 +174,9 @@ Checklist:
   - Primary files: `src/core/config/microCompact.ts`, `src/cli.tsx`, `test/core/config/microCompact.test.ts`
   - Acceptance: CLI passes `{ keepRecent }` into `runAgent` by default, honors `compact.microCompact.keepRecent`, and disables the pre-provider pass when `compact.microCompact.enabled: false`.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
-- [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
+- [x] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
+  - Primary files: `src/core/compact/compact.ts`, `src/cli.tsx`, `test/core/compact/compact.test.ts`
+  - Acceptance: manual compact can apply the same local microcompact cleanup to the retained window after summary/native compaction succeeds, and CLI passes the configured microcompact options into `/compact`.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.
   - Primary files: `src/core/agent/autoCompact.ts`, `test/core/agent/autoCompact.test.ts`
   - Acceptance: `maybeAutoCompact` expands the preserved tail backward when a kept `tool` message would otherwise lose its matching assistant `tool_use`, so provider-visible history never starts a retained tool result without its call.

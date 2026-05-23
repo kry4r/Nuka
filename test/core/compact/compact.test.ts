@@ -1,6 +1,7 @@
 // test/core/compact/compact.test.ts
 import { describe, it, expect } from 'vitest'
 import { compactSession, COMPACT_SUMMARY_MARKER } from '../../../src/core/compact/compact'
+import { MICROCOMPACT_CLEARED_TOOL_RESULT } from '../../../src/core/compact/microCompact'
 import { createSession } from '../../../src/core/session/session'
 import type { LLMProvider, LLMRequest, ProviderEvent } from '../../../src/core/provider/types'
 
@@ -107,6 +108,41 @@ describe('compactSession', () => {
         ts: expect.any(Number),
       },
       ...before,
+    ])
+  })
+
+  it('cleans stale tool results in the kept window after compacting', async () => {
+    const s = createSession({ providerId: 'p', model: 'm' })
+    for (let i = 0; i < 6; i++) {
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i * 4, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({
+        role: 'assistant',
+        id: `a${i}`,
+        ts: i * 4 + 1,
+        content: [{ type: 'tool_use', id: `call_${i}`, name: 'Read', input: { path: `${i}.ts` } }],
+      })
+      s.messages.push({
+        role: 'tool',
+        id: `t${i}`,
+        ts: i * 4 + 2,
+        toolUseId: `call_${i}`,
+        content: `read result ${i}`,
+        isError: false,
+      })
+    }
+
+    await compactSession(s, {
+      provider: stub('SUMMARY'),
+      model: 'm',
+      keepTurns: 3,
+      postCompactMicroCompact: { keepRecent: 1 },
+    })
+
+    const toolMessages = s.messages.filter((m): m is Extract<typeof m, { role: 'tool' }> => m.role === 'tool')
+    expect(toolMessages.map(m => m.content)).toEqual([
+      MICROCOMPACT_CLEARED_TOOL_RESULT,
+      MICROCOMPACT_CLEARED_TOOL_RESULT,
+      'read result 5',
     ])
   })
 })

@@ -2,6 +2,7 @@
 import type { Session } from '../session/types'
 import type { LLMProvider } from '../provider/types'
 import type { AssistantMessage, Message, ResponsesCompactionMessage } from '../message/types'
+import { microcompactToolResults, type MicrocompactToolResultsOptions } from './microCompact'
 import { ulid } from 'ulid'
 
 export const COMPACT_SUMMARY_MARKER = '[[compact-summary]]'
@@ -19,6 +20,7 @@ export type CompactOpts = {
   provider: LLMProvider
   model: string
   keepTurns?: number
+  postCompactMicroCompact?: MicrocompactToolResultsOptions
 }
 
 function turnBoundaries(messages: Message[]): number[] {
@@ -56,7 +58,7 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
         id: ulid(),
         ts: Date.now(),
       }
-      session.messages = [summary, ...kept]
+      session.messages = applyPostCompactCleanup([summary, ...kept], opts)
       return
     }
   }
@@ -88,5 +90,10 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
     ],
   }
 
-  session.messages = [summary, ...kept]
+  session.messages = applyPostCompactCleanup([summary, ...kept], opts)
+}
+
+function applyPostCompactCleanup(messages: Message[], opts: CompactOpts): Message[] {
+  if (!opts.postCompactMicroCompact) return messages
+  return microcompactToolResults(messages, opts.postCompactMicroCompact).messages
 }
