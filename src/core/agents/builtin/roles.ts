@@ -18,6 +18,15 @@ export const ROLE_AGENTS: ResolvedAgentDef[] = [
     maxTurns: 6,
   },
   {
+    name: 'core:explorer',
+    pluginName: 'core',
+    description: 'Fast read-only code search and file exploration agent.',
+    systemPrompt: 'You are a fast read-only code explorer. Find files, search symbols, and inspect existing code only. Prefer LSPQuery for symbol-level questions; fall back to Grep/Glob when LSPQuery is unavailable. Report findings with file:line references. Do not modify files, run shell commands, or create output files.',
+    allowedTools: ['Read', 'Grep', 'Glob', 'LSPQuery'],
+    deniedTools: ['Edit', 'Write', 'Bash'],
+    maxTurns: 10,
+  },
+  {
     name: 'core:researcher',
     pluginName: 'core',
     description: 'Searches codebase + docs; never writes.',
