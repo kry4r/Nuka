@@ -167,6 +167,9 @@ Checklist:
 - [x] Wire local microcompact into `runAgent` as a pre-provider prompt-copy pass.
   - Primary files: `src/core/agent/loop.ts`, `test/core/agent/loop.test.ts`
   - Acceptance: when `deps.microCompact` is provided, provider requests receive stale allowlisted tool results replaced by the cleared marker while `session.messages` remains complete for local history, persistence, and future resume/rewind work.
+- [x] Add config surface for local microcompact.
+  - Primary files: `src/core/config/schema.ts`, `test/core/config/load.test.ts`
+  - Acceptance: project/user config can set `compact.microCompact.enabled` and `compact.microCompact.keepRecent`; defaults remain compatible with existing configs.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.

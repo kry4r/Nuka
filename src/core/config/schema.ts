@@ -46,6 +46,12 @@ export const CompactSchema = z
     model: z.string().optional(),
     autoThreshold: z.number().min(0).max(1).default(0.8),
     contextWindow: z.number().int().positive().default(200_000),
+    microCompact: z
+      .object({
+        enabled: z.boolean().default(true),
+        keepRecent: z.number().int().nonnegative().default(4),
+      })
+      .optional(),
   })
   .optional()
 

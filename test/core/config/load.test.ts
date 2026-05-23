@@ -69,6 +69,26 @@ recap:
     expect(cfg.recap?.awayThresholdMinutes).toBe(10)
   })
 
+  it('loads compact microCompact options from project scope', async () => {
+    const home = tmp()
+    const cwd = tmp()
+    mkdirSync(join(cwd, '.nuka'))
+    writeFileSync(
+      join(cwd, '.nuka', 'config.yaml'),
+      `compact:
+  keepTurns: 4
+  microCompact:
+    enabled: true
+    keepRecent: 2
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd })
+
+    expect(cfg.compact?.microCompact?.enabled).toBe(true)
+    expect(cfg.compact?.microCompact?.keepRecent).toBe(2)
+  })
+
   it('every ConfigSchema top-level key is reachable through loadConfig', async () => {
     // Regression guard: loadConfig enumerates fields explicitly. If a new
     // field is added to ConfigSchema but not to loadConfig's merge object,
