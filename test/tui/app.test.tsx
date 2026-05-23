@@ -7,6 +7,7 @@ import { SlashRegistry } from '../../src/slash/registry'
 import { HelpCommand } from '../../src/slash/help'
 import { PermissionBridge } from '../../src/core/permission/bridge'
 import { appendMessage } from '../../src/core/session/session'
+import { CompactCommand } from '../../src/slash/compact'
 
 describe('App', () => {
   it('boots with welcome screen when no messages exist', () => {
@@ -115,5 +116,76 @@ describe('App', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('Nuka/gpt-5.5')
     expect(f).not.toContain('custom-2/gpt-5.5')
+  })
+
+  it('shows manual compact progress while /compact is running', async () => {
+    const sessions = new SessionManager()
+    sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    const slash = new SlashRegistry()
+    slash.register(CompactCommand)
+    let resolveCompact!: () => void
+    const compactDone = new Promise<void>(resolve => { resolveCompact = resolve })
+
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => { await compactDone }}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      stdin.write('/compact\r')
+      await new Promise(r => setTimeout(r, 30))
+      expect(lastFrame() ?? '').toContain('compact: running')
+
+      resolveCompact()
+      await new Promise(r => setTimeout(r, 30))
+      expect(lastFrame() ?? '').toContain('compact: done')
+    } finally {
+      unmount()
+    }
+  })
+
+  it('shows manual compact failure without crashing the TUI', async () => {
+    const sessions = new SessionManager()
+    sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    const slash = new SlashRegistry()
+    slash.register(CompactCommand)
+
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => { throw new Error('compact endpoint blocked') }}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      stdin.write('/compact\r')
+      await new Promise(r => setTimeout(r, 30))
+      expect(lastFrame() ?? '').toContain('compact: failed')
+      expect(lastFrame() ?? '').toContain('compact endpoint blocked')
+    } finally {
+      unmount()
+    }
   })
 })

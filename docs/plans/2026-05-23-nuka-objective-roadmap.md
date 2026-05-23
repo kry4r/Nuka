@@ -223,6 +223,9 @@ Checklist:
 - [x] Add Codex-style retained-message budget support for manual compact.
   - Primary files: `src/core/compact/compact.ts`, `src/core/config/schema.ts`, `src/cli.tsx`, `src/tui/Submenu/settings/CompactForm.tsx`, `test/core/compact/compact.test.ts`, `test/core/config/load.test.ts`, `test/tui/Submenu/settings/CompactForm.test.tsx`
   - Acceptance: manual compact can retain only the newest messages that fit within `compact.retainedMessageBudget` estimated tokens even when `keepTurns` would otherwise no-op; budget cuts do not orphan retained tool results; Settings exposes the field as `tailBudget` and can save or clear it.
+- [x] Add visible manual compact progress state.
+  - Primary files: `src/tui/App.tsx`, `test/tui/app.test.tsx`
+  - Acceptance: `/compact` shows `compact: running` while the compact request is in flight, changes to `compact: done` after success, and shows `compact: failed` plus the error message if the compact endpoint fails without crashing the TUI.
 
 ---
 

@@ -372,11 +372,17 @@ export type AppProps = {
   resolverDeps?: import('../promptContextReferences/resolver').PromptResolverDeps
 }
 
+type ManualCompactState =
+  | { status: 'running' }
+  | { status: 'done' }
+  | { status: 'failed'; message: string }
+
 export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp()
   const [session, setSession] = useState<Session>(() => props.sessions.active()!)
   const [input, setInput] = useState('')
   const [messageScrollOffset, setMessageScrollOffset] = useState(0)
+  const [manualCompact, setManualCompact] = useState<ManualCompactState | null>(null)
   // Iter MMMM — stable poke callback wired into PromptInput.onUserInput.
   // When props.idleHook is undefined (no provider configured, or under
   // test) `pokeIdle` is a no-op, so PromptInput needs no special-casing.
@@ -504,20 +510,33 @@ export function App(props: AppProps): React.JSX.Element {
   const handleSlashEffect = useCallback(async (effect: { kind: string }) => {
     if (effect.kind === 'clear-screen') {
       stream.reset()
+      setManualCompact(null)
     } else if (effect.kind === 'new-session') {
       const next = props.sessions.new()
       next.providerId = session.providerId
       next.model = session.model
       setSession(next)
       stream.reset()
+      setManualCompact(null)
     } else if (effect.kind === 'fork-session') {
       const next = props.sessions.fork()
       setSession(next)
       stream.reset()
+      setManualCompact(null)
     } else if (effect.kind === 'compact') {
-      await props.compactSession(session)
+      setManualCompact({ status: 'running' })
+      try {
+        await props.compactSession(session)
+        setManualCompact({ status: 'done' })
+        bumpMessages()
+      } catch (error) {
+        setManualCompact({
+          status: 'failed',
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
-  }, [session, props, stream])
+  }, [session, props, stream, bumpMessages])
 
   const handleSubmit = useCallback(async (raw: string) => {
     setInput('')
@@ -961,6 +980,15 @@ export function App(props: AppProps): React.JSX.Element {
           region are clipped, never pushing the bottom-anchored Prompt zone
           off-screen. Messages clamps the live tail via availableRows. */}
       <Box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" minHeight={0}>
+        {manualCompact?.status === 'running' && (
+          <Text color={activeTheme.colors.fgMuted} dimColor>compact: running</Text>
+        )}
+        {manualCompact?.status === 'done' && (
+          <Text color={activeTheme.colors.fgMuted} dimColor>compact: done</Text>
+        )}
+        {manualCompact?.status === 'failed' && (
+          <Text color={activeTheme.colors.error}>compact: failed — {manualCompact.message}</Text>
+        )}
         {justCompacted && (
           <Text color={activeTheme.colors.fgMuted} dimColor>✻ context compacted — older turns summarized</Text>
         )}
