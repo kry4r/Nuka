@@ -11,6 +11,7 @@ const CMDS: Array<[string, string]> = [
   ['/btw <text>', 'Queue a message without interrupting the current turn'],
   ['/compact', 'Summarize older messages to free context'],
   ['/cost', 'Show cost and token breakdown'],
+  ['/goal [text]', 'Set/show/pause/resume/complete the session goal'],
   ['/tasks', 'List/show/cancel background tasks'],
   ['/recap [--since 1h]', 'Generate a structured recap of the current session'],
 ]

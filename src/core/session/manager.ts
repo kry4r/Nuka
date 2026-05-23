@@ -9,9 +9,9 @@ import { MessageQueue } from './queue'
 export type SessionGoalInput = {
   objective: string
   status?: SessionGoal['status']
-  tokenBudget?: number
-  tokenUsage?: number
-  blockedReason?: string
+  tokenBudget?: number | null
+  tokenUsage?: number | null
+  blockedReason?: string | null
 }
 
 export class SessionManager {
@@ -164,14 +164,26 @@ export class SessionManager {
     if (!session) throw new Error(`unknown session: ${sessionId}`)
     const previous = session.goal
     const now = Date.now()
+    const blockedReason =
+      input.blockedReason === null
+        ? undefined
+        : input.blockedReason ?? previous?.blockedReason
+    const tokenBudget =
+      input.tokenBudget === null
+        ? undefined
+        : input.tokenBudget ?? previous?.tokenBudget
+    const tokenUsage =
+      input.tokenUsage === null
+        ? undefined
+        : input.tokenUsage ?? previous?.tokenUsage
     const goal: SessionGoal = {
       objective: input.objective,
       status: input.status ?? previous?.status ?? 'active',
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
-      tokenBudget: input.tokenBudget ?? previous?.tokenBudget,
-      tokenUsage: input.tokenUsage ?? previous?.tokenUsage,
-      blockedReason: input.blockedReason ?? previous?.blockedReason,
+      tokenBudget,
+      tokenUsage,
+      blockedReason,
     }
     session.goal = goal
     session.updatedAt = now

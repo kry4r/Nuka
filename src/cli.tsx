@@ -42,6 +42,7 @@ import { TaskManager } from './core/tasks/manager'
 import { ThemeCommand } from './slash/theme'
 import { StatsCommand } from './slash/stats'
 import { PlanCommand } from './slash/plan'
+import { GoalCommand } from './slash/goal'
 import { IdeCommand } from './slash/ide'
 import { StatusBarCommand } from './slash/statusBar'
 import { createPluginCommand } from './slash/plugin'
@@ -897,7 +898,7 @@ async function runInteractive(): Promise<void> {
     CostCommand, ModelCommand, EffortCommand, SettingsCommand, ConfigCommand, CompactCommand, ResumeCommand,
     HistoryCommand,
     MemdirCommand, VimCommand, DoctorCommand,
-    RewindCommand, TasksCommand, TaskRunCommand, ThemeCommand, StatsCommand, PlanCommand, IdeCommand,
+    RewindCommand, TasksCommand, TaskRunCommand, ThemeCommand, StatsCommand, PlanCommand, GoalCommand, IdeCommand,
     StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
