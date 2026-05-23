@@ -22,6 +22,7 @@ import { readFile, readdir, stat } from 'node:fs/promises'
 import { extname, join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
+import { addAgentMemoryTools, type AgentMemoryScope } from './agentMemory'
 
 /**
  * Public subagent shape after parsing. Maps onto Nuka's internal
@@ -51,6 +52,8 @@ export interface SubagentDefinition {
   maxTokens?: number
   /** Optional sampling temperature forwarded to provider. */
   temperature?: number
+  /** Optional persistent agent memory scope, matching Nuka-Code frontmatter. */
+  memory?: AgentMemoryScope
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -84,6 +87,7 @@ const SubagentFileSchema = z
     maxTurns: z.number().int().positive().optional(),
     maxTokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(1).optional(),
+    memory: z.enum(['user', 'project', 'local']).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -123,7 +127,7 @@ function assembleDefinition(
   // file uses `allowedTools` we accept that too and surface both shapes
   // on the result so downstream Nuka code that expects `allowedTools`
   // (via resolveAgentDef path) gets what it needs.
-  const tools = parsed.tools ?? parsed.allowedTools
+  const tools = withMemoryTools(parsed.tools ?? parsed.allowedTools, parsed.memory)
   const def: SubagentDefinition = {
     name: parsed.name,
     description: parsed.description,
@@ -137,8 +141,17 @@ function assembleDefinition(
   if (parsed.maxTurns !== undefined) def.maxTurns = parsed.maxTurns
   if (parsed.maxTokens !== undefined) def.maxTokens = parsed.maxTokens
   if (parsed.temperature !== undefined) def.temperature = parsed.temperature
+  if (parsed.memory !== undefined) def.memory = parsed.memory
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
+}
+
+function withMemoryTools(
+  tools: string[] | undefined,
+  memory: AgentMemoryScope | undefined,
+): string[] | undefined {
+  if (tools === undefined || memory === undefined) return tools
+  return addAgentMemoryTools(tools)
 }
 
 /**
@@ -188,6 +201,7 @@ function parseMarkdownAgent(content: string): unknown {
     allowedTools: normalizeToolList(parsed.frontmatter['allowedTools']),
     deniedTools: normalizeToolList(parsed.frontmatter['deniedTools']),
     disallowedTools: normalizeToolList(parsed.frontmatter['disallowedTools']),
+    memory: parsed.frontmatter['memory'],
   }
 }
 

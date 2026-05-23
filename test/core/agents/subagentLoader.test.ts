@@ -115,6 +115,48 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.maxTurns).toBe(7)
   })
 
+  it('loads Nuka-Code memory frontmatter scope', async () => {
+    const filePath = join(dir, 'researcher.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: researcher',
+        'description: research with persistent notes',
+        'memory: project',
+        '---',
+        '',
+        'You remember project-specific research patterns.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.memory).toBe('project')
+  })
+
+  it('adds memory file tools when memory is enabled with an explicit allowlist', async () => {
+    const filePath = join(dir, 'remembering-reviewer.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: remembering-reviewer',
+        'description: reviews and remembers feedback',
+        'tools:',
+        '  - Grep',
+        'memory: local',
+        '---',
+        '',
+        'You review code.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.tools).toEqual(['Grep', 'Read', 'Write', 'Edit'])
+  })
+
   it('maps Nuka-Code disallowedTools frontmatter to deniedTools', async () => {
     const filePath = join(dir, 'verify.md')
     await writeFile(
@@ -233,6 +275,16 @@ describe('loadSubagentFile — invalid shape', () => {
       allowedTools: ['Grep'],
     })
     await expect(loadSubagentFile(fp)).rejects.toThrow(/tools.*allowedTools/)
+  })
+
+  it('throws when memory scope is invalid', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      memory: 'repo',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/memory/)
   })
 
   it('throws on unknown/extra field (strict schema)', async () => {

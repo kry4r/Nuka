@@ -2,6 +2,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { AgentDef, ResolvedAgentDef } from './types'
+import { addAgentMemoryTools } from './agentMemory'
 
 /**
  * Resolve an AgentDef into a ResolvedAgentDef:
@@ -39,6 +40,9 @@ export async function resolveAgentDef(
   void _unused
   return {
     ...rest,
+    ...(rest.memory !== undefined && rest.allowedTools !== undefined
+      ? { allowedTools: addAgentMemoryTools(rest.allowedTools) }
+      : {}),
     systemPrompt,
     pluginName,
   }

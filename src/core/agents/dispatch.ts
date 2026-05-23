@@ -31,6 +31,7 @@ import type { WorktreeStore } from '../worktree/store'
 import { resolveToolCwd } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import { applyOutputStyle } from '../outputStyles/resolve'
+import { loadAgentMemoryPrompt, type AgentMemoryDeps } from './agentMemory'
 
 export type DispatchAgentOpts = {
   agent: ResolvedAgentDef
@@ -87,6 +88,12 @@ export type DispatchAgentOpts = {
    * style, mirroring the main-loop wiring in `agent/systemPrompt.ts`.
    */
   outputStyle?: OutputStyle | null
+  /**
+   * Optional override for agent-scoped memory prompt loading. Tests can inject
+   * a deterministic loader; production uses the Nuka-Code-style filesystem
+   * loader from `agentMemory.ts`.
+   */
+  agentMemory?: AgentMemoryDeps
 }
 
 export type DispatchAgentResult = {
@@ -122,6 +129,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     hookRegistry,
     worktreeStore,
     outputStyle,
+    agentMemory,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
 
@@ -131,9 +139,16 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   // REPLACE per `keepCodingInstructions`). When `outputStyle` is
   // absent / null the base is passed through verbatim — same shape
   // the dispatcher used before output-styles existed.
+  const baseSystemPrompt = appendAgentMemoryPrompt({
+    systemPrompt: agent.systemPrompt,
+    agentName: agent.name,
+    memory: agent.memory,
+    cwd: resolveToolCwd(worktreeStore, process.cwd()),
+    agentMemory,
+  })
   const effectiveSystemPrompt = outputStyle
-    ? applyOutputStyle(agent.systemPrompt, outputStyle)
-    : agent.systemPrompt
+    ? applyOutputStyle(baseSystemPrompt, outputStyle)
+    : baseSystemPrompt
 
   // Build filtered tool registry for the sub-session.
   const filtered: Tool[] = filterTools(registry.list(), {
@@ -392,6 +407,29 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       usage: totalUsage,
     }
   }
+}
+
+function appendAgentMemoryPrompt(input: {
+  systemPrompt: string
+  agentName: string
+  memory?: ResolvedAgentDef['memory']
+  cwd: string
+  agentMemory?: AgentMemoryDeps
+}): string {
+  if (!input.memory) return input.systemPrompt
+  const loadPrompt = input.agentMemory?.loadPrompt ?? loadAgentMemoryPrompt
+  let memoryPrompt = ''
+  try {
+    memoryPrompt = loadPrompt({
+      agentName: input.agentName,
+      scope: input.memory,
+      cwd: input.cwd,
+    }).trim()
+  } catch {
+    return input.systemPrompt
+  }
+  if (memoryPrompt.length === 0) return input.systemPrompt
+  return `${input.systemPrompt.replace(/\s+$/, '')}\n\n${memoryPrompt}`
 }
 
 function finalOutput(assistant: AssistantMessage): string | ToolContentBlock[] {

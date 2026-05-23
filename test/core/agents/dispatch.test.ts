@@ -199,6 +199,73 @@ describe('dispatchAgent', () => {
     expect(msgs[0]!.content[0]!.text).toContain('some background')
   })
 
+  it('appends agent memory prompt to provider system prompt when enabled', async () => {
+    let seenSystem = ''
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenSystem = req.system
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    await dispatchAgent({
+      agent: makeAgent({ memory: 'project' }),
+      task: 'use memory',
+      registry: new ToolRegistry(),
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+      agentMemory: {
+        loadPrompt: ({ agentName, scope }) =>
+          `# Persistent Agent Memory\nagent=${agentName}\nscope=${scope}\nremember deterministic reviews`,
+      },
+    })
+
+    expect(seenSystem).toContain('You are a reviewer.')
+    expect(seenSystem).toContain('# Persistent Agent Memory')
+    expect(seenSystem).toContain('agent=reviewer')
+    expect(seenSystem).toContain('scope=project')
+    expect(seenSystem).toContain('remember deterministic reviews')
+  })
+
+  it('continues with the base system prompt when agent memory loading fails', async () => {
+    let seenSystem = ''
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenSystem = req.system
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    const result = await dispatchAgent({
+      agent: makeAgent({ memory: 'local' }),
+      task: 'use memory',
+      registry: new ToolRegistry(),
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+      agentMemory: {
+        loadPrompt: () => {
+          throw new Error('memory disk unavailable')
+        },
+      },
+    })
+
+    expect(result.isError).toBe(false)
+    expect(result.output).toBe('ok')
+    expect(seenSystem).toBe('You are a reviewer.')
+  })
+
   it('sets allowedAgentDispatch=false on the sub-session (recursion guard)', async () => {
     // We capture the session via a tool that reads ctx.session.
     let capturedFlag: boolean | undefined

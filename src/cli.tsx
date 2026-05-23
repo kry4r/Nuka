@@ -1139,6 +1139,7 @@ async function runInteractive(): Promise<void> {
             ...(sub.model !== undefined ? { model: sub.model } : {}),
             ...(sub.maxTokens !== undefined ? { maxTokens: sub.maxTokens } : {}),
             ...(sub.temperature !== undefined ? { temperature: sub.temperature } : {}),
+            ...(sub.memory !== undefined ? { memory: sub.memory } : {}),
             ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
           }
           const resolved = await resolveAgentDef(agentDef, dirPath, pluginName)

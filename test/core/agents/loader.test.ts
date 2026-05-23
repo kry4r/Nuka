@@ -46,6 +46,24 @@ describe('resolveAgentDef', () => {
     expect(resolved.pluginName).toBe('core')
   })
 
+  it('adds memory file tools for memory-enabled plugin agents with an explicit allowlist', async () => {
+    const dir = mkPlugin()
+    const resolved = await resolveAgentDef(
+      {
+        name: 'remembering-reviewer',
+        description: 'reviews and remembers feedback',
+        systemPrompt: 'Review code.',
+        allowedTools: ['Grep'],
+        memory: 'project',
+        maxTurns: 20,
+      },
+      dir,
+      'demo',
+    )
+
+    expect(resolved.allowedTools).toEqual(['Grep', 'Read', 'Write', 'Edit'])
+  })
+
   it('throws a descriptive error when systemPromptPath is missing', async () => {
     const dir = mkPlugin()
     await expect(
