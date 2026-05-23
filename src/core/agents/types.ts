@@ -24,6 +24,7 @@ export const AgentDefSchema = z
     isolation: z.enum(['inherit', 'worktree']).optional(),
     background: z.boolean().optional(),
     permissionMode: z.enum(['plan']).optional(),
+    initialPrompt: z.string().min(1).optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),

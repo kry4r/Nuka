@@ -239,6 +239,37 @@ describe('dispatchAgent', () => {
     expect(msgs[0]!.content[0]!.text).toContain('some background')
   })
 
+  it('prepends agent initialPrompt to the first sub-agent user turn', async () => {
+    let seenMessages: unknown
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenMessages = req.messages
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    await dispatchAgent({
+      agent: makeAgent({ initialPrompt: 'Read AGENTS.md first.' }),
+      task: 'implement feature',
+      context: 'ticket context',
+      registry: new ToolRegistry(),
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+    })
+
+    const msgs = seenMessages as Array<{ role: string; content: Array<{ text: string }> }>
+    expect(msgs[0]!.role).toBe('user')
+    expect(msgs[0]!.content[0]!.text).toBe(
+      'Read AGENTS.md first.\n\nimplement feature\n\n--- context ---\nticket context',
+    )
+  })
+
   it('appends agent memory prompt to provider system prompt when enabled', async () => {
     let seenSystem = ''
     const provider: LLMProvider = {

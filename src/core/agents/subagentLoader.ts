@@ -61,6 +61,8 @@ export interface SubagentDefinition {
   background?: boolean
   /** Optional permission mode override for the sub-agent session. */
   permissionMode?: 'plan'
+  /** Optional prompt prepended to the first user turn, matching Nuka-Code agents. */
+  initialPrompt?: string
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -98,6 +100,7 @@ const SubagentFileSchema = z
     isolation: z.enum(['inherit', 'worktree']).optional(),
     background: z.boolean().optional(),
     permissionMode: z.enum(['plan']).optional(),
+    initialPrompt: z.string().min(1).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -155,6 +158,7 @@ function assembleDefinition(
   if (parsed.isolation !== undefined) def.isolation = parsed.isolation
   if (parsed.background !== undefined) def.background = parsed.background
   if (parsed.permissionMode !== undefined) def.permissionMode = parsed.permissionMode
+  if (parsed.initialPrompt !== undefined) def.initialPrompt = parsed.initialPrompt
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -218,6 +222,7 @@ function parseMarkdownAgent(content: string): unknown {
     isolation: parsed.frontmatter['isolation'],
     background: normalizeFrontmatterBoolean(parsed.frontmatter['background']),
     permissionMode: parsed.frontmatter['permissionMode'],
+    initialPrompt: parsed.frontmatter['initialPrompt'],
   }
 }
 
@@ -236,6 +241,7 @@ export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
     ...(sub.isolation !== undefined ? { isolation: sub.isolation } : {}),
     ...(sub.background !== undefined ? { background: sub.background } : {}),
     ...(sub.permissionMode !== undefined ? { permissionMode: sub.permissionMode } : {}),
+    ...(sub.initialPrompt !== undefined ? { initialPrompt: sub.initialPrompt } : {}),
     ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }

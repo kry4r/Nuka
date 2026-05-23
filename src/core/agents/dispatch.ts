@@ -197,9 +197,12 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   }
 
   // Seed with the first user message; include optional context.
-  const firstText = context !== undefined && context.length > 0
-    ? `${task}\n\n--- context ---\n${context}`
+  const taskText = agent.initialPrompt !== undefined && agent.initialPrompt.trim().length > 0
+    ? `${agent.initialPrompt.trim()}\n\n${task}`
     : task
+  const firstText = context !== undefined && context.length > 0
+    ? `${taskText}\n\n--- context ---\n${context}`
+    : taskText
   // Iter RRR — fire promptSubmit BEFORE the message lands so handlers see
   // the same pre-append snapshot the main loop offers them.
   if (hookRegistry) {

@@ -196,6 +196,26 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.permissionMode).toBe('plan')
   })
 
+  it('loads Nuka-Code initialPrompt frontmatter', async () => {
+    const filePath = join(dir, 'primer.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: primer',
+        'description: primes the first subagent turn',
+        'initialPrompt: Always inspect AGENTS.md before changing files.',
+        '---',
+        '',
+        'You execute the requested task.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.initialPrompt).toBe('Always inspect AGENTS.md before changing files.')
+  })
+
   it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
     const filePath = join(dir, 'foreground.md')
     await writeFile(
@@ -602,6 +622,7 @@ describe('subagentToAgentDef', () => {
       isolation: 'worktree',
       background: true,
       permissionMode: 'plan',
+      initialPrompt: 'Read AGENTS.md first.',
       keywords: ['implement'],
       sourcePath: '/tmp/worker.md',
     })
@@ -620,6 +641,7 @@ describe('subagentToAgentDef', () => {
       isolation: 'worktree',
       background: true,
       permissionMode: 'plan',
+      initialPrompt: 'Read AGENTS.md first.',
       keywords: ['implement'],
     })
   })
