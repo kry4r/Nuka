@@ -127,6 +127,9 @@ Checklist:
 - [x] Add resumable subagent state, including final output lookup and in-flight task metadata.
   - Primary files: `src/core/tasks/meta.ts`, `src/core/tasks/manager.ts`, `test/core/tasks/meta.test.ts`, `test/core/tasks/manager.test.ts`
   - Acceptance: local-agent task sidecars persist in-flight metadata, terminal `finalOutput`, and a `<task>.transcript.json` baseline containing the user task/context and assistant final output for future true resume/fork reconstruction.
+- [x] Let `resume_agent` / `send_agent` include persisted transcript context when available.
+  - Primary files: `src/core/agents/agentLifecycleTools.ts`, `test/core/agents/agentLifecycleTools.test.ts`
+  - Acceptance: persisted local-agent resumes read `<task>.transcript.json`, include the previous user/assistant transcript summary in the follow-up context, and still fall back to meta-only context when the transcript sidecar is missing.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.

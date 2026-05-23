@@ -5,7 +5,7 @@ import * as path from 'node:path'
 import { makeWaitAgentTool, makeCloseAgentTool, makeResumeAgentTool, makeSendAgentTool } from '../../../src/core/agents/agentLifecycleTools'
 import type { Tool, ToolContext, ToolResult } from '../../../src/core/tools/types'
 import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
-import { writeMeta } from '../../../src/core/tasks/meta'
+import { writeMeta, writeTranscript } from '../../../src/core/tasks/meta'
 import { AgentRegistry } from '../../../src/core/agents/registry'
 import { ToolRegistry } from '../../../src/core/tools/registry'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
@@ -382,6 +382,17 @@ describe('agent lifecycle wrapper tools', () => {
       providerId: 'p',
       model: 'm',
     })
+    writeTranscript(home, {
+      id: 'old-task',
+      agentId: 'agent-persisted',
+      agentName: 'core:reviewer',
+      providerId: 'p',
+      model: 'm',
+      messages: [
+        { role: 'user', content: 'old prompt\n\npersisted context' },
+        { role: 'assistant', content: 'previous final output' },
+      ],
+    })
     const manager = {
       get: () => undefined,
       list: () => [],
@@ -421,17 +432,20 @@ describe('agent lifecycle wrapper tools', () => {
       agentId: 'agent-persisted',
       agentName: 'core:reviewer',
       task: 'continue from disk',
-      context: ['persisted context', 'new disk facts'].join('\n\n'),
       providerId: 'p',
       model: 'm',
       resumed: true,
     })
+    expect(specs[0]!.context).toContain('persisted context')
+    expect(specs[0]!.context).toContain('previous final output')
+    expect(specs[0]!.context).toContain('new disk facts')
 
     for await (const _chunk of specs[0]!.agentRunner(new AbortController().signal)) {
       // drain
     }
     expect(seenPrompts[0]).toContain('continue from disk')
     expect(seenPrompts[0]).toContain('persisted context')
+    expect(seenPrompts[0]).toContain('previous final output')
     expect(seenPrompts[0]).toContain('new disk facts')
   })
 })

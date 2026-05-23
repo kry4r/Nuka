@@ -10,7 +10,7 @@ import type { TaskOutputToolInput } from '../tasks/outputTool'
 import type { TaskStopToolInput } from '../tasks/stopTool'
 import type { LocalAgentSpec, Task } from '../tasks/types'
 import { cleanLookupId, findTaskByAgentId, type TaskLookupManagerLike } from '../tasks/lookup'
-import { findLatestMetaByAgentId } from '../tasks/meta'
+import { findLatestMetaByAgentId, readTranscript, type TaskTranscript } from '../tasks/meta'
 import type { AgentRegistry } from './registry'
 import type { ToolRegistry } from '../tools/registry'
 import type { ProviderResolver } from '../provider/resolver'
@@ -402,7 +402,9 @@ function findResumeSeed(deps: ResumeAgentDeps, agentId: string): ResumeSeed {
     error: undefined,
     sourceId: persisted.id,
     agentName: persisted.agentName ?? agentId,
-    context: persisted.agentContext,
+    context: mergeContext(persisted.agentContext, formatTranscriptContext(
+      deps.home ? readTranscript(deps.home, persisted.id) : undefined,
+    )),
     providerId: persisted.providerId,
     model: persisted.model,
   }
@@ -421,6 +423,19 @@ function mergeContext(
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value))
   return parts.length > 0 ? parts.join('\n\n') : undefined
+}
+
+function formatTranscriptContext(transcript: TaskTranscript | undefined): string | undefined {
+  if (!transcript || transcript.messages.length === 0) return undefined
+  const lines = transcript.messages
+    .map(message => {
+      const content = message.content.trim()
+      return content ? `${message.role}: ${content}` : ''
+    })
+    .filter(Boolean)
+  return lines.length > 0
+    ? ['Previous subagent transcript:', ...lines].join('\n')
+    : undefined
 }
 
 function stringifyOutput(output: ToolResult['output']): string {
