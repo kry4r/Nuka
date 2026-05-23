@@ -18,6 +18,7 @@ const PROLOGUE_ROWS = 12
 // Floor on tailN so the live area never collapses below a couple of
 // recent turns even on a tiny terminal.
 const TAIL_FLOOR = 5
+const TURN_GAP_ROWS = 1
 
 /**
  * Build a map of tool_use id → {output, isError} for dispatch_agent tool
@@ -74,7 +75,8 @@ export function Messages(props: {
   if (typeof props.availableRows === 'number') {
     const prologueRows = showPrologue ? PROLOGUE_ROWS : 0
     const budget = props.availableRows - prologueRows
-    tailLimit = Math.min(TAIL_N, Math.max(TAIL_FLOOR, budget))
+    const rowCostPerTurn = 1 + TURN_GAP_ROWS
+    tailLimit = Math.min(TAIL_N, Math.max(TAIL_FLOOR, Math.ceil(budget / rowCostPerTurn)))
   }
   const offset = Math.max(0, Math.min(props.scrollOffset ?? 0, Math.max(0, props.items.length - 1)))
   const end = props.items.length - offset
@@ -105,14 +107,16 @@ export function Messages(props: {
           </Box>
         )}
         {liveTail.map((m, i) => (
-          <MessageRow
-            key={'id' in m ? m.id : `live-${i}`}
-            m={m}
-            toolResultsById={toolResultsById}
-            expandedAgentCallIds={props.expandedAgentCallIds}
-            resolveToolSource={props.resolveToolSource}
-            resolveToolAnnotations={props.resolveToolAnnotations}
-          />
+          <React.Fragment key={'id' in m ? m.id : `live-${i}`}>
+            {i > 0 && <Box height={TURN_GAP_ROWS} />}
+            <MessageRow
+              m={m}
+              toolResultsById={toolResultsById}
+              expandedAgentCallIds={props.expandedAgentCallIds}
+              resolveToolSource={props.resolveToolSource}
+              resolveToolAnnotations={props.resolveToolAnnotations}
+            />
+          </React.Fragment>
         ))}
         {props.streaming && offset === 0 && (
           <MessageRow

@@ -240,7 +240,9 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
   - Evidence fixture: `test/ui-auto/fixtures/iter-23-human-tui-baseline.fixtures.tsx`
   - Evidence test: `npm test -- test/ui-auto/humanTuiBaseline.test.ts`
   - Evidence captures: `ink-ui-explorer capture test/ui-auto/fixtures/iter-23-human-tui-baseline.fixtures.tsx --viewport=120x30` and `--viewport=70x24`; expected desktop/narrow capture JSON pairs have zero error-level L1 violations.
-- [ ] Redesign conversation spacing: less cramped than current output, but still terminal-dense enough for coding.
+- [x] Redesign conversation spacing: less cramped than current output, but still terminal-dense enough for coding.
+  - Evidence test: `npm test -- test/tui/Messages.static.test.tsx test/ui-auto/humanTuiBaseline.test.ts test/tui/app.test.tsx`
+  - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; message turns now have a single blank row between them while long conversations keep the scroll hint and newest messages.
 - [ ] Redesign assistant message framing by studying Codex/Nuka-Code patterns; avoid nested cards and noisy borders.
 - [ ] Make provider/model identity visible in one place with the configured provider name.
 - [ ] Make scroll state discoverable without instructional clutter.

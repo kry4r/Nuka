@@ -95,6 +95,32 @@ describe('Messages — live transcript', () => {
     }
   })
 
+  it('adds breathing room between turns without splitting wrapped message lines', async () => {
+    const items: Message[] = [
+      userMsg('u1', 'alpha-line-1\nalpha-line-2'),
+      assistantMsg('a1', 'beta-line-1'),
+    ]
+    const handle = renderWithViewport(
+      <Messages items={items} streaming={null} />,
+      { cols: 80, rows: 18 },
+    )
+    try {
+      await flushInk()
+
+      const lines = (handle.lastFrame() ?? '').split('\n')
+      const alpha1 = lines.findIndex(line => line.includes('alpha-line-1'))
+      const alpha2 = lines.findIndex(line => line.includes('alpha-line-2'))
+      const beta = lines.findIndex(line => line.includes('beta-line-1'))
+
+      expect(alpha1).toBeGreaterThanOrEqual(0)
+      expect(alpha2).toBe(alpha1 + 1)
+      expect(beta).toBe(alpha2 + 2)
+      expect(lines[alpha2 + 1]?.trim()).toBe('')
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('streaming message in flight stays in the live frame', async () => {
     const items: Message[] = [userMsg('u1', 'historical')]
     const streaming: Message = {

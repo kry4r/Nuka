@@ -73,7 +73,8 @@ describe('App', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('older')
     expect(f).toContain('newer')
-    expect(f).toContain('message-12')
+    expect(f).toContain('message-15')
+    expect(f).not.toContain('message-24')
     expect(f).not.toContain('[5~')
   })
 
