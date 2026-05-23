@@ -161,6 +161,9 @@ Checklist:
   - Decision: add Nuka-Code-style local microcompact as a separate pre-provider pass, before each provider stream request, and keep `compactSessionAware` as the heavier post-turn summary/native compact path.
   - Rationale: microcompact removes or replaces stale tool-result payloads to reduce the next prompt immediately; the current `compactSessionAware` runs only after `turn_end`, so folding microcompact into it would miss the over-budget request that needs the relief. Nuka also does not yet expose provider-level context-management fields in `LLMRequest`, so API/context-management microcompact stays deferred until provider request schemas support it cleanly.
   - Initial implementation target: pure helper over `Message[]` that clears older `role: "tool"` contents for allowlisted high-volume tools while keeping the newest N tool results and preserving tool ids/error flags; then wire it at the provider-call boundary with focused loop tests.
+- [x] Add pure local microcompact helper for stale tool-result payloads.
+  - Primary files: `src/core/compact/microCompact.ts`, `test/core/compact/microCompact.test.ts`
+  - Acceptance: helper maps assistant `tool_use` ids to tool names, clears older allowlisted `role: "tool"` contents, keeps the newest N compactable tool results, preserves ids/error flags, returns estimated token savings, and does not mutate the input transcript.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.
