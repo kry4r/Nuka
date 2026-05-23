@@ -60,14 +60,17 @@ function visibleInput(input: string): string {
   return input.replace(/[\u0000-\u001f\u007f]/g, '')
 }
 
-function isNavigationSequence(input: string, key: Record<string, unknown>): boolean {
-  if (key.pageUp || key.pageDown || key.home || key.end) return true
-  return input === '\u001B[5~'
-    || input === '\u001B[6~'
-    || input === '\u001B[H'
-    || input === '\u001B[F'
-    || input === '\u001B[1~'
-    || input === '\u001B[4~'
+export type PromptNavigationAction = 'page-up' | 'page-down' | 'home' | 'end'
+
+export function promptNavigationAction(
+  input: string,
+  key: Record<string, unknown>,
+): PromptNavigationAction | null {
+  if (key.pageUp === true || input === '\u001B[5~' || input === '[5~') return 'page-up'
+  if (key.pageDown === true || input === '\u001B[6~' || input === '[6~') return 'page-down'
+  if (key.home === true || input === '\u001B[H' || input === '\u001B[1~' || input === '[H' || input === '[1~') return 'home'
+  if (key.end === true || input === '\u001B[F' || input === '\u001B[4~' || input === '[F' || input === '[4~') return 'end'
+  return null
 }
 
 function getAbsolutePosition(node: DOMElement | null): Position | null {
@@ -147,6 +150,8 @@ export type PromptInputProps = {
    * recognized keystroke (typing, arrows, Enter, Esc, Tab, backspace).
    */
   onUserInput?: () => void
+  /** Notified when terminal navigation keys should move the conversation view. */
+  onConversationNavigate?: (action: PromptNavigationAction) => void
 }
 
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
@@ -325,8 +330,10 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
 
   useInput((input, key) => {
     if (props.disabled) return
-    if (isNavigationSequence(input, key)) {
+    const navigationAction = promptNavigationAction(input, key)
+    if (navigationAction !== null) {
       props.onUserInput?.()
+      props.onConversationNavigate?.(navigationAction)
       return
     }
     const returnIndex = input.search(/[\r\n]/)

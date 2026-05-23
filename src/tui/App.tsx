@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
-import { PromptInput } from './PromptInput/PromptInput'
+import { PromptInput, type PromptNavigationAction } from './PromptInput/PromptInput'
 import { useIdlePoke } from './hooks/useIdlePoke'
 import { useAwayRecap } from './hooks/useAwayRecap'
 import { AwaySummaryCard } from './Recap/AwaySummaryCard'
@@ -245,22 +245,6 @@ function ErrorIndicator(props: { message: string }): React.JSX.Element {
   )
 }
 
-function isPageUpInput(input: string, key: Record<string, unknown>): boolean {
-  return key.pageUp === true || input === '\u001B[5~'
-}
-
-function isPageDownInput(input: string, key: Record<string, unknown>): boolean {
-  return key.pageDown === true || input === '\u001B[6~'
-}
-
-function isHomeInput(input: string, key: Record<string, unknown>): boolean {
-  return key.home === true || input === '\u001B[H' || input === '\u001B[1~'
-}
-
-function isEndInput(input: string, key: Record<string, unknown>): boolean {
-  return key.end === true || input === '\u001B[F' || input === '\u001B[4~'
-}
-
 function syncSessionSelectionFromConfig(session: Session, config: Config): void {
   const activeProviderId = config.active?.providerId ?? ''
   const activeProvider = config.providers.find(p => p.id === activeProviderId)
@@ -460,6 +444,14 @@ export function App(props: AppProps): React.JSX.Element {
   const useColumnsPanel = Object.values(columnsState).some(c => c.rows.length > 0)
   const [tasksFocus14b, setTasksFocus14b] = useState(() => initialFocus())
   const { columns: terminalCols, rows: terminalRows } = useTerminalSize()
+  // Bug fix #9: compute a row budget so Messages can clamp its own height
+  // and stop shoving the prompt off-screen on small terminals. Reserved
+  // rows budget = status (~3) + tasks summary when collapsed (~3) + bordered
+  // prompt input (~4) + safety margin (~4). The Messages component falls
+  // back to its old TAIL_N=50 behavior if availableRows is omitted, so this
+  // change is opt-in.
+  const RESERVED_ROWS = 14
+  const conversationAvailableRows = Math.max(8, terminalRows - RESERVED_ROWS)
 
   // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
   const [slashCursor, setSlashCursor] = useState(0)
@@ -672,6 +664,19 @@ export function App(props: AppProps): React.JSX.Element {
   }, [props, session, stream, handleSlashEffect, exit, appendAssistantNotice])
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
+  const scrollConversation = useCallback((action: PromptNavigationAction) => {
+    const maxOffset = Math.max(0, session.messages.length - 1)
+    const page = Math.max(5, Math.floor(conversationAvailableRows / 2))
+    if (action === 'page-up') {
+      setMessageScrollOffset(v => Math.min(maxOffset, v + page))
+    } else if (action === 'page-down') {
+      setMessageScrollOffset(v => Math.max(0, v - page))
+    } else if (action === 'home') {
+      setMessageScrollOffset(maxOffset)
+    } else {
+      setMessageScrollOffset(0)
+    }
+  }, [conversationAvailableRows, session.messages.length])
 
   // Bug fix #18: live count of focusable Tasks rows. When a subagent finishes
   // and rolls off the panel mid-focus, dispatch a clamp so cursor never
@@ -695,6 +700,12 @@ export function App(props: AppProps): React.JSX.Element {
   }, [flattenedTotal, uiState])
 
   useInput((inputKey, key) => {
+    if (uiState.kind === 'normal' && !promptFocused) {
+      if (key.pageUp) { scrollConversation('page-up'); return }
+      if (key.pageDown) { scrollConversation('page-down'); return }
+      if (key.home) { scrollConversation('home'); return }
+      if (key.end) { scrollConversation('end'); return }
+    }
     if (key.escape) {
       // Esc always returns to normal from any non-normal UIState. Inline
       // submenus (permission/plugin-config) own their own Esc handler; we
@@ -724,25 +735,6 @@ export function App(props: AppProps): React.JSX.Element {
       }
       lastEscRef.current = now
       return
-    }
-    if (uiState.kind === 'normal' && !stream.running) {
-      const maxOffset = Math.max(0, session.messages.length - 1)
-      if (isPageUpInput(inputKey, key)) {
-        setMessageScrollOffset(v => Math.min(maxOffset, v + Math.max(5, Math.floor(conversationAvailableRows / 2))))
-        return
-      }
-      if (isPageDownInput(inputKey, key)) {
-        setMessageScrollOffset(v => Math.max(0, v - Math.max(5, Math.floor(conversationAvailableRows / 2))))
-        return
-      }
-      if (isHomeInput(inputKey, key)) {
-        setMessageScrollOffset(maxOffset)
-        return
-      }
-      if (isEndInput(inputKey, key)) {
-        setMessageScrollOffset(0)
-        return
-      }
     }
     // Phase 13 M4 — Tab enters Tasks focus mode when Tasks panel is non-empty;
     // also exits focus mode when already focused.
@@ -957,15 +949,6 @@ export function App(props: AppProps): React.JSX.Element {
     [props.cwd, branchName, branchDirty, session.model, props.version, props.updates, props.recent],
   )
 
-  // Bug fix #9: compute a row budget so Messages can clamp its own height
-  // and stop shoving the prompt off-screen on small terminals. Reserved
-  // rows budget = status (~3) + tasks summary when collapsed (~3) + bordered
-  // prompt input (~4) + safety margin (~4). The Messages component falls
-  // back to its old TAIL_N=50 behavior if availableRows is omitted, so this
-  // change is opt-in.
-  const RESERVED_ROWS = 14
-  const conversationAvailableRows = Math.max(8, terminalRows - RESERVED_ROWS)
-
   return (
     <ThemeProvider theme={activeTheme}>
     {/* Anchor the prompt + status to the bottom of the terminal: the outer
@@ -1150,6 +1133,7 @@ export function App(props: AppProps): React.JSX.Element {
           onSlashActiveChange={handleSlashActiveChange}
           onSlashCursorChange={setSlashCursor}
           onUserInput={handleUserInput}
+          onConversationNavigate={scrollConversation}
         />
       )}
 
