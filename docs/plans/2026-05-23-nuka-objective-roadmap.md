@@ -146,6 +146,9 @@ Checklist:
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `spawn_agent(..., fork_context: true)` injects a textual parent-session context summary into the child `local_agent` context and preserves explicit caller context; recursion guard still prevents subagents from forking further.
   - Limitation: this is a minimal context-summary fork, not yet Nuka-Code's cache-identical full transcript/tool-result placeholder fork and not yet isolated worktree write-scope support.
+- [x] Add spawn-time worktree isolation for background subagents.
+  - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
+  - Acceptance: `spawn_agent({ isolation: "worktree" })` creates a tracked git worktree using the existing worktree git runner helpers, records the isolated cwd in the queued local-agent spec, includes the worktree path in tool output, keeps the parent active worktree pointer unchanged, and runs the background agent's tools inside the isolated cwd.
 - [x] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
   - [x] Add first Nuka-Code-style fast read-only code exploration agent as `core:explorer`.
   - [x] Add Nuka-Code-style independent verification agent as `core:verifier`.

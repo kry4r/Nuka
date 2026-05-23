@@ -12,6 +12,7 @@ import { createWorktreeStore } from '../../../src/core/worktree/store'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
 import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
 import type { ProviderEvent } from '../../../src/core/provider/types'
+import type { GitResult } from '../../../src/core/worktree/git'
 
 function mkAgent(pluginName: string, name: string, description: string): ResolvedAgentDef {
   return {
@@ -53,6 +54,26 @@ function mkResolver(p: LLMProvider): ProviderResolver {
     resolveFor: () => ({ provider: p, model: 'm' }),
     listProviders: () => [{ id: 'p' } as unknown as never],
   } as unknown as ProviderResolver
+}
+
+function fakeGitRunner(calls: string[][] = []) {
+  return (args: string[], opts: { cwd: string }): GitResult => {
+    calls.push([opts.cwd, ...args])
+    if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+      return { code: 0, stdout: '/repo\n', stderr: '' }
+    }
+    if (args[0] === 'worktree' && args[1] === 'add') {
+      return { code: 0, stdout: '', stderr: '' }
+    }
+    return { code: 1, stdout: '', stderr: 'unexpected git call' }
+  }
+}
+
+function failingGitRootRunner(calls: string[][] = []) {
+  return (args: string[], opts: { cwd: string }): GitResult => {
+    calls.push([opts.cwd, ...args])
+    return { code: 1, stdout: '', stderr: 'not a repo' }
+  }
 }
 
 class FakeTaskManager implements SpawnAgentTaskManagerLike {
@@ -351,5 +372,137 @@ describe('makeSpawnAgentTool', () => {
     }
 
     expect(cwdSeen).toEqual(['/tmp/nuka-first-worktree'])
+  })
+
+  it('creates an isolated worktree for a spawned background agent when requested', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const cwdSeen: string[] = []
+    const registry = new ToolRegistry()
+    registry.register({
+      name: 'PeekCwd',
+      description: 'peek cwd',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      needsPermission: () => 'none',
+      run: async (_input, ctx) => {
+        cwdSeen.push(ctx.cwd)
+        return { output: 'cwd-ok', isError: false }
+      },
+    })
+    const provider = mkScriptProvider([
+      [
+        { type: 'tool_use_start', id: 'cwd-1', name: 'PeekCwd' },
+        { type: 'tool_use_stop', id: 'cwd-1', input: {} },
+        { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+      [
+        { type: 'text_delta', text: 'done' },
+        { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+    ])
+    const gitCalls: string[][] = []
+    const worktreeStore = createWorktreeStore()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry,
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore,
+      gitRunner: fakeGitRunner(gitCalls),
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'check isolated cwd',
+        isolation: 'worktree',
+        worktree_name: 'review branch',
+      },
+      { signal: new AbortController().signal, cwd: '/repo', session },
+    )
+
+    expect(result.isError).toBe(false)
+    expect(gitCalls).toContainEqual(['/repo', 'rev-parse', '--show-toplevel'])
+    expect(gitCalls).toContainEqual([
+      '/repo',
+      'worktree',
+      'add',
+      '-b',
+      'review-branch',
+      '/repo/.nuka/worktrees/review-branch',
+    ])
+    expect(worktreeStore.getActive()).toBeUndefined()
+    expect(worktreeStore.list()).toHaveLength(1)
+    expect(tasks.specs[0]).toMatchObject({
+      cwd: '/repo/.nuka/worktrees/review-branch',
+    })
+    expect(result.output as string).toContain('worktree=/repo/.nuka/worktrees/review-branch')
+
+    for await (const _chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+    expect(cwdSeen).toEqual(['/repo/.nuka/worktrees/review-branch'])
+  })
+
+  it('rejects worktree isolation without a worktree store', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider('unused')),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'check isolated cwd',
+        isolation: 'worktree',
+      },
+      { signal: new AbortController().signal, cwd: '/repo', session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain('requires a worktree store')
+    expect(tasks.specs).toHaveLength(0)
+  })
+
+  it('rejects worktree isolation outside a git repo without enqueueing', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const gitCalls: string[][] = []
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider('unused')),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore: createWorktreeStore(),
+      gitRunner: failingGitRootRunner(gitCalls),
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'check isolated cwd',
+        isolation: 'worktree',
+      },
+      { signal: new AbortController().signal, cwd: '/not-repo', session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain('requires a git repo')
+    expect(gitCalls).toEqual([['/not-repo', 'rev-parse', '--show-toplevel']])
+    expect(tasks.specs).toHaveLength(0)
   })
 })

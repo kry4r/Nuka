@@ -12,6 +12,13 @@ import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
 import { resolveToolCwd } from '../worktree/store'
+import {
+  createWorktree,
+  defaultGitRunner,
+  findGitRoot,
+  type GitRunner,
+} from '../worktree/git'
+import { normalizeWorktreeName } from '../worktree/tools'
 import type { OutputStyle } from '../outputStyles/types'
 import type { Message } from '../message/types'
 import type { LocalAgentSpec, Task } from '../tasks/types'
@@ -29,6 +36,8 @@ export type SpawnAgentInput = {
   context?: string
   description?: string
   fork_context?: boolean
+  isolation?: 'inherit' | 'worktree'
+  worktree_name?: string
 }
 
 export function makeSpawnAgentTool(deps: {
@@ -39,6 +48,7 @@ export function makeSpawnAgentTool(deps: {
   taskManager: SpawnAgentTaskManagerLike
   hookRegistry?: HookRegistry
   worktreeStore?: WorktreeStore
+  gitRunner?: GitRunner
   outputStyle?: () => OutputStyle | null
 }): Tool<SpawnAgentInput> {
   const listed = deps.agents.list()
@@ -81,6 +91,18 @@ export function makeSpawnAgentTool(deps: {
           description:
             'Inject a summarized parent session context into the background subagent. This is a lightweight context fork, not a full transcript/worktree clone.',
         },
+        isolation: {
+          type: 'string',
+          enum: ['inherit', 'worktree'],
+          description:
+            'Cwd isolation for the background agent. "inherit" uses the current active cwd; "worktree" creates a tracked git worktree and runs the agent there.',
+        },
+        worktree_name: {
+          type: 'string',
+          description:
+            'Optional worktree branch/name when isolation="worktree"; slugified before git worktree creation.',
+          minLength: 1,
+        },
       },
       additionalProperties: false,
     },
@@ -118,7 +140,9 @@ export function makeSpawnAgentTool(deps: {
           : undefined,
         input.context,
       )
-      const cwd = resolveToolCwd(deps.worktreeStore, process.cwd())
+      const cwdResolution = resolveSpawnCwd(input, ctx.cwd, deps)
+      if (cwdResolution.isError) return cwdResolution.result
+      const { cwd, worktreePath } = cwdResolution
 
       const task = deps.taskManager.enqueue({
         kind: 'local_agent',
@@ -156,12 +180,65 @@ export function makeSpawnAgentTool(deps: {
           `agent_id=${task.agentId ?? `agent-${task.id}`}`,
           `agent=${resolved.name}`,
           `description=${task.description}`,
+          ...(worktreePath ? [`worktree=${worktreePath}`] : []),
           `output_file=${task.outputFile}`,
           'Use TaskOutput with agent_id to read output; use TaskStop with agent_id to stop it.',
         ].join('\n'),
       }
     },
   })
+}
+
+function resolveSpawnCwd(
+  input: SpawnAgentInput,
+  parentCwd: string,
+  deps: {
+    worktreeStore?: WorktreeStore
+    gitRunner?: GitRunner
+  },
+): { isError: false; cwd: string; worktreePath?: string } | { isError: true; result: ToolResult } {
+  if (input.isolation !== 'worktree') {
+    return {
+      isError: false,
+      cwd: resolveToolCwd(deps.worktreeStore, process.cwd()),
+    }
+  }
+  if (!deps.worktreeStore) {
+    return {
+      isError: true,
+      result: {
+        isError: true,
+        output: 'spawn_agent isolation=worktree requires a worktree store.',
+      },
+    }
+  }
+  const rawName = input.worktree_name?.trim() || input.task.slice(0, 64)
+  const slug = normalizeWorktreeName(rawName)
+  const runner = deps.gitRunner ?? defaultGitRunner
+  const repoRoot = findGitRoot(runner, parentCwd)
+  if (!repoRoot) {
+    return {
+      isError: true,
+      result: {
+        isError: true,
+        output: `Not inside a git repository (cwd=${parentCwd}). spawn_agent isolation=worktree requires a git repo.`,
+      },
+    }
+  }
+  const created = createWorktree(runner, { repoRoot, slug })
+  if (!created.ok) {
+    return { isError: true, result: { isError: true, output: created.message } }
+  }
+  deps.worktreeStore.add({
+    path: created.worktreePath,
+    branch: created.branch,
+    originalCwd: parentCwd,
+  })
+  return {
+    isError: false,
+    cwd: created.worktreePath,
+    worktreePath: created.worktreePath,
+  }
 }
 
 function normalizeDescription(value: string | undefined): string | undefined {
