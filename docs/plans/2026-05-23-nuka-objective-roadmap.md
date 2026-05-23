@@ -10,7 +10,8 @@
 - Nuka current implementation: `/data/xtzhang/Nuka`
 - Nuka-Code reference: `/data/xtzhang/Nuka-Code`
 - claude-status reference: `/tmp/claude-status` if already cloned; clone through `http://192.168.2.185:7897` if missing.
-- Upstream Codex / Claude Code / Pi source: not present under `/data/xtzhang` as of 2026-05-23; locate or clone before feature-intake work. Use `192.168.2.185:7897` as proxy if GitHub clone fails.
+- Codex reference: `/tmp/openai-codex` at commit `7d47056ea42636271ac020b86347fbbef49490aa`.
+- Upstream feature intake: `docs/plans/2026-05-23-upstream-feature-intake.md`.
 
 ---
 
@@ -169,11 +170,16 @@ Checklist:
 
 ## Track 3 - Upstream Feature Intake
 
-- [ ] Locate or clone the current upstream repositories for Claude Code, Codex, and Pi.
-- [ ] Record source, date, commit, and license constraints for every inspected feature.
-- [ ] Create a feature checklist with columns: source, feature, user value, Nuka equivalent, gap, risk, priority, test surface.
-- [ ] Pull only features that improve repeated work: task delegation, context survival, recovery, editing flow, and provider reliability.
-- [ ] Reject features that are mostly decorative unless they directly improve TUI comprehension.
+- [x] Locate or clone the current upstream repositories/docs for Claude Code, Codex, and Pi.
+  - Evidence: Codex local checkout `/tmp/openai-codex`; Claude Code official docs fetched from `code.claude.com`; Pi official release notes fetched from `pi.dev/news/releases`.
+- [x] Record source, date, commit, and license constraints for every inspected feature.
+  - Evidence: `docs/plans/2026-05-23-upstream-feature-intake.md`.
+- [x] Create a feature checklist with columns: source, feature, user value, Nuka equivalent, gap, risk, priority, test surface.
+  - Evidence: `docs/plans/2026-05-23-upstream-feature-intake.md`.
+- [x] Pull only features that improve repeated work: task delegation, context survival, recovery, editing flow, and provider reliability.
+  - Evidence: accepted iteration order in `docs/plans/2026-05-23-upstream-feature-intake.md`.
+- [x] Reject features that are mostly decorative unless they directly improve TUI comprehension.
+  - Evidence: rejected/deferred section in `docs/plans/2026-05-23-upstream-feature-intake.md`.
 
 ---
 
