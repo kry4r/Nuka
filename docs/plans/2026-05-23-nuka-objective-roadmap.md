@@ -118,6 +118,9 @@ Checklist:
   - Decision: extend `spawn_agent` with explicit `fork_context?: boolean` rather than overloading missing `agent`; the first implementation may reject `fork_context: true` with a clear unsupported error until parent transcript capture is available.
   - Decision: keep true fork/resume state separate from the alias: true fork must inherit parent transcript/system/tool context and eventually worktree state; true send must recover transcript when available, but can initially share `resume_agent` metadata fallback.
   - Acceptance for first code iter: `send_agent` delegates to the same task metadata/path as `resume_agent`, preserves `agent_id`, accepts `message` instead of `prompt`, and is registered in CLI.
+- [x] Add `send_agent` follow-up alias over the local-agent task runtime.
+  - Primary files: `src/core/agents/agentLifecycleTools.ts`, `src/cli.tsx`, `test/core/agents/agentLifecycleTools.test.ts`
+  - Acceptance: `send_agent` accepts `{ agent_id, message, context?, description? }`, preserves the stable `agent_id`, merges prior and new context, enqueues a resumed `local_agent` execution, reports `status=sent` and `sent_to=<source task>`, and is registered by the CLI.
 - [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.

@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { makeWaitAgentTool, makeCloseAgentTool, makeResumeAgentTool } from '../../../src/core/agents/agentLifecycleTools'
+import { makeWaitAgentTool, makeCloseAgentTool, makeResumeAgentTool, makeSendAgentTool } from '../../../src/core/agents/agentLifecycleTools'
 import type { Tool, ToolContext, ToolResult } from '../../../src/core/tools/types'
 import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
 import { writeMeta } from '../../../src/core/tasks/meta'
@@ -235,6 +235,71 @@ describe('agent lifecycle wrapper tools', () => {
 
     expect(result.isError).toBe(true)
     expect(result.output as string).toContain("No background task with agent id 'missing'")
+  })
+
+  it('send_agent accepts message and enqueues a follow-up under the same agent_id', async () => {
+    const specs: LocalAgentSpec[] = []
+    const existing: Task = {
+      id: 'task-1',
+      kind: 'local_agent',
+      description: 'core:reviewer: original',
+      state: 'completed',
+      outputFile: '/tmp/task-1.log',
+      agentId: 'agent-123',
+      spec: {
+        kind: 'local_agent',
+        agentId: 'agent-123',
+        agentName: 'core:reviewer',
+        task: 'original',
+        context: 'old context',
+        description: 'core:reviewer: original',
+        agentRunner: async function* () { yield { text: 'old' } },
+      },
+    }
+    const manager = {
+      get: (id: string) => id === existing.id ? existing : undefined,
+      list: () => [existing],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'task-2',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/task-2.log',
+          agentId: spec.agentId ?? 'agent-task-2',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer'))
+    const tool = makeSendAgentTool({
+      taskManager: manager,
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider([])),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    const result = await tool.run({
+      agent_id: 'agent-123',
+      message: 'please continue',
+      context: 'new facts',
+    }, ctx())
+
+    expect(result.isError).toBe(false)
+    expect(specs[0]).toMatchObject({
+      agentId: 'agent-123',
+      agentName: 'core:reviewer',
+      task: 'please continue',
+      context: ['old context', 'new facts'].join('\n\n'),
+      resumed: true,
+    })
+    expect(result.output as string).toContain('status=sent')
+    expect(result.output as string).toContain('task_id=task-2')
+    expect(result.output as string).toContain('agent_id=agent-123')
+    expect(result.output as string).toContain('sent_to=task-1')
   })
 
   it('resume_agent rebuilt runner dispatches the new prompt, not the previous closure', async () => {

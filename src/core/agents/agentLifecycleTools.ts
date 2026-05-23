@@ -39,6 +39,13 @@ export type ResumeAgentInput = {
   description?: string
 }
 
+export type SendAgentInput = {
+  agent_id: string
+  message: string
+  context?: string
+  description?: string
+}
+
 export type ResumeAgentTaskManagerLike = TaskLookupManagerLike & {
   enqueue(spec: LocalAgentSpec): Task
 }
@@ -184,79 +191,155 @@ export function makeResumeAgentTool(
     annotations: { readOnly: false, destructive: false, openWorld: true },
     searchHint: ['agent', 'resume', 'background', 'task'],
     async run(input): Promise<ToolResult> {
-      const agentId = cleanLookupId(input.agent_id)
-      if (!agentId) {
-        return { isError: true, output: 'agent_id is required.' }
-      }
-      const prompt = input.prompt.trim()
-      if (!prompt) {
-        return { isError: true, output: 'prompt is required.' }
-      }
-
-      const seed = findResumeSeed(deps, agentId)
-      if (seed.error) return seed.error
-
-      const { agentName } = seed
-      const resolved = deps.agents.find(agentName)
-      if (!resolved) {
-        const available = deps.agents.list().map(a => a.name).join(', ') || '(none)'
-        return {
-          isError: true,
-          output: `Cannot resume agent '${agentName}': definition is not registered. Available: ${available}`,
-        }
-      }
-      const context = mergeContext(seed.context, input.context)
-      const description = normalizeDescription(input.description)
-        ?? `${agentName}: ${prompt.slice(0, 80)}`
-      const providerId = seed.providerId
-      const model = resolved.model ?? seed.model
-      const parentSession = providerId && model ? { providerId, model } : undefined
-      const activeStyle = deps.outputStyle ? deps.outputStyle() : null
-      const task = deps.taskManager.enqueue({
-        kind: 'local_agent',
-        description,
-        agentId,
-        agentName,
-        task: prompt,
-        ...(context !== undefined ? { context } : {}),
-        resumed: true,
-        providerId,
-        model,
-        ...(seed.hookRegistry ? { hookRegistry: seed.hookRegistry } : {}),
-        ...(seed.taskSessionId ? { taskSessionId: seed.taskSessionId } : {}),
-        agentRunner: async function* (signal) {
-          const result = await dispatchAgent({
-            agent: resolved,
-            task: prompt,
-            ...(context !== undefined ? { context } : {}),
-            registry: deps.registry,
-            providerResolver: deps.providerResolver,
-            permission: deps.permission,
-            signal,
-            ...(parentSession ? { parentSession } : {}),
-            ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
-            ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
-            ...(activeStyle ? { outputStyle: activeStyle } : {}),
-          })
-          yield { text: stringifyOutput(result.output) }
-        },
+      return enqueueAgentFollowup(deps, {
+        agentIdRaw: input.agent_id,
+        promptRaw: input.prompt,
+        context: input.context,
+        description: input.description,
+        emptyPromptMessage: 'prompt is required.',
+        status: 'resumed',
+        sourceLabel: 'resumed_from',
       })
-
-      return {
-        isError: false,
-        output: [
-          'status=resumed',
-          `task_id=${task.id}`,
-          `agent_id=${task.agentId ?? agentId}`,
-          `agent=${agentName}`,
-          `description=${task.description}`,
-          `resumed_from=${seed.sourceId}`,
-          `output_file=${task.outputFile}`,
-          'Use wait_agent with agent_id to read final output; use close_agent with agent_id to stop it.',
-        ].join('\n'),
-      }
     },
   })
+}
+
+export function makeSendAgentTool(
+  deps: ResumeAgentDeps,
+): Tool<SendAgentInput> {
+  return defineTool<SendAgentInput>({
+    name: 'send_agent',
+    description:
+      'Send a follow-up instruction to an existing background subagent. Reuses the same stable agent_id and starts a new background execution. This is currently equivalent to resume_agent with message instead of prompt.',
+    parameters: {
+      type: 'object',
+      required: ['agent_id', 'message'],
+      properties: {
+        agent_id: {
+          type: 'string',
+          description: 'Stable subagent ID returned by spawn_agent.',
+          minLength: 1,
+        },
+        message: {
+          type: 'string',
+          description: 'Follow-up instruction to send to the subagent.',
+          minLength: 1,
+        },
+        context: {
+          type: 'string',
+          description: 'Optional additional context to append after prior context.',
+        },
+        description: {
+          type: 'string',
+          description: 'Short label for the follow-up background task.',
+        },
+      },
+      additionalProperties: false,
+    },
+    source: 'builtin',
+    tags: ['core', 'agent', 'tasks'],
+    needsPermission: () => 'none',
+    annotations: { readOnly: false, destructive: false, openWorld: true },
+    searchHint: ['agent', 'send', 'message', 'background', 'task'],
+    async run(input): Promise<ToolResult> {
+      return enqueueAgentFollowup(deps, {
+        agentIdRaw: input.agent_id,
+        promptRaw: input.message,
+        context: input.context,
+        description: input.description,
+        emptyPromptMessage: 'message is required.',
+        status: 'sent',
+        sourceLabel: 'sent_to',
+      })
+    },
+  })
+}
+
+type AgentFollowupOpts = {
+  agentIdRaw: string
+  promptRaw: string
+  context?: string
+  description?: string
+  emptyPromptMessage: string
+  status: 'resumed' | 'sent'
+  sourceLabel: 'resumed_from' | 'sent_to'
+}
+
+async function enqueueAgentFollowup(
+  deps: ResumeAgentDeps,
+  opts: AgentFollowupOpts,
+): Promise<ToolResult> {
+  const agentId = cleanLookupId(opts.agentIdRaw)
+  if (!agentId) {
+    return { isError: true, output: 'agent_id is required.' }
+  }
+  const prompt = opts.promptRaw.trim()
+  if (!prompt) {
+    return { isError: true, output: opts.emptyPromptMessage }
+  }
+
+  const seed = findResumeSeed(deps, agentId)
+  if (seed.error) return seed.error
+
+  const { agentName } = seed
+  const resolved = deps.agents.find(agentName)
+  if (!resolved) {
+    const available = deps.agents.list().map(a => a.name).join(', ') || '(none)'
+    return {
+      isError: true,
+      output: `Cannot resume agent '${agentName}': definition is not registered. Available: ${available}`,
+    }
+  }
+  const context = mergeContext(seed.context, opts.context)
+  const description = normalizeDescription(opts.description)
+    ?? `${agentName}: ${prompt.slice(0, 80)}`
+  const providerId = seed.providerId
+  const model = resolved.model ?? seed.model
+  const parentSession = providerId && model ? { providerId, model } : undefined
+  const activeStyle = deps.outputStyle ? deps.outputStyle() : null
+  const task = deps.taskManager.enqueue({
+    kind: 'local_agent',
+    description,
+    agentId,
+    agentName,
+    task: prompt,
+    ...(context !== undefined ? { context } : {}),
+    resumed: true,
+    providerId,
+    model,
+    ...(seed.hookRegistry ? { hookRegistry: seed.hookRegistry } : {}),
+    ...(seed.taskSessionId ? { taskSessionId: seed.taskSessionId } : {}),
+    agentRunner: async function* (signal) {
+      const result = await dispatchAgent({
+        agent: resolved,
+        task: prompt,
+        ...(context !== undefined ? { context } : {}),
+        registry: deps.registry,
+        providerResolver: deps.providerResolver,
+        permission: deps.permission,
+        signal,
+        ...(parentSession ? { parentSession } : {}),
+        ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
+        ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
+        ...(activeStyle ? { outputStyle: activeStyle } : {}),
+      })
+      yield { text: stringifyOutput(result.output) }
+    },
+  })
+
+  return {
+    isError: false,
+    output: [
+      `status=${opts.status}`,
+      `task_id=${task.id}`,
+      `agent_id=${task.agentId ?? agentId}`,
+      `agent=${agentName}`,
+      `description=${task.description}`,
+      `${opts.sourceLabel}=${seed.sourceId}`,
+      `output_file=${task.outputFile}`,
+      'Use wait_agent with agent_id to read final output; use close_agent with agent_id to stop it.',
+    ].join('\n'),
+  }
 }
 
 type ResumeSeed =

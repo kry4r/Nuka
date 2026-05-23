@@ -118,7 +118,7 @@ import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { makeSpawnAgentTool } from './core/agents/spawnTool'
-import { makeCloseAgentTool, makeResumeAgentTool, makeWaitAgentTool } from './core/agents/agentLifecycleTools'
+import { makeCloseAgentTool, makeResumeAgentTool, makeSendAgentTool, makeWaitAgentTool } from './core/agents/agentLifecycleTools'
 import { makeCoordinateAgentsTool } from './core/tools/coordinator/coordinateAgentsTool'
 import type { Tool as ToolType } from './core/tools/types'
 import { dispatchAgent } from './core/agents/dispatch'
@@ -1188,6 +1188,19 @@ async function runInteractive(): Promise<void> {
   )
   tools.register(
     makeResumeAgentTool({
+      taskManager,
+      home,
+      agents,
+      registry: tools,
+      providerResolver: providers,
+      permission,
+      hookRegistry,
+      worktreeStore: getWorktreeStore(),
+      outputStyle: resolveActiveOutputStyleNow,
+    }) as any,
+  )
+  tools.register(
+    makeSendAgentTool({
       taskManager,
       home,
       agents,
