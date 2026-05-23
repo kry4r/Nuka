@@ -3,6 +3,7 @@ import type { Session } from '../session/types'
 import type { LLMProvider } from '../provider/types'
 import type { AssistantMessage, Message, ResponsesCompactionMessage } from '../message/types'
 import { microcompactToolResults, type MicrocompactToolResultsOptions } from './microCompact'
+import { isContextWindowError } from './contextWindowError'
 import { ulid } from 'ulid'
 
 export const COMPACT_SUMMARY_MARKER = '[[compact-summary]]'
@@ -21,6 +22,7 @@ export type CompactOpts = {
   model: string
   keepTurns?: number
   postCompactMicroCompact?: MicrocompactToolResultsOptions
+  maxShrinkRetries?: number
 }
 
 function turnBoundaries(messages: Message[]): number[] {
@@ -40,16 +42,7 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
   const kept = session.messages.slice(cutBoundaryIndex)
 
   if (opts.provider.compact) {
-    const compacted = await opts.provider.compact(
-      {
-        model: opts.model,
-        system: COMPACT_SYSTEM,
-        messages: older,
-        tools: [],
-        maxTokens: 800,
-      },
-      new AbortController().signal,
-    )
+    const compacted = await compactWithShrinkRetry(older, opts)
     if (compacted.output.length > 0) {
       const summary: ResponsesCompactionMessage = {
         role: 'responses_compaction',
@@ -63,20 +56,7 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
     }
   }
 
-  let summaryText = ''
-  const stream = opts.provider.stream(
-    {
-      model: opts.model,
-      system: COMPACT_SYSTEM,
-      messages: older,
-      tools: [],
-      maxTokens: 800,
-    },
-    new AbortController().signal,
-  )
-  for await (const ev of stream) {
-    if (ev.type === 'text_delta') summaryText += ev.text
-  }
+  const summaryText = await summarizeWithShrinkRetry(older, opts)
 
   const summary: AssistantMessage = {
     role: 'assistant',
@@ -91,6 +71,82 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
   }
 
   session.messages = applyPostCompactCleanup([summary, ...kept], opts)
+}
+
+async function compactWithShrinkRetry(
+  older: Message[],
+  opts: CompactOpts,
+) {
+  let attemptMessages = older
+  let lastContextError: unknown
+  const maxRetries = Math.max(0, opts.maxShrinkRetries ?? 2)
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await opts.provider.compact!(
+        compactRequest(opts, attemptMessages),
+        new AbortController().signal,
+      )
+    } catch (error) {
+      if (!isContextWindowError(error)) throw error
+      lastContextError = error
+      const shrunk = shrinkMessagesForRetry(attemptMessages)
+      if (shrunk.length >= attemptMessages.length) throw error
+      attemptMessages = shrunk
+    }
+  }
+
+  throw lastContextError
+}
+
+function compactRequest(opts: CompactOpts, messages: Message[]) {
+  return {
+    model: opts.model,
+    system: COMPACT_SYSTEM,
+    messages,
+    tools: [],
+    maxTokens: 800,
+  }
+}
+
+async function summarizeWithShrinkRetry(
+  older: Message[],
+  opts: CompactOpts,
+): Promise<string> {
+  let attemptMessages = older
+  let lastContextError: unknown
+  const maxRetries = Math.max(0, opts.maxShrinkRetries ?? 2)
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await summarizeOnce(attemptMessages, opts)
+    } catch (error) {
+      if (!isContextWindowError(error)) throw error
+      lastContextError = error
+      const shrunk = shrinkMessagesForRetry(attemptMessages)
+      if (shrunk.length >= attemptMessages.length) throw error
+      attemptMessages = shrunk
+    }
+  }
+
+  throw lastContextError
+}
+
+async function summarizeOnce(messages: Message[], opts: CompactOpts): Promise<string> {
+  let summaryText = ''
+  const stream = opts.provider.stream(
+    compactRequest(opts, messages),
+    new AbortController().signal,
+  )
+  for await (const ev of stream) {
+    if (ev.type === 'text_delta') summaryText += ev.text
+  }
+  return summaryText
+}
+
+function shrinkMessagesForRetry(messages: Message[]): Message[] {
+  if (messages.length <= 1) return messages
+  return messages.slice(Math.floor(messages.length / 2))
 }
 
 function applyPostCompactCleanup(messages: Message[], opts: CompactOpts): Message[] {

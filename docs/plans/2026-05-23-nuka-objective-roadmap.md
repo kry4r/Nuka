@@ -183,7 +183,9 @@ Checklist:
 - [x] Add tests for image/document blocks so compacting never expands base64 or binary payloads.
   - Primary file: `test/core/agent/autoCompact.image.test.ts`
   - Acceptance: text extraction for compaction skips base64 image payloads; token estimation charges image blocks structurally instead of inlining binary data into summaries.
-- [ ] Add Codex-style retry/shrink-on-context-window-exceeded behavior for local summary compact and native compact.
+- [x] Add Codex-style retry/shrink-on-context-window-exceeded behavior for local summary compact and native compact.
+  - Primary files: `src/core/compact/compact.ts`, `src/core/agent/autoCompact.ts`, `src/core/compact/contextWindowError.ts`, `test/core/compact/compact.test.ts`, `test/core/agent/autoCompact.test.ts`
+  - Acceptance: native Responses compact, manual text-summary compact, and pure autoCompact custom summarizers retry with a smaller older/middle slice on context-window errors while preserving ordinary error propagation.
 
 ---
 

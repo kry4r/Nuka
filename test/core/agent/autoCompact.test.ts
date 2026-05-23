@@ -296,6 +296,31 @@ describe('maybeAutoCompact — custom summarizer', () => {
     })
     expect(summarize).not.toHaveBeenCalled()
   })
+
+  it('shrinks and retries summarize when the middle slice exceeds context', async () => {
+    const messages = makeHeavyTranscript(8)
+    const seenLengths: number[] = []
+    const summarize = vi.fn().mockImplementation(async (middle: Message[]) => {
+      seenLengths.push(middle.length)
+      if (seenLengths.length === 1) {
+        throw new Error('context length exceeded: prompt too long')
+      }
+      return 'SHRUNK SUMMARY'
+    })
+
+    const result = await maybeAutoCompact(messages, {
+      triggerTokens: 200,
+      targetTokens: 50_000,
+      preserveRecent: 2,
+      summarize,
+      summarizeMaxRetries: 2,
+    })
+
+    expect(result.compacted).toBe(true)
+    expect(seenLengths).toHaveLength(2)
+    expect(seenLengths[1]).toBeLessThan(seenLengths[0]!)
+    expect(result.messages.some(m => m.role === 'system' && m.content === 'SHRUNK SUMMARY')).toBe(true)
+  })
 })
 
 describe('maybeAutoCompact — hook veto', () => {

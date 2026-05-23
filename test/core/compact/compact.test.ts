@@ -145,4 +145,78 @@ describe('compactSession', () => {
       'read result 5',
     ])
   })
+
+  it('shrinks and retries native compact when the older slice exceeds context', async () => {
+    const compactRequests: LLMRequest[] = []
+    const provider: LLMProvider = {
+      id: 'custom',
+      format: 'openai',
+      async compact(req) {
+        compactRequests.push(req)
+        if (compactRequests.length === 1) {
+          throw new Error('OpenAI Responses compact request failed (413 Payload Too Large): prompt is too long for context window')
+        }
+        return {
+          implementation: 'responses_compact',
+          output: [{ type: 'compaction', encrypted_content: 'shrunk' }],
+        }
+      },
+      async *stream(): AsyncIterable<ProviderEvent> {
+        throw new Error('stream should not be used')
+      },
+      async listRemoteModels() { return [] },
+    }
+    const s = createSession({ providerId: 'custom', model: 'm' })
+    for (let i = 0; i < 8; i++) {
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+    }
+
+    await compactSession(s, { provider, model: 'm', keepTurns: 2, maxShrinkRetries: 2 })
+
+    expect(compactRequests).toHaveLength(2)
+    expect(compactRequests[1]!.messages.length).toBeLessThan(compactRequests[0]!.messages.length)
+    expect(s.messages[0]).toMatchObject({
+      role: 'responses_compaction',
+      output: [{ type: 'compaction', encrypted_content: 'shrunk' }],
+    })
+  })
+
+  it('shrinks and retries summary compact when the older slice exceeds context', async () => {
+    const streamRequests: LLMRequest[] = []
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req): AsyncIterable<ProviderEvent> {
+        streamRequests.push(req)
+        if (streamRequests.length === 1) {
+          throw new Error('context length exceeded: prompt too long')
+        }
+        yield { type: 'text_delta', text: 'SHRUNK SUMMARY' }
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const s = createSession({ providerId: 'p', model: 'm' })
+    for (let i = 0; i < 8; i++) {
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+    }
+
+    await compactSession(s, { provider, model: 'm', keepTurns: 2, maxShrinkRetries: 2 })
+
+    expect(streamRequests).toHaveLength(2)
+    expect(streamRequests[1]!.messages.length).toBeLessThan(streamRequests[0]!.messages.length)
+    expect(s.messages[0]).toMatchObject({ role: 'assistant' })
+    if (s.messages[0]?.role === 'assistant') {
+      expect(s.messages[0].content[0]).toMatchObject({
+        type: 'text',
+        text: expect.stringContaining('SHRUNK SUMMARY'),
+      })
+    }
+  })
 })

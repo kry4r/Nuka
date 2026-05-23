@@ -27,6 +27,7 @@ import type { Message, SystemMessage } from '../message/types'
 import { roughTokenCountEstimationForMessages } from '../tokens/estimate'
 import { fireBeforeAutoCompact } from '../hooks/lifecycle'
 import type { HookRegistry } from '../hooks/registry'
+import { isContextWindowError } from '../compact/contextWindowError'
 
 /**
  * Project a transcript down to a single string of model-visible text.
@@ -87,6 +88,8 @@ export interface AutoCompactConfig {
    * deterministic placeholder is used (no I/O, safe for pure tests).
    */
   summarize?: (messages: Message[]) => Promise<string>
+  /** Max context-window shrink retries for the custom summarizer. Default 2. */
+  summarizeMaxRetries?: number
   /**
    * For the placeholder path only: optional session identifier used by the
    * agent loop for the hook payload. Default `'orchestrator'`. Unused when
@@ -498,8 +501,36 @@ async function produceSummaryText(
   config: AutoCompactConfig,
 ): Promise<string> {
   if (config.summarize) {
-    return config.summarize(middle)
+    return summarizeWithShrinkRetry(middle, config)
   }
   const droppedTokens = roughTokenCountEstimationForMessages(middle)
   return `${PLACEHOLDER_PREFIX} ${middle.length} messages, ~${droppedTokens} tokens]`
+}
+
+async function summarizeWithShrinkRetry(
+  middle: Message[],
+  config: AutoCompactConfig,
+): Promise<string> {
+  let attemptMessages = middle
+  let lastContextError: unknown
+  const maxRetries = Math.max(0, config.summarizeMaxRetries ?? 2)
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await config.summarize!(attemptMessages)
+    } catch (error) {
+      if (!isContextWindowError(error)) throw error
+      lastContextError = error
+      const shrunk = shrinkMessagesForRetry(attemptMessages)
+      if (shrunk.length >= attemptMessages.length) throw error
+      attemptMessages = shrunk
+    }
+  }
+
+  throw lastContextError
+}
+
+function shrinkMessagesForRetry(messages: Message[]): Message[] {
+  if (messages.length <= 1) return messages
+  return messages.slice(Math.floor(messages.length / 2))
 }
