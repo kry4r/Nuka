@@ -149,4 +149,48 @@ describe('SessionManager resume + listPersisted', () => {
     const metas = await m.listPersisted()
     expect(metas).toEqual([])
   })
+
+  it('forkPersisted copies a stored session into a new active persisted child', async () => {
+    const dir = await tmpDir()
+    const store1 = new SessionStore({ dir })
+    const meta1 = new DebouncedMetaWriter(store1, 0)
+    const m1 = new SessionManager({ store: store1, metaWriter: meta1 })
+    const source = m1.start({ providerId: 'p', model: 'gpt-x' })
+    const msg: Message = {
+      role: 'user',
+      id: 'u1',
+      ts: Date.now(),
+      content: [{ type: 'text', text: 'fork me' }],
+    }
+    m1.persist(source, msg)
+    await meta1.flush()
+    await new Promise(r => setTimeout(r, 20))
+
+    const store2 = new SessionStore({ dir })
+    const meta2 = new DebouncedMetaWriter(store2, 0)
+    const m2 = new SessionManager({ store: store2, metaWriter: meta2 })
+
+    const forked = await m2.forkPersisted(source.id)
+    await meta2.flush()
+
+    expect(forked.id).not.toBe(source.id)
+    expect(forked.parentId).toBe(source.id)
+    expect(forked.providerId).toBe('p')
+    expect(forked.model).toBe('gpt-x')
+    expect(forked.messages).toHaveLength(1)
+    expect((forked.messages[0]!.content[0] as any).text).toBe('fork me')
+    expect(m2.active()).toBe(forked)
+
+    const persistedFork = await store2.readMessages(forked.id)
+    expect(persistedFork).toHaveLength(1)
+    expect((persistedFork[0]!.content[0] as any).text).toBe('fork me')
+    const forkMeta = await store2.readMeta(forked.id)
+    expect(forkMeta?.parentId).toBe(source.id)
+    expect(forkMeta?.messageCount).toBe(1)
+  })
+
+  it('forkPersisted throws without a store', async () => {
+    const m = new SessionManager()
+    await expect(m.forkPersisted('some-id')).rejects.toThrow('no store — session fork unavailable')
+  })
 })

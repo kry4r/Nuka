@@ -253,6 +253,9 @@ Checklist:
 - [x] Add Codex-style read-only thread view facade over persisted Nuka sessions.
   - Primary files: `src/core/session/threadView.ts`, `src/core/session/history/index.ts`, `test/core/session/threadView.test.ts`
   - Acceptance: callers can read a stored session as a `thread/read`-style metadata view without resuming it, optionally include reconstructed user-turn groups, and page turns with JSON cursors plus ascending/descending direction. This is a foundation for later `thread/fork` / true resume rather than a new UI yet.
+- [x] Add persisted session fork primitive for Codex-style `thread/fork` foundations.
+  - Primary files: `src/core/session/manager.ts`, `test/core/session/manager.test.ts`
+  - Acceptance: `SessionManager.forkPersisted(id)` reads a stored session, creates a new active child session with `parentId` set to the source id, deep-copies provider/model/mode/usage/messages, persists the new message snapshot, and writes fork metadata through the existing meta writer.
 
 ---
 

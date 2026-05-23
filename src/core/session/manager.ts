@@ -47,6 +47,27 @@ export class SessionManager {
     return forked
   }
 
+  async forkPersisted(id: string): Promise<Session> {
+    if (!this.store) throw new Error('no store — session fork unavailable')
+    const meta = await this.store.readMeta(id)
+    if (!meta) throw new Error(`unknown session: ${id}`)
+    const messages = await this.store.readMessages(id)
+    const forked = createSession({
+      providerId: meta.providerId,
+      model: meta.model,
+    })
+    forked.parentId = meta.id
+    forked.messages = JSON.parse(JSON.stringify(messages)) as Message[]
+    forked.totalUsage = { ...meta.totalUsage }
+    forked.mode = meta.mode
+    forked.updatedAt = Date.now()
+    this.sessions.push(forked)
+    this.activeId = forked.id
+    await this.store.rewriteMessages(forked.id, forked.messages)
+    this.metaWriter?.schedule(forked)
+    return forked
+  }
+
   switch(id: string): Session {
     const s = this.sessions.find(x => x.id === id)
     if (!s) throw new Error(`unknown session: ${id}`)
