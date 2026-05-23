@@ -7,6 +7,7 @@ import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Tool } from '../../../src/core/tools/types'
 import type { AutoCompactSessionAwareOpts as AutoCompactOpts } from '../../../src/core/agent/autoCompact'
+import { MICROCOMPACT_CLEARED_TOOL_RESULT } from '../../../src/core/compact/microCompact'
 
 function stubProvider(scripts: ProviderEvent[][]): LLMProvider {
   let i = 0
@@ -164,6 +165,72 @@ describe('runAgent', () => {
     const sysIdx = session.messages.indexOf(systemMsg!)
     const userIdx = session.messages.findIndex((m) => m.role === 'user')
     expect(sysIdx).toBeLessThan(userIdx)
+  })
+
+  it('microcompacts stale tool results before provider calls without mutating session history', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    session.messages = [
+      {
+        role: 'assistant',
+        id: 'a1',
+        ts: 1,
+        content: [{ type: 'tool_use', id: 'call_1', name: 'Read', input: { path: 'old.ts' } }],
+      },
+      {
+        role: 'tool',
+        toolUseId: 'call_1',
+        content: 'old read result',
+        isError: false,
+        id: 't1',
+        ts: 2,
+      },
+      {
+        role: 'assistant',
+        id: 'a2',
+        ts: 3,
+        content: [{ type: 'tool_use', id: 'call_2', name: 'Read', input: { path: 'new.ts' } }],
+      },
+      {
+        role: 'tool',
+        toolUseId: 'call_2',
+        content: 'new read result',
+        isError: false,
+        id: 't2',
+        ts: 4,
+      },
+    ]
+    let providerMessages: unknown[] = []
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        providerMessages = req.messages
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    for await (const _ of runAgent(
+      { text: 'continue' },
+      session,
+      {
+        provider: { resolveFor: () => ({ provider, model: 'm' }) } as any,
+        tools,
+        permission,
+        microCompact: { keepRecent: 1 },
+      },
+      new AbortController().signal,
+    )) { /* drain */ }
+
+    expect((providerMessages[1] as any).content).toBe(MICROCOMPACT_CLEARED_TOOL_RESULT)
+    expect((providerMessages[3] as any).content).toBe('new read result')
+    expect((session.messages[1] as any).content).toBe('old read result')
   })
 
   it('yields tool_progress events before tool_result when tool calls onProgress', async () => {

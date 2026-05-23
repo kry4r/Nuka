@@ -164,6 +164,9 @@ Checklist:
 - [x] Add pure local microcompact helper for stale tool-result payloads.
   - Primary files: `src/core/compact/microCompact.ts`, `test/core/compact/microCompact.test.ts`
   - Acceptance: helper maps assistant `tool_use` ids to tool names, clears older allowlisted `role: "tool"` contents, keeps the newest N compactable tool results, preserves ids/error flags, returns estimated token savings, and does not mutate the input transcript.
+- [x] Wire local microcompact into `runAgent` as a pre-provider prompt-copy pass.
+  - Primary files: `src/core/agent/loop.ts`, `test/core/agent/loop.test.ts`
+  - Acceptance: when `deps.microCompact` is provided, provider requests receive stale allowlisted tool results replaced by the cleared marker while `session.messages` remains complete for local history, persistence, and future resume/rewind work.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.

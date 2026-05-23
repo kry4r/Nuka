@@ -17,6 +17,10 @@ import { activeToolsForMany } from '../skill/activation'
 import { createProgressPump } from './progressPump'
 import type { AutoCompactSessionAwareOpts } from './autoCompact'
 import { compactSessionAware } from './autoCompact'
+import {
+  microcompactToolResults,
+  type MicrocompactToolResultsOptions,
+} from '../compact/microCompact'
 import { validateWithJsonSchema } from '../tools/validate'
 import { serializeContentBlocks } from '../tools/content'
 import type { HookEntry } from '../hooks/types'
@@ -73,6 +77,11 @@ export type RunAgentDeps = {
    * threshold gate, hook veto, and structural fold.
    */
   autoCompact?: AutoCompactSessionAwareOpts
+  /**
+   * Optional pre-provider local microcompact. This rewrites only the prompt
+   * copy sent to the provider; session history remains intact.
+   */
+  microCompact?: MicrocompactToolResultsOptions
   hooks?: HookEntry[]
   /**
    * Practical Iter JJJ — in-process HookRegistry. When provided, the agent
@@ -364,11 +373,14 @@ export async function* runAgent(
       return [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
     })
 
+    const providerMessages = deps.microCompact
+      ? microcompactToolResults(session.messages, deps.microCompact).messages
+      : session.messages
     const stream = provider.stream(
       {
         model,
         system,
-        messages: session.messages,
+        messages: providerMessages,
         tools: toolSpecs,
         effort: deps.effort,
       },
