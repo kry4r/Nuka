@@ -170,6 +170,9 @@ Checklist:
 - [x] Add config surface for local microcompact.
   - Primary files: `src/core/config/schema.ts`, `test/core/config/load.test.ts`
   - Acceptance: project/user config can set `compact.microCompact.enabled` and `compact.microCompact.keepRecent`; defaults remain compatible with existing configs.
+- [x] Enable local microcompact through CLI wiring.
+  - Primary files: `src/core/config/microCompact.ts`, `src/cli.tsx`, `test/core/config/microCompact.test.ts`
+  - Acceptance: CLI passes `{ keepRecent }` into `runAgent` by default, honors `compact.microCompact.keepRecent`, and disables the pre-provider pass when `compact.microCompact.enabled: false`.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.

@@ -102,6 +102,7 @@ import { runAgent as runAgentLoop } from './core/agent/loop'
 import { compactSession } from './core/compact/compact'
 import type { AutoCompactSessionAwareOpts } from './core/agent/autoCompact'
 import { globalConfigPath } from './core/config/paths'
+import { microCompactOptionsFromConfig } from './core/config/microCompact'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
 import { loadAllSkills } from './core/skill/loadDir'
@@ -1342,6 +1343,7 @@ async function runInteractive(): Promise<void> {
       skills,
       persist: sessions.persist,
       autoCompact: autoCompact!,
+      microCompact: microCompactOptionsFromConfig(config),
       hooks,
       hookRegistry,
       lsp: lspManager,
