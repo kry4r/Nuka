@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { ROLE_AGENTS } from '../../../../src/core/agents/builtin/roles'
 
 describe('ROLE_AGENTS', () => {
-  it('exposes 6 default role defs', () => {
+  it('exposes 7 default role defs', () => {
     expect(ROLE_AGENTS.map(a => a.name)).toEqual([
-      'core:planner', 'core:skeptic', 'core:explorer', 'core:researcher', 'core:implementer', 'core:reviewer',
+      'core:planner', 'core:skeptic', 'core:explorer', 'core:researcher', 'core:implementer', 'core:verifier', 'core:reviewer',
     ])
   })
 
@@ -29,5 +29,16 @@ describe('ROLE_AGENTS', () => {
     expect(explorer.allowedTools).toEqual(['Read', 'Grep', 'Glob', 'LSPQuery'])
     expect(explorer.deniedTools).toEqual(['Edit', 'Write', 'Bash'])
     expect(explorer.maxTurns).toBeLessThanOrEqual(10)
+  })
+
+  it('verifier can run checks but cannot edit files', () => {
+    const verifier = ROLE_AGENTS.find(a => a.name === 'core:verifier')!
+    expect(verifier.description).toMatch(/verif/i)
+    expect(verifier.systemPrompt).toMatch(/VERDICT:/)
+    expect(verifier.systemPrompt).toMatch(/Do not modify/i)
+    expect(verifier.allowedTools).toContain('Bash')
+    expect(verifier.allowedTools).toContain('Read')
+    expect(verifier.deniedTools).toEqual(['Edit', 'Write'])
+    expect(verifier.maxTurns).toBeGreaterThanOrEqual(12)
   })
 })

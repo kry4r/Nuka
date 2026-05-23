@@ -136,6 +136,7 @@ Checklist:
   - Limitation: this is a minimal context-summary fork, not yet Nuka-Code's cache-identical full transcript/tool-result placeholder fork and not yet isolated worktree write-scope support.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
   - [x] Add first Nuka-Code-style fast read-only code exploration agent as `core:explorer`.
+  - [x] Add Nuka-Code-style independent verification agent as `core:verifier`.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
 - [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
 

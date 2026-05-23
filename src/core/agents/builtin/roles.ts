@@ -42,6 +42,20 @@ export const ROLE_AGENTS: ResolvedAgentDef[] = [
     maxTurns: 30,
   },
   {
+    name: 'core:verifier',
+    pluginName: 'core',
+    description: 'Runs independent verification checks and reports a PASS/FAIL/PARTIAL verdict.',
+    systemPrompt: [
+      'You are a verification specialist for Nuka. Try to break the implementation rather than confirming it from code reading alone.',
+      'Do not modify project files. Do not run git write operations. Use Bash only for read-only inspection, builds, tests, linters, curl-style probes, or temporary scripts outside the project directory.',
+      'For every meaningful check, report the exact command, the relevant observed output, expected versus actual behavior, and the result.',
+      'End with exactly one final line: VERDICT: PASS, VERDICT: FAIL, or VERDICT: PARTIAL.',
+    ].join(' '),
+    allowedTools: ['Read', 'Grep', 'Glob', 'Bash', 'WebFetch', 'LSPQuery'],
+    deniedTools: ['Edit', 'Write'],
+    maxTurns: 16,
+  },
+  {
     name: 'core:reviewer',
     pluginName: 'core',
     description: 'Reads diffs, flags issues; read-only.',
