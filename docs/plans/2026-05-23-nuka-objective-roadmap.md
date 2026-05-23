@@ -246,7 +246,9 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
 - [x] Redesign assistant message framing by studying Codex/Nuka-Code patterns; avoid nested cards and noisy borders.
   - Evidence test: `npm test -- test/tui/agentCall.test.tsx test/tui/Messages.static.test.tsx test/ui-auto/humanTuiBaseline.test.ts test/tui/app.test.tsx test/tui/outputStylesRender.test.tsx`
   - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; assistant text renders as quiet indented copy while user turns retain the left marker and tool/agent components keep their structured display.
-- [ ] Make provider/model identity visible in one place with the configured provider name.
+- [x] Make provider/model identity visible in one place with the configured provider name.
+  - Evidence test: `npm test -- test/tui/Status.harness.test.tsx test/tui/planModeBadge.test.tsx test/ui-auto/humanTuiBaseline.test.ts test/tui/app.test.tsx`
+  - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; statusline keeps `Xiaomi Mimo/mimo-v2-pro` visible at 70 columns and preserves context separators when truncating.
 - [ ] Make scroll state discoverable without instructional clutter.
 - [ ] Simplify task/subagent panels so in-flight work is legible at a glance.
 - [ ] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.

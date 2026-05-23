@@ -2,6 +2,7 @@ import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
 import { StatusPanel } from '../../src/tui/Status/StatusPanel'
+import { renderWithViewport } from '../../src/core/testing/explorer/L0/render'
 
 const baseProps = {
   mode: 'idle' as const,
@@ -46,6 +47,36 @@ describe('StatusPanel', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('Nuka/opus-4.7')
     expect(f).not.toContain('custom-2/opus-4.7')
+  })
+
+  it('preserves the configured provider name in narrow compact layout', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        {...baseProps}
+        mode="running"
+        providerId="custom-2"
+        providerName="Xiaomi Mimo"
+        model="mimo-v2-pro"
+        cost={0}
+        pluginCount={0}
+        agentInFlight={1}
+        contextUsed={87_000}
+        contextMax={100_000}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 70, rows: 6 },
+    )
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('Xiaomi Mimo')
+      expect(f).toContain('mimo-v2-pro')
+      expect(f).not.toMatch(/∴context|context[█░]/)
+      expect(f).not.toContain('custom-2')
+    } finally {
+      handle.unmount()
+    }
   })
 
   it('omits zero-value noise', () => {

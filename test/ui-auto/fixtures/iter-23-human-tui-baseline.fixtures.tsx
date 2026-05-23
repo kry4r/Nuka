@@ -217,7 +217,7 @@ const fixture: FixtureDef = {
     },
     'main-screen-narrow': {
       render: () => <MainScreen narrow />,
-      mustContain: ['[running]', 'compact soon'],
+      mustContain: ['[running]', 'Xiaomi Mimo', 'mimo-v2-pro'],
     },
     'long-conversation-desktop': {
       render: () => <ConversationBaseline />,
@@ -257,7 +257,7 @@ const fixture: FixtureDef = {
     },
     'statusline-narrow': {
       render: () => <StatusBaseline narrow />,
-      mustContain: ['Xiaomi', 'compact soon'],
+      mustContain: ['Xiaomi Mimo', 'mimo-v2-pro'],
     },
   },
 }

@@ -220,6 +220,11 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     ctxPct >= 0.9 ? 'compact now'
       : ctxPct >= 0.8 ? 'compact soon'
       : null
+  const contextText = [
+    `∴ context: ${progressBar(props.contextUsed, props.contextMax)} ${Math.floor(ctxPct * 100)}%`,
+    contextTitle.length > 0 ? contextTitle : null,
+    contextPressure,
+  ].filter((x): x is string => x !== null).join(' ')
   const parts: Array<{ id: string; node: React.JSX.Element }> = []
 
   if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', node: <Text color={accent}>{modeBadge(props.mode, iconMode)}</Text> })
@@ -237,15 +242,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   if (has('context')) {
     parts.push({
       id: 'context',
-      node: (
-        <>
-          <Text color={muted}>∴ </Text>
-          <Text color={muted}>context: </Text>
-          <Text color={ctxColor}>{progressBar(props.contextUsed, props.contextMax)} {Math.floor(ctxPct * 100)}%</Text>
-          {contextTitle.length > 0 && <Text color={muted}> {contextTitle}</Text>}
-          {contextPressure && <Text color={ctxColor}> {contextPressure}</Text>}
-        </>
-      ),
+      node: <Text color={ctxColor}>{contextText}</Text>,
     })
   }
 
@@ -268,7 +265,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
         {second.length > 0 && (
           <Box height={1} overflow="hidden">
             {second.map((s, i) => (
-              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'model' ? 1 : 0}>
+              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'context' ? 1 : 0}>
                 {s.node}
               </Box>
             ))}
