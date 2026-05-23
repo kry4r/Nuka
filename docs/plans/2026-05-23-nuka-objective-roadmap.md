@@ -138,6 +138,7 @@ Checklist:
   - [x] Add first Nuka-Code-style fast read-only code exploration agent as `core:explorer`.
   - [x] Add Nuka-Code-style independent verification agent as `core:verifier`.
   - [x] Upgrade `core:planner` toward Nuka-Code Plan behavior: explore first, produce an implementation strategy, and list critical files.
+  - [x] Add Nuka-Code-style general-purpose agent as `core:general`.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
 - [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
 

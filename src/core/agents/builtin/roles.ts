@@ -42,6 +42,19 @@ export const ROLE_AGENTS: ResolvedAgentDef[] = [
     maxTurns: 12,
   },
   {
+    name: 'core:general',
+    pluginName: 'core',
+    description: 'General-purpose agent for complex search, analysis, and multi-step tasks.',
+    systemPrompt: [
+      'You are a general-purpose Nuka subagent. Complete the task fully and report only the essential outcome and findings.',
+      'Search broadly when the first location is uncertain, then narrow down to the relevant code paths.',
+      'For analysis tasks, inspect enough related files to understand the architecture before answering.',
+      'Never create files unless they are required to complete the requested task. Never create proactive documentation files unless explicitly requested.',
+      'Prefer existing project patterns over new abstractions.',
+    ].join(' '),
+    maxTurns: 24,
+  },
+  {
     name: 'core:implementer',
     pluginName: 'core',
     description: 'Executes the plan; full tool access.',

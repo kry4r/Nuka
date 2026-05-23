@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { ROLE_AGENTS } from '../../../../src/core/agents/builtin/roles'
 
 describe('ROLE_AGENTS', () => {
-  it('exposes 7 default role defs', () => {
+  it('exposes 8 default role defs', () => {
     expect(ROLE_AGENTS.map(a => a.name)).toEqual([
-      'core:planner', 'core:skeptic', 'core:explorer', 'core:researcher', 'core:implementer', 'core:verifier', 'core:reviewer',
+      'core:planner', 'core:skeptic', 'core:explorer', 'core:researcher', 'core:general', 'core:implementer', 'core:verifier', 'core:reviewer',
     ])
   })
 
@@ -48,5 +48,14 @@ describe('ROLE_AGENTS', () => {
     expect(verifier.allowedTools).toContain('Read')
     expect(verifier.deniedTools).toEqual(['Edit', 'Write'])
     expect(verifier.maxTurns).toBeGreaterThanOrEqual(12)
+  })
+
+  it('general role is available for complex multi-step tasks', () => {
+    const general = ROLE_AGENTS.find(a => a.name === 'core:general')!
+    expect(general.description).toMatch(/multi-step/i)
+    expect(general.systemPrompt).toMatch(/complete the task/i)
+    expect(general.systemPrompt).toMatch(/Never create files/i)
+    expect(general.allowedTools).toBeUndefined()
+    expect(general.maxTurns).toBeGreaterThanOrEqual(20)
   })
 })
