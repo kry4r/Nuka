@@ -10,6 +10,7 @@ import { SubagentColumn } from './columns/SubagentColumn'
 import { PipelineColumn } from './columns/PipelineColumn'
 import { BackgroundColumn } from './columns/BackgroundColumn'
 import { MessageColumn } from './columns/MessageColumn'
+import { truncateByWidth } from '../../core/stringWidth'
 import type { ColumnsState } from './columnReducer'
 import type { FocusState } from './focusReducer'
 
@@ -32,10 +33,11 @@ export function TasksPanelNew(props: { state: ColumnsState; focus: FocusState; c
       background: props.state.background.rows.length,
       message: props.state.message.rows.length,
     }
+    const summary = buildNarrowTaskSummary(counts, active, idx, props.cols)
     return (
       <Box flexDirection="column">
         <Text>
-          {`[plan(${counts.plan}) sub(${counts.subagent}) pipe(${counts.pipeline}) bg(${counts.background}) msg(${counts.message})] (${idx + 1}/5)`}
+          {summary}
         </Text>
         {active === 'plan'       && <PlanColumn rows={props.state.plan.rows} focused selectedIndex={selectedIndex} />}
         {active === 'subagent'   && <SubagentColumn rows={props.state.subagent.rows} focused selectedIndex={selectedIndex} />}
@@ -54,4 +56,15 @@ export function TasksPanelNew(props: { state: ColumnsState; focus: FocusState; c
       <MessageColumn    rows={props.state.message.rows}    focused={focusedCol === 'message'}    selectedIndex={focusedCol === 'message' ? selectedIndex : undefined} />
     </Box>
   )
+}
+
+function buildNarrowTaskSummary(
+  counts: { plan: number; subagent: number; pipeline: number; background: number; message: number },
+  active: 'plan' | 'subagent' | 'pipeline' | 'background' | 'message',
+  activeIndex: number,
+  cols: number,
+): string {
+  const focus = active === 'subagent' ? 'sub' : active === 'pipeline' ? 'pipe' : active === 'background' ? 'bg' : active === 'message' ? 'msg' : active
+  const summary = `Tasks: plan ${counts.plan} · sub ${counts.subagent} · pipe ${counts.pipeline} · bg ${counts.background} · msg ${counts.message} · focus ${focus} ${activeIndex + 1}/5`
+  return truncateByWidth(summary, Math.max(20, cols))
 }

@@ -249,7 +249,7 @@ const fixture: FixtureDef = {
     },
     'task-panel-narrow': {
       render: () => <TaskBaseline />,
-      mustContain: ['sub(1)', 'core:verifier'],
+      mustContain: ['Tasks:', 'sub 1', 'core:verifier'],
     },
     'statusline-desktop': {
       render: () => <StatusBaseline />,

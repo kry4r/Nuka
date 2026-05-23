@@ -27,12 +27,14 @@ describe('TasksPanel layout', () => {
   it('narrow terminal collapses to single column with row counts', () => {
     const out = render(<TasksPanelNew state={initialColumns()} focus={{ kind: 'prompt' }} cols={80} />).lastFrame() ?? ''
     const lower = out.toLowerCase()
-    // Tab strip in narrow mode lists every column with a (count) suffix.
-    expect(lower).toMatch(/plan\(0\)/)
-    expect(lower).toMatch(/sub\(0\)/)
-    expect(lower).toMatch(/pipe\(0\)/)
-    expect(lower).toMatch(/bg\(0\)/)
-    expect(lower).toMatch(/msg\(0\)/)
+    // Narrow mode uses a readable status summary instead of a dense tab strip.
+    expect(lower).toContain('tasks:')
+    expect(lower).toContain('plan 0')
+    expect(lower).toContain('sub 0')
+    expect(lower).toContain('pipe 0')
+    expect(lower).toContain('bg 0')
+    expect(lower).toContain('msg 0')
+    expect(lower).not.toContain('[plan(')
   })
 
   it('renders subagent agent name with task context', () => {
