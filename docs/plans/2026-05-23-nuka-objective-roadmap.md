@@ -260,4 +260,6 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
 - [x] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.
   - Evidence test: `npm test -- test/tui/LayoutGuards.harness.test.tsx test/tui/PromptInput.cursorAnsi.test.tsx test/tui/Status.harness.test.tsx test/tui/toolCall.test.tsx`
   - Coverage: `LayoutGuards.harness` now runs L1 checks for narrow statusline provider/model truncation, bordered tool progress overflow/border bleed, and native cursor declaration in the full App viewport.
-- [ ] Keep `stringWidth` / `truncateByWidth` in every width-sensitive path.
+- [x] Keep `stringWidth` / `truncateByWidth` in every width-sensitive path.
+  - Evidence test: `npm test -- test/tui/LayoutGuards.harness.test.tsx test/tui/Status.harness.test.tsx test/ui-auto/humanTuiBaseline.test.ts`
+  - Coverage: audited terminal-visible `.length`/`.slice` paths; statusline cwd shortening now uses display-width left truncation so CJK paths preserve the leaf directory and context segment in narrow viewports.

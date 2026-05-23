@@ -68,6 +68,40 @@ describe('TUI layout guards', () => {
     }
   })
 
+  it('keeps wide-character cwd from crowding out context in the statusline', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        mode="running"
+        providerId="custom"
+        providerName="Xiaomi Mimo"
+        model="mimo-v2-pro"
+        cwd="/data/项目/阶段/超级超级超级超级超级超级超级超级长路径/Nuka"
+        gitBranch={{ branch: 'main', dirty: true }}
+        contextUsed={81_000}
+        contextMax={100_000}
+        inputTokens={59_900}
+        outputTokens={186}
+        cost={0}
+        pluginCount={0}
+        sessionPluginCount={0}
+        agentInFlight={1}
+        hiddenSegments={[]}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 50, rows: 8 },
+    )
+    try {
+      await expectNoL1Errors(handle, { cols: 50, rows: 8 })
+
+      const view = handle.grid().asciiView
+      expect(view).toContain('Nuka')
+      expect(view).toContain('context:')
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('keeps bordered tool progress inside a narrow viewport', async () => {
     const handle = renderWithViewport(
       <ToolCall

@@ -91,11 +91,27 @@ function modeBadge(mode: StatusMode, iconMode: IconMode): string {
   return `[${label}]`
 }
 
-function shortenCwd(cwd: string): string {
+function shortenCwd(cwd: string, maxColumns = 42): string {
   // Truncate from the left so the leaf directory stays visible.
   const home = process.env.HOME
   const display = home && cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd
-  return display.length > 42 ? '…' + display.slice(display.length - 41) : display
+  return truncateLeftByWidth(display, maxColumns)
+}
+
+function truncateLeftByWidth(text: string, maxColumns: number): string {
+  if (stringWidth(text) <= maxColumns) return text
+  const budget = Math.max(0, maxColumns - stringWidth('…'))
+  let out = ''
+  let used = 0
+  const segments = Array.from(new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(text), part => part.segment)
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const segment = segments[i]!
+    const width = stringWidth(segment)
+    if (used + width > budget) break
+    out = segment + out
+    used += width
+  }
+  return `…${out}`
 }
 
 function progressBar(used: number, max: number): string {
@@ -173,6 +189,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const branchText = props.gitBranch?.branch
     ? `${props.gitBranch.branch}${dirtyMark}`
     : null
+  const cwdBudget = columns < 60 ? Math.max(16, Math.floor(columns * 0.42)) : 42
   const providerLabel = (props.providerName?.trim() || props.providerId || '—').trim()
   const modelLabel = truncateByWidth(props.model, Math.max(12, Math.floor(columns * 0.24)))
   const providerBudget = Math.max(16, Math.floor(columns * 0.32))
@@ -235,7 +252,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
 
   if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', node: <Text color={accent}>{modeBadge(props.mode, iconMode)}</Text> })
   if (has('plan') && props.planMode) parts.push({ id: 'plan', node: <Text color={warn} bold>[PLAN MODE]</Text> })
-  if (has('cwd')) parts.push({ id: 'cwd', node: <Text color={accent}>{shortenCwd(props.cwd)}</Text> })
+  if (has('cwd')) parts.push({ id: 'cwd', node: <Text color={accent}>{shortenCwd(props.cwd, cwdBudget)}</Text> })
   if (has('cwd') && branchText) parts.push({ id: 'git', node: <Text color={props.gitBranch?.dirty ? warn : muted}>{branchText}</Text> })
   if (has('model')) {
     parts.push({
