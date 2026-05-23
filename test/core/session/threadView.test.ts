@@ -39,10 +39,20 @@ function assistant(id: string, text: string, ts: number): Message {
   }
 }
 
-async function writeThread(messages: Message[]): Promise<string> {
-  const session = createSession({ providerId: 'p', model: 'm' })
+async function writeThread(
+  messages: Message[],
+  opts: {
+    providerId?: string
+    model?: string
+    updatedAt?: number
+  } = {},
+): Promise<string> {
+  const session = createSession({
+    providerId: opts.providerId ?? 'p',
+    model: opts.model ?? 'm',
+  })
   session.createdAt = 100
-  session.updatedAt = 900
+  session.updatedAt = opts.updatedAt ?? 900
   session.messages = messages
   for (const message of messages) {
     await store.appendMessage(session.id, message)
@@ -93,6 +103,48 @@ describe('ThreadViewStore.read', () => {
 
   it('returns null for unknown threads', async () => {
     expect(await threads.read('missing')).toBeNull()
+  })
+})
+
+describe('ThreadViewStore.list', () => {
+  it('pages thread metadata newest-first with JSON cursors', async () => {
+    const first = await writeThread([user('u1', 'first prompt', 1)], { updatedAt: 100 })
+    const second = await writeThread([user('u2', 'second prompt', 2)], { updatedAt: 200 })
+    const third = await writeThread([user('u3', 'third prompt', 3)], { updatedAt: 300 })
+
+    const firstPage = await threads.list({ limit: 2 })
+
+    expect(firstPage.threads.map(thread => thread.id)).toEqual([third, second])
+    expect(JSON.parse(firstPage.nextCursor ?? '{}')).toEqual({
+      threadId: second,
+      includeAnchor: false,
+    })
+
+    const secondPage = await threads.list({
+      limit: 2,
+      cursor: firstPage.nextCursor,
+    })
+    expect(secondPage.threads.map(thread => thread.id)).toEqual([first])
+    expect(secondPage.nextCursor).toBeUndefined()
+  })
+
+  it('filters thread metadata by provider, model, and search text', async () => {
+    const matching = await writeThread([user('u1', 'needle prompt', 1)])
+    await writeThread(
+      [user('u2', 'other prompt', 2)],
+      {
+        providerId: 'other-provider',
+        model: 'other-model',
+      },
+    )
+
+    const page = await threads.list({
+      providerIds: ['p'],
+      models: ['m'],
+      searchTerm: 'needle',
+    })
+
+    expect(page.threads.map(thread => thread.id)).toEqual([matching])
   })
 })
 

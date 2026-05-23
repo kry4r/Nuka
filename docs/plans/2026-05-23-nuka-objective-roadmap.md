@@ -256,6 +256,9 @@ Checklist:
 - [x] Add persisted session fork primitive for Codex-style `thread/fork` foundations.
   - Primary files: `src/core/session/manager.ts`, `test/core/session/manager.test.ts`
   - Acceptance: `SessionManager.forkPersisted(id)` reads a stored session, creates a new active child session with `parentId` set to the source id, deep-copies provider/model/mode/usage/messages, persists the new message snapshot, and writes fork metadata through the existing meta writer.
+- [x] Add Codex-style paged thread metadata listing over persisted sessions.
+  - Primary files: `src/core/session/threadView.ts`, `src/core/session/history/index.ts`, `test/core/session/threadView.test.ts`
+  - Acceptance: `ThreadViewStore.list()` returns `thread/list`-style metadata pages with JSON cursors, newest-first default ordering, optional ascending direction, and provider/model/search filters without resuming sessions.
 
 ---
 

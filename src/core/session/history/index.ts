@@ -10,6 +10,8 @@ export type {
 } from './types'
 export type {
   ThreadReadOptions,
+  ThreadListOptions,
+  ThreadListPage,
   ThreadSortDirection,
   ThreadStatus,
   ThreadTurn,
