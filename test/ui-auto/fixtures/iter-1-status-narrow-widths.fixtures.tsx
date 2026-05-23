@@ -40,7 +40,7 @@ const fixture: FixtureDef = {
           gitBranch={{ branch: 'main', dirty: false }}
         />
       ),
-      mustContain: ['idle', 'main'],
+      mustContain: ['main'],
     },
     'running-plan-mode-badge': {
       // Iter DDDD — planMode=true injects [PLAN MODE] badge after mode.

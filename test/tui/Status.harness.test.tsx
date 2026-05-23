@@ -79,6 +79,36 @@ describe('StatusPanel', () => {
     }
   })
 
+  it('splits compact statusline before provider model text is clipped', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        {...baseProps}
+        mode="running"
+        providerId="xiaomi-mimo"
+        providerName="Xiaomi Mimo"
+        model="mimo-v2-pro"
+        cwd="/data/xtzhang/Nuka"
+        gitBranch={{ branch: 'main', dirty: true }}
+        cost={0}
+        pluginCount={0}
+        agentInFlight={1}
+        contextUsed={174_000}
+        contextMax={200_000}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 100, rows: 8 },
+    )
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('Xiaomi Mimo/mimo-v2-pro')
+      expect(f).not.toContain('Xiaomi Mimo/  1 agents')
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('omits zero-value noise', () => {
     const { lastFrame } = render(
       <StatusPanel

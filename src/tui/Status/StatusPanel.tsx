@@ -126,6 +126,41 @@ function backgroundCount(tm?: TaskManager): number {
   return tm.list().filter(t => t.state === 'running' || t.state === 'pending').length
 }
 
+type StatusPart = {
+  id: string
+  text: string
+  node: React.JSX.Element
+}
+
+function statusLineWidth(parts: readonly StatusPart[]): number {
+  return parts.reduce((total, part, index) => (
+    total + stringWidth(part.text) + (index > 0 ? 1 : 0)
+  ), 0)
+}
+
+function splitStatusLines(parts: readonly StatusPart[], columns: number): StatusPart[][] {
+  if (parts.length === 0) return []
+  if (statusLineWidth(parts) <= columns) return [Array.from(parts)]
+
+  const headlineIds = new Set(['mode', 'plan', 'cwd', 'git'])
+  const contextIds = new Set(['context'])
+  const headline = parts.filter(part => headlineIds.has(part.id))
+  const context = parts.filter(part => contextIds.has(part.id))
+  const details = parts.filter(part => !headlineIds.has(part.id) && !contextIds.has(part.id))
+  const detailContext = [...details, ...context]
+  const lines: StatusPart[][] = []
+
+  if (headline.length > 0) lines.push(headline)
+  if (detailContext.length > 0 && statusLineWidth(detailContext) <= columns) {
+    lines.push(detailContext)
+  } else {
+    if (details.length > 0) lines.push(details)
+    if (context.length > 0) lines.push(context)
+  }
+
+  return lines
+}
+
 export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const theme = useTheme()
   const tColors = theme.colors
@@ -137,6 +172,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
 
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 80
+  const contentColumns = Math.max(1, columns - 2)
   const iconMode: IconMode = props.iconMode ?? 'icon'
 
   const hidden = new Set(props.hiddenSegments ?? [])
@@ -189,11 +225,11 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const branchText = props.gitBranch?.branch
     ? `${props.gitBranch.branch}${dirtyMark}`
     : null
-  const cwdBudget = columns < 60 ? Math.max(16, Math.floor(columns * 0.42)) : 42
+  const cwdBudget = contentColumns < 60 ? Math.max(16, Math.floor(contentColumns * 0.42)) : 42
   const providerLabel = (props.providerName?.trim() || props.providerId || '—').trim()
-  const modelLabel = truncateByWidth(props.model, Math.max(12, Math.floor(columns * 0.24)))
-  const providerBudget = Math.max(16, Math.floor(columns * 0.32))
-  const providerModelBudget = Math.max(providerBudget + stringWidth(modelLabel) + 1, Math.floor(columns * 0.58))
+  const modelLabel = truncateByWidth(props.model, Math.max(12, Math.floor(contentColumns * 0.24)))
+  const providerBudget = Math.max(16, Math.floor(contentColumns * 0.32))
+  const providerModelBudget = Math.max(providerBudget + stringWidth(modelLabel) + 1, Math.floor(contentColumns * 0.58))
   const providerModel = truncateByWidth(
     `${truncateByWidth(providerLabel, providerBudget)}/${modelLabel}`,
     providerModelBudget,
@@ -248,77 +284,52 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     contextTitle.length > 0 ? contextTitle : null,
     contextPressure,
   ].filter((x): x is string => x !== null).join(' ')
-  const parts: Array<{ id: string; node: React.JSX.Element }> = []
+  const parts: StatusPart[] = []
 
-  if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', node: <Text color={accent}>{modeBadge(props.mode, iconMode)}</Text> })
-  if (has('plan') && props.planMode) parts.push({ id: 'plan', node: <Text color={warn} bold>[PLAN MODE]</Text> })
-  if (has('cwd')) parts.push({ id: 'cwd', node: <Text color={accent}>{shortenCwd(props.cwd, cwdBudget)}</Text> })
-  if (has('cwd') && branchText) parts.push({ id: 'git', node: <Text color={props.gitBranch?.dirty ? warn : muted}>{branchText}</Text> })
+  const modeText = modeBadge(props.mode, iconMode)
+  if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', text: modeText, node: <Text color={accent}>{modeText}</Text> })
+  if (has('plan') && props.planMode) parts.push({ id: 'plan', text: '[PLAN MODE]', node: <Text color={warn} bold>[PLAN MODE]</Text> })
+  if (has('cwd')) {
+    const cwdText = shortenCwd(props.cwd, cwdBudget)
+    parts.push({ id: 'cwd', text: cwdText, node: <Text color={accent}>{cwdText}</Text> })
+  }
+  if (has('cwd') && branchText) parts.push({ id: 'git', text: branchText, node: <Text color={props.gitBranch?.dirty ? warn : muted}>{branchText}</Text> })
   if (has('model')) {
+    const text = `${providerModel}${props.effort ? ` ${props.effort}` : ''}`
     parts.push({
       id: 'model',
-      node: <Text color={muted}>{providerModel}{props.effort ? ` ${props.effort}` : ''}</Text>,
+      text,
+      node: <Text color={muted}>{text}</Text>,
     })
   }
-  if (has('cost') && props.cost > 0) parts.push({ id: 'cost', node: <Text color={muted}>${props.cost.toFixed(4)}</Text> })
-  if (has('counts') && hasCounts) parts.push({ id: 'counts', node: <Text color={muted}>{countText}</Text> })
+  if (has('cost') && props.cost > 0) {
+    const text = `$${props.cost.toFixed(4)}`
+    parts.push({ id: 'cost', text, node: <Text color={muted}>{text}</Text> })
+  }
+  if (has('counts') && hasCounts) parts.push({ id: 'counts', text: countText, node: <Text color={muted}>{countText}</Text> })
   if (has('context')) {
     parts.push({
       id: 'context',
+      text: contextText,
       node: <Text color={ctxColor}>{contextText}</Text>,
     })
   }
 
   if (parts.length === 0 && !showStatusLineRow) return null
 
-  if (props.layout === 'compact' && columns < 72 && parts.length > 3) {
-    const first = parts.filter(p => p.id === 'mode' || p.id === 'plan' || p.id === 'cwd' || p.id === 'git')
-    const second = parts.filter(p => !first.includes(p))
-    const secondMain = columns < 60 ? second.filter(p => p.id !== 'context') : second
-    const secondContext = columns < 60 ? second.filter(p => p.id === 'context') : []
-    return (
-      <Box flexDirection="column" paddingX={1} flexShrink={0}>
-        {first.length > 0 && (
-          <Box height={1} overflow="hidden">
-            {first.map((s, i) => (
-              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' ? 1 : 0}>
-                {s.node}
-              </Box>
-            ))}
-          </Box>
-        )}
-        {secondMain.length > 0 && (
-          <Box height={1} overflow="hidden">
-            {secondMain.map((s, i) => (
-              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'context' ? 1 : 0}>
-                {s.node}
-              </Box>
-            ))}
-          </Box>
-        )}
-        {secondContext.length > 0 && (
-          <Box height={1} overflow="hidden">
-            {secondContext.map((s, i) => (
-              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={1}>
-                {s.node}
-              </Box>
-            ))}
-          </Box>
-        )}
-        {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
-      </Box>
-    )
-  }
+  const lines = splitStatusLines(parts, contentColumns)
 
   return (
     <Box flexDirection="column" paddingX={1} flexShrink={0}>
-      <Box height={1} overflow="hidden">
-        {parts.map((s, i) => (
-          <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'model' ? 1 : 0}>
-            {s.node}
-          </Box>
-        ))}
-      </Box>
+      {lines.map((line, lineIndex) => (
+        <Box key={lineIndex} height={1} overflow="hidden">
+          {line.map((s, i) => (
+            <Box key={`${lineIndex}-${s.id}`} marginLeft={i > 0 ? 1 : 0} flexShrink={0}>
+              {s.node}
+            </Box>
+          ))}
+        </Box>
+      ))}
       {showStatusLineRow && <Box height={1} overflow="hidden">{renderStatusLineRow()}</Box>}
     </Box>
   )
