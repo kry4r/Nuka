@@ -99,7 +99,7 @@ export type StatusLineConfig = z.infer<typeof StatusLineConfigSchema>
  * Phase 12 §4.5 — controls which segments render in the unified Status
  * panel. `hidden` is a list of segment ids; everything else shows.
  *
- * Segment ids (Phase 13): mode, model, cwd, context, cost, counts.
+ * Segment ids (Phase 13): mode, model, cwd, context, goal, cost, counts.
  * Plus `status-line` for the optional legacy custom row.
  * (Phase 12 had `cost-time`; migrated to `cost` in Phase 13 §5.1.)
  *

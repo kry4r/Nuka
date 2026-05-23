@@ -171,6 +171,35 @@ describe('App', () => {
     expect(f).not.toContain('custom-2/gpt-5.5')
   })
 
+  it('renders the active session goal in the statusline', () => {
+    const sessions = new SessionManager()
+    const session = sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    sessions.setGoal(session.id, {
+      objective: 'ship statusline goal',
+      status: 'active',
+    })
+    const slash = new SlashRegistry()
+
+    const { lastFrame } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    expect(lastFrame() ?? '').toContain('goal: ship statusline goal')
+  })
+
   it('shows manual compact progress while /compact is running', async () => {
     const sessions = new SessionManager()
     sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })

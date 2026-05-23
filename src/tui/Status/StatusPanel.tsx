@@ -14,6 +14,7 @@ import { useTheme } from '../../core/theme/context'
 import { stringWidth, truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette } from '../theme'
 import type { StatusLineConfig } from '../../core/config/schema'
+import type { SessionGoal } from '../../core/session/types'
 import type { TaskManager } from '../../core/tasks/manager'
 import { execFirstLine, template, type StatusLineCtx } from './statusLine'
 
@@ -70,6 +71,8 @@ export type StatusPanelProps = {
    * is hidden when false/undefined (idle path stays clean).
    */
   planMode?: boolean
+  /** Active thread goal, when set through /goal or restored from session meta. */
+  goal?: Pick<SessionGoal, 'objective' | 'status'>
 }
 
 function fmtTokens(n: number): string {
@@ -126,6 +129,11 @@ function backgroundCount(tm?: TaskManager): number {
   return tm.list().filter(t => t.state === 'running' || t.state === 'pending').length
 }
 
+function goalLabel(goal: Pick<SessionGoal, 'objective' | 'status'>): string {
+  const prefix = goal.status === 'active' ? 'goal' : goal.status
+  return `${prefix}: ${goal.objective}`
+}
+
 type StatusPart = {
   id: string
   text: string
@@ -142,7 +150,7 @@ function splitStatusLines(parts: readonly StatusPart[], columns: number): Status
   if (parts.length === 0) return []
 
   const metricIds = new Set(['context', 'cost', 'counts'])
-  const locationIds = new Set(['mode', 'plan', 'cwd', 'git'])
+  const locationIds = new Set(['mode', 'plan', 'cwd', 'git', 'goal'])
   const modelIds = new Set(['model'])
   const metrics = parts.filter(part => metricIds.has(part.id))
   const location = parts.filter(part => locationIds.has(part.id))
@@ -248,7 +256,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     effectiveHidden.add(h === 'cost-time' ? 'cost' : h)
   }
 
-  const visibleIds = ['mode', 'plan', 'cwd', 'model', 'context', 'cost', 'counts']
+  const visibleIds = ['mode', 'plan', 'cwd', 'model', 'context', 'cost', 'counts', 'goal']
     .filter(id => !effectiveHidden.has(id))
   const showStatusLineRow = !!props.statusLineConfig && !hidden.has('status-line')
 
@@ -296,6 +304,12 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const modeText = modeBadge(props.mode, iconMode)
   if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', text: modeText, node: <Text color={accent}>{modeText}</Text> })
   if (has('plan') && props.planMode) parts.push({ id: 'plan', text: '[PLAN MODE]', node: <Text color={warn} bold>[PLAN MODE]</Text> })
+  if (has('goal') && props.goal && props.goal.status !== 'complete') {
+    const goalBudget = Math.max(18, Math.floor(contentColumns * 0.36))
+    const text = truncateByWidth(goalLabel(props.goal), goalBudget)
+    const color = props.goal.status === 'blocked' ? warn : muted
+    parts.push({ id: 'goal', text, node: <Text color={color}>{text}</Text> })
+  }
   if (has('cwd')) {
     const cwdText = shortenCwd(props.cwd, cwdBudget)
     parts.push({ id: 'cwd', text: cwdText, node: <Text color={accent}>{cwdText}</Text> })

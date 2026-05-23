@@ -3,7 +3,7 @@ import type { SlashCommand, SlashResult } from './types'
 import { saveStatusBarHidden, saveConfigPatch } from '../core/config/save'
 
 const SEGMENTS = [
-  'mode', 'model', 'cwd', 'context', 'cost', 'counts',
+  'mode', 'model', 'cwd', 'context', 'goal', 'cost', 'counts',
 ] as const
 
 export type SegmentName = typeof SEGMENTS[number]

@@ -54,6 +54,49 @@ describe('StatusPanel', () => {
     expect(f).not.toContain('custom-2/opus-4.7')
   })
 
+  it('shows the active goal in the location row', () => {
+    const { lastFrame } = render(
+      <StatusPanel
+        {...baseProps}
+        goal={{ objective: 'finish provider polish', status: 'active' }}
+        layout="dense"
+      />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('goal: finish provider polish')
+    expect(f).not.toContain('goal: active')
+  })
+
+  it('truncates long goal text by display width in narrow layouts', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        {...baseProps}
+        cwd="/data/xtzhang/Nuka"
+        gitBranch={{ branch: 'main', dirty: true }}
+        cost={0}
+        pluginCount={0}
+        contextUsed={20_000}
+        contextMax={200_000}
+        goal={{
+          objective: '完成当前bug修复之后继续复刻Nuka-Code subagent系统',
+          status: 'blocked',
+        }}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 70, rows: 8 },
+    )
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('blocked:')
+      expect(f).toContain('…')
+      expect(f).not.toContain('完成当前bug修复之后继续复刻Nuka-Code subagent系统')
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('preserves the configured provider name in narrow compact layout', async () => {
     const handle = renderWithViewport(
       <StatusPanel

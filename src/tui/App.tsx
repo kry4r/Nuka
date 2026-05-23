@@ -1162,6 +1162,7 @@ export function App(props: AppProps): React.JSX.Element {
           statusLineConfig={props.config.statusLine}
           startedAt={session.createdAt}
           planMode={session.mode === 'plan'}
+          goal={session.goal}
         />
       )}
       </Box>
