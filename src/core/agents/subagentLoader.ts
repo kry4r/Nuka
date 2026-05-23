@@ -9,9 +9,9 @@
 //   • cwd/.nuka/subagents/         — project-scoped definitions
 //   • home/.nuka/subagents/        — user-scoped definitions
 //
-// YAML/JSON files use Nuka's explicit `systemPrompt` field. Markdown files
-// use the Nuka-Code shape: YAML frontmatter for metadata and the body as the
-// system prompt.
+// YAML/JSON files use Nuka's explicit `systemPrompt` field, with Nuka-Code's
+// `prompt` alias accepted for compatibility. Markdown files use the Nuka-Code
+// shape: YAML frontmatter for metadata and the body as the system prompt.
 //
 // Per-file errors in `loadSubagentsFromDir` are isolated — one bad file
 // surfaces in `errors[]` and the rest of the batch still loads. Missing
@@ -87,7 +87,8 @@ const SubagentFileSchema = z
         "name must match /^[a-z][a-z0-9_-]*$/ (lowercase, namespace-safe)",
       ),
     description: z.string().min(1, 'description must be a non-empty string'),
-    systemPrompt: z.string().min(1, 'systemPrompt must be a non-empty string'),
+    systemPrompt: z.string().min(1, 'systemPrompt must be a non-empty string').optional(),
+    prompt: z.string().min(1, 'prompt must be a non-empty string').optional(),
     tools: z.array(z.string()).optional(),
     allowedTools: z.array(z.string()).optional(),
     deniedTools: z.array(z.string()).optional(),
@@ -118,6 +119,13 @@ const SubagentFileSchema = z
         "specify either 'tools' or 'allowedTools' — not both (they are aliases)",
     },
   )
+  .refine(
+    (d) => (d.systemPrompt !== undefined) !== (d.prompt !== undefined),
+    {
+      message:
+        "specify exactly one of 'systemPrompt' or 'prompt' (they are aliases)",
+    },
+  )
 
 type SubagentFile = z.infer<typeof SubagentFileSchema>
 
@@ -144,7 +152,7 @@ function assembleDefinition(
   const def: SubagentDefinition = {
     name: parsed.name,
     description: parsed.description,
-    systemPrompt: parsed.systemPrompt,
+    systemPrompt: parsed.systemPrompt ?? parsed.prompt!,
     sourcePath: filePath,
   }
   if (tools !== undefined) def.tools = tools

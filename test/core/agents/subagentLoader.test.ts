@@ -73,6 +73,24 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.keywords).toEqual(['plan', 'design'])
   })
 
+  it('accepts Nuka-Code JSON prompt as a systemPrompt alias', async () => {
+    const filePath = join(dir, 'nukacode-worker.json')
+    await writeFile(
+      filePath,
+      JSON.stringify({
+        name: 'nukacode-worker',
+        description: 'implements from a Nuka-Code agent definition',
+        prompt: 'You are a Nuka-Code compatible worker.',
+        tools: ['Read', 'Edit'],
+      }),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.systemPrompt).toBe('You are a Nuka-Code compatible worker.')
+    expect(def.tools).toEqual(['Read', 'Edit'])
+  })
+
   it('loads a .yml file (alternate YAML extension)', async () => {
     const filePath = join(dir, 'tester.yml')
     await writeFile(
@@ -346,6 +364,16 @@ describe('loadSubagentFile — invalid shape', () => {
       description: 'd',
     })
     await expect(loadSubagentFile(fp)).rejects.toThrow(/systemPrompt/)
+  })
+
+  it('throws when both systemPrompt and prompt are supplied', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      prompt: 'alias',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/systemPrompt.*prompt/)
   })
 
   it('throws when tools is not an array', async () => {
