@@ -24,8 +24,25 @@ export type TaskMeta = {
   lastEventSeq?: number
 }
 
+export type TaskTranscriptMessage =
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string }
+
+export type TaskTranscript = {
+  id: string
+  agentId?: string
+  agentName?: string
+  providerId?: string
+  model?: string
+  messages: TaskTranscriptMessage[]
+}
+
 export function metaPath(home: string, id: string): string {
   return path.join(tasksDir(home), `${id}.meta.json`)
+}
+
+export function transcriptPath(home: string, id: string): string {
+  return path.join(tasksDir(home), `${id}.transcript.json`)
 }
 
 export function writeMeta(home: string, meta: TaskMeta): void {
@@ -36,11 +53,29 @@ export function writeMeta(home: string, meta: TaskMeta): void {
   fs.renameSync(tmp, file)
 }
 
+export function writeTranscript(home: string, transcript: TaskTranscript): void {
+  const file = transcriptPath(home, transcript.id)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const tmp = `${file}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`
+  fs.writeFileSync(tmp, JSON.stringify(transcript, null, 2), 'utf8')
+  fs.renameSync(tmp, file)
+}
+
 export function readMeta(home: string, id: string): TaskMeta | undefined {
   const file = metaPath(home, id)
   if (!fs.existsSync(file)) return undefined
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8')) as TaskMeta
+  } catch {
+    return undefined
+  }
+}
+
+export function readTranscript(home: string, id: string): TaskTranscript | undefined {
+  const file = transcriptPath(home, id)
+  if (!fs.existsSync(file)) return undefined
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')) as TaskTranscript
   } catch {
     return undefined
   }
@@ -108,5 +143,29 @@ function readFinalOutput(file: string): string | undefined {
       : text
   } catch {
     return undefined
+  }
+}
+
+export function transcriptFromMeta(meta: TaskMeta): TaskTranscript | undefined {
+  if (meta.kind !== 'local_agent') return undefined
+  const messages: TaskTranscriptMessage[] = []
+  const userContent = [meta.agentTask, meta.agentContext]
+    .map(value => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join('\n\n')
+  if (userContent) {
+    messages.push({ role: 'user', content: userContent })
+  }
+  if (meta.finalOutput?.trim()) {
+    messages.push({ role: 'assistant', content: meta.finalOutput.trim() })
+  }
+  if (messages.length === 0) return undefined
+  return {
+    id: meta.id,
+    agentId: meta.agentId,
+    agentName: meta.agentName,
+    providerId: meta.providerId,
+    model: meta.model,
+    messages,
   }
 }

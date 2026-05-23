@@ -10,7 +10,7 @@
 // hot-tip explicitly authorises this in lieu of ulid).
 
 import { randomUUID } from 'node:crypto'
-import { writeMeta, fromTask } from './meta'
+import { writeMeta, writeTranscript, fromTask, transcriptFromMeta } from './meta'
 import { runBash } from './run-bash'
 import { runAgent } from './run-agent'
 import { runTeammate } from './run-teammate'
@@ -306,6 +306,11 @@ export class TaskManager {
   }
 
   private persistMeta(task: Task): void {
-    try { writeMeta(this.home, fromTask(task)) } catch { /* non-fatal */ }
+    try {
+      const meta = fromTask(task)
+      writeMeta(this.home, meta)
+      const transcript = transcriptFromMeta(meta)
+      if (transcript) writeTranscript(this.home, transcript)
+    } catch { /* non-fatal */ }
   }
 }

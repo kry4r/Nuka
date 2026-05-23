@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { writeMeta, readMeta, fromTask, findLatestMetaByAgentId } from '../../../src/core/tasks/meta'
+import { writeMeta, readMeta, fromTask, findLatestMetaByAgentId, transcriptFromMeta, writeTranscript, readTranscript } from '../../../src/core/tasks/meta'
 
 describe('task meta sidecar', () => {
   let home: string
@@ -101,5 +101,50 @@ describe('task meta sidecar', () => {
 
     expect(found?.id).toBe('newer')
     expect(found?.agentContext).toBe('latest context')
+  })
+
+  it('round-trips a transcript sidecar', () => {
+    writeTranscript(home, {
+      id: 'task-1',
+      agentId: 'agent-1',
+      agentName: 'core:reviewer',
+      messages: [
+        { role: 'user', content: 'task' },
+        { role: 'assistant', content: 'answer' },
+      ],
+    })
+
+    expect(readTranscript(home, 'task-1')).toMatchObject({
+      id: 'task-1',
+      agentId: 'agent-1',
+      messages: [
+        { role: 'user', content: 'task' },
+        { role: 'assistant', content: 'answer' },
+      ],
+    })
+  })
+
+  it('builds a local-agent transcript from terminal metadata', () => {
+    const transcript = transcriptFromMeta({
+      id: 'task-1',
+      kind: 'local_agent',
+      state: 'completed',
+      startedAt: 1,
+      agentId: 'agent-1',
+      agentName: 'core:reviewer',
+      agentTask: 'task',
+      agentContext: 'context',
+      finalOutput: 'answer',
+    })
+
+    expect(transcript).toMatchObject({
+      id: 'task-1',
+      agentId: 'agent-1',
+      agentName: 'core:reviewer',
+      messages: [
+        { role: 'user', content: 'task\n\ncontext' },
+        { role: 'assistant', content: 'answer' },
+      ],
+    })
   })
 })

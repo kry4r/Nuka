@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { TaskManager } from '../../../src/core/tasks/manager'
 import type { LocalAgentSpec } from '../../../src/core/tasks/types'
-import { readMeta } from '../../../src/core/tasks/meta'
+import { readMeta, readTranscript } from '../../../src/core/tasks/meta'
 
 async function newHome(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), 'nuka-tasks-'))
@@ -110,6 +110,38 @@ describe('TaskManager', () => {
       state: 'completed',
       agentId: 'agent-final-output',
       finalOutput: ['first line', 'final answer'].join('\n'),
+    })
+  })
+
+  it('persists a local_agent transcript sidecar after completion', async () => {
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: inspect',
+      agentId: 'agent-transcript',
+      agentName: 'core:reviewer',
+      task: 'inspect this',
+      context: 'prior context',
+      providerId: 'p',
+      model: 'm',
+      agentRunner: async function* () {
+        yield { text: 'final answer' }
+      },
+    })
+
+    await m.drain()
+    const transcript = readTranscript(home, t.id)
+
+    expect(transcript).toMatchObject({
+      id: t.id,
+      agentId: 'agent-transcript',
+      agentName: 'core:reviewer',
+      providerId: 'p',
+      model: 'm',
+      messages: [
+        { role: 'user', content: 'inspect this\n\nprior context' },
+        { role: 'assistant', content: 'final answer' },
+      ],
     })
   })
 

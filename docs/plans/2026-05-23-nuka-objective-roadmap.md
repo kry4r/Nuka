@@ -124,7 +124,9 @@ Checklist:
 - [x] Add explicit `fork_context` input guard to `spawn_agent`.
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `spawn_agent` schema accepts `fork_context`, but `fork_context: true` returns a clear unsupported error and does not enqueue work until true parent-transcript fork support lands.
-- [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
+- [x] Add resumable subagent state, including final output lookup and in-flight task metadata.
+  - Primary files: `src/core/tasks/meta.ts`, `src/core/tasks/manager.ts`, `test/core/tasks/meta.test.ts`, `test/core/tasks/manager.test.ts`
+  - Acceptance: local-agent task sidecars persist in-flight metadata, terminal `finalOutput`, and a `<task>.transcript.json` baseline containing the user task/context and assistant final output for future true resume/fork reconstruction.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
