@@ -134,14 +134,16 @@ Checklist:
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `spawn_agent(..., fork_context: true)` injects a textual parent-session context summary into the child `local_agent` context and preserves explicit caller context; recursion guard still prevents subagents from forking further.
   - Limitation: this is a minimal context-summary fork, not yet Nuka-Code's cache-identical full transcript/tool-result placeholder fork and not yet isolated worktree write-scope support.
-- [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
+- [x] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
   - [x] Add first Nuka-Code-style fast read-only code exploration agent as `core:explorer`.
   - [x] Add Nuka-Code-style independent verification agent as `core:verifier`.
   - [x] Upgrade `core:planner` toward Nuka-Code Plan behavior: explore first, produce an implementation strategy, and list critical files.
   - [x] Add Nuka-Code-style general-purpose agent as `core:general`.
-- [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
+  - Decision: do not port Claude-Code-guide/statusline-setup as default Nuka roles yet; they are Claude-specific setup/help agents, while Nuka now has native provider/statusline code paths and docs should stay outside the default role list until there is a Nuka-specific guide generator.
+- [x] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
   - [x] New Tasks columns display local subagent agent name, task/id context, and stable theme-bound agent color keys.
-- [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
+- [x] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
+  - Existing coverage: `test/core/agents/recursion.test.ts`, `test/core/agents/toolFilter.test.ts`, `test/core/agents/dispatchHookThreading.test.ts`, `test/core/tasks/stopTool.test.ts`, and `test/core/tasks/run-agent-lifecycle.test.ts`.
   - [x] Add `spawn_agent` regression coverage for inherited lifecycle hooks and active worktree cwd in the queued background runner.
 
 ---
