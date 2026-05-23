@@ -174,13 +174,14 @@ async function executeStep(step: Step, index: number, ctx: StepCtx): Promise<voi
       // useInput hook so onSubmit fires.
       const text = step.command.startsWith('/') ? step.command : '/' + step.command
       h.stdin.write(text)
+      await h.waitFor({ contains: text }, 500)
       await ctx.flush()
-      await new Promise(r => setTimeout(r, 5))
+      await new Promise(r => setTimeout(r, 30))
       h.stdin.write('\r')
       // Allow async slash dispatch (registry.find -> cmd.run -> setDialog
       // -> re-render) to settle before the next step samples the frame.
       await ctx.flush()
-      await new Promise(r => setTimeout(r, 5))
+      await new Promise(r => setTimeout(r, 30))
       await ctx.flush()
       ctx.appendStepResult({
         index, ok: true, kind: 'slash',
