@@ -69,6 +69,7 @@ import { eventBus } from '../core/events/bus'
 import { useTerminalSize } from './hooks/useTerminalSize'
 import { truncateByWidth } from '../core/stringWidth'
 import { defaultPalette as P } from './theme'
+import { allowedEffortLevelsForModel } from '../core/config/effort'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -1213,6 +1214,10 @@ export function App(props: AppProps): React.JSX.Element {
         <SubmenuFrame mode="full" title="Reasoning effort" focused>
           <EffortPicker
             current={props.config.effort}
+            allowedLevels={allowedEffortLevelsForModel(
+              props.providers.getProviderConfig(session.providerId),
+              session.model,
+            )}
             onSelect={async (level) => {
               try {
                 await saveConfigPatch(os.homedir(), (obj) => {
