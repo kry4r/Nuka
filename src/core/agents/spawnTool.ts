@@ -26,6 +26,7 @@ export type SpawnAgentInput = {
   task: string
   context?: string
   description?: string
+  fork_context?: boolean
 }
 
 export function makeSpawnAgentTool(deps: {
@@ -73,6 +74,11 @@ export function makeSpawnAgentTool(deps: {
           description:
             'Short label for the background task. Defaults to the selected agent and task preview.',
         },
+        fork_context: {
+          type: 'boolean',
+          description:
+            'Reserved for true forked-context subagents. Currently returns a clear unsupported error when true.',
+        },
       },
       additionalProperties: false,
     },
@@ -85,6 +91,13 @@ export function makeSpawnAgentTool(deps: {
       if (ctx.session?.allowedAgentDispatch === false) {
         return {
           output: 'Sub-agents cannot spawn further sub-agents.',
+          isError: true,
+        }
+      }
+      if (input.fork_context === true) {
+        return {
+          output:
+            'fork_context is not supported yet: Nuka must persist parent transcripts before true forked-context subagents can inherit them.',
           isError: true,
         }
       }

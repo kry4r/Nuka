@@ -152,6 +152,23 @@ describe('makeSpawnAgentTool', () => {
     expect(tasks.specs).toHaveLength(0)
   })
 
+  it('accepts fork_context but reports it as unsupported until true transcript fork lands', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const { deps, tasks } = makeDeps(agents)
+    const tool = makeSpawnAgentTool(deps)
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      { agent: 'core:reviewer', task: 'review this', fork_context: true },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain('fork_context is not supported yet')
+    expect(tasks.specs).toHaveLength(0)
+  })
+
   it('recursion guard: refuses inside a sub-agent session', async () => {
     const agents = new AgentRegistry()
     agents.register(mkAgent('core', 'reviewer', 'reviews code'))
