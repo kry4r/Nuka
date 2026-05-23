@@ -12,6 +12,7 @@ import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
+import type { Message } from '../message/types'
 import type { LocalAgentSpec, Task } from '../tasks/types'
 import type { AgentRegistry } from './registry'
 import { defineTool } from '../tools/define'
@@ -94,13 +95,6 @@ export function makeSpawnAgentTool(deps: {
           isError: true,
         }
       }
-      if (input.fork_context === true) {
-        return {
-          output:
-            'fork_context is not supported yet: Nuka must persist parent transcripts before true forked-context subagents can inherit them.',
-          isError: true,
-        }
-      }
 
       const resolved = deps.agents.find(input.agent)
       if (!resolved) {
@@ -117,20 +111,26 @@ export function makeSpawnAgentTool(deps: {
       const description = normalizeDescription(input.description)
         ?? `${resolved.name}: ${input.task.slice(0, 80)}`
       const activeStyle = deps.outputStyle ? deps.outputStyle() : null
+      const context = mergeContext(
+        input.fork_context === true
+          ? formatForkContext(ctx.session?.messages ?? [])
+          : undefined,
+        input.context,
+      )
 
       const task = deps.taskManager.enqueue({
         kind: 'local_agent',
         description,
         agentName: resolved.name,
         task: input.task,
-        ...(input.context !== undefined ? { context: input.context } : {}),
+        ...(context !== undefined ? { context } : {}),
         providerId: parentSession?.providerId,
         model: resolved.model ?? parentSession?.model,
         agentRunner: async function* (signal) {
           const result = await dispatchAgent({
             agent: resolved,
             task: input.task,
-            ...(input.context !== undefined ? { context: input.context } : {}),
+            ...(context !== undefined ? { context } : {}),
             registry: deps.registry,
             providerResolver: deps.providerResolver,
             permission: deps.permission,
@@ -163,6 +163,48 @@ export function makeSpawnAgentTool(deps: {
 function normalizeDescription(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed ? trimmed : undefined
+}
+
+function mergeContext(
+  first: string | undefined,
+  second: string | undefined,
+): string | undefined {
+  const parts = [first, second]
+    .map(value => value?.trim())
+    .filter((value): value is string => Boolean(value))
+  return parts.length > 0 ? parts.join('\n\n') : undefined
+}
+
+function formatForkContext(messages: readonly Message[]): string | undefined {
+  const lines = messages
+    .flatMap(messageToContextLines)
+    .filter(line => line.trim().length > 0)
+  return lines.length > 0
+    ? ['Forked parent context:', ...lines].join('\n')
+    : undefined
+}
+
+function messageToContextLines(message: Message): string[] {
+  if (message.role === 'system') return [`system: ${message.content}`]
+  if (message.role === 'tool') {
+    const content = typeof message.content === 'string'
+      ? message.content
+      : message.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
+    return [`tool(${message.toolUseId}): ${content}`]
+  }
+  if (message.role === 'responses_compaction') {
+    return [`context_compaction: ${JSON.stringify(message.output)}`]
+  }
+  const text = message.content
+    .map(block => {
+      if (block.type === 'text') return block.text
+      if (block.type === 'tool_use') return `tool_use ${block.name}(${block.id}) ${JSON.stringify(block.input)}`
+      if (block.type === 'image') return '[image]'
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+  return text ? [`${message.role}: ${text}`] : []
 }
 
 function stringifyOutput(output: ToolResult['output']): string {

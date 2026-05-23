@@ -152,21 +152,36 @@ describe('makeSpawnAgentTool', () => {
     expect(tasks.specs).toHaveLength(0)
   })
 
-  it('accepts fork_context but reports it as unsupported until true transcript fork lands', async () => {
+  it('injects parent session context when fork_context is true', async () => {
     const agents = new AgentRegistry()
     agents.register(mkAgent('core', 'reviewer', 'reviews code'))
     const { deps, tasks } = makeDeps(agents)
     const tool = makeSpawnAgentTool(deps)
     const session = createSession({ providerId: 'p', model: 'm' })
+    session.messages.push({
+      role: 'user',
+      id: 'u1',
+      ts: 1,
+      content: [{ type: 'text', text: 'parent request' }],
+    })
+    session.messages.push({
+      role: 'assistant',
+      id: 'a1',
+      ts: 2,
+      content: [{ type: 'text', text: 'parent answer' }],
+    })
 
     const result = await tool.run(
-      { agent: 'core:reviewer', task: 'review this', fork_context: true },
+      { agent: 'core:reviewer', task: 'review this', context: 'extra context', fork_context: true },
       { signal: new AbortController().signal, cwd: process.cwd(), session },
     )
 
-    expect(result.isError).toBe(true)
-    expect(result.output as string).toContain('fork_context is not supported yet')
-    expect(tasks.specs).toHaveLength(0)
+    expect(result.isError).toBe(false)
+    expect(tasks.specs).toHaveLength(1)
+    expect(tasks.specs[0]?.context).toContain('Forked parent context:')
+    expect(tasks.specs[0]?.context).toContain('user: parent request')
+    expect(tasks.specs[0]?.context).toContain('assistant: parent answer')
+    expect(tasks.specs[0]?.context).toContain('extra context')
   })
 
   it('recursion guard: refuses inside a sub-agent session', async () => {

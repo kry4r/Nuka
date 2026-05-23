@@ -130,7 +130,10 @@ Checklist:
 - [x] Let `resume_agent` / `send_agent` include persisted transcript context when available.
   - Primary files: `src/core/agents/agentLifecycleTools.ts`, `test/core/agents/agentLifecycleTools.test.ts`
   - Acceptance: persisted local-agent resumes read `<task>.transcript.json`, include the previous user/assistant transcript summary in the follow-up context, and still fall back to meta-only context when the transcript sidecar is missing.
-- [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
+- [x] Add forked-context support with explicit write-scope and parent-session inheritance rules.
+  - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
+  - Acceptance: `spawn_agent(..., fork_context: true)` injects a textual parent-session context summary into the child `local_agent` context and preserves explicit caller context; recursion guard still prevents subagents from forking further.
+  - Limitation: this is a minimal context-summary fork, not yet Nuka-Code's cache-identical full transcript/tool-result placeholder fork and not yet isolated worktree write-scope support.
 - [ ] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
 - [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
