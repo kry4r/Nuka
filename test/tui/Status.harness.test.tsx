@@ -124,4 +124,27 @@ describe('StatusPanel', () => {
     expect(f).toContain('⬢ running')
     expect(f).toMatch(/█|░/)
   })
+
+  it('surfaces compact pressure before the context window is exhausted', () => {
+    const warn = render(
+      <StatusPanel
+        {...baseProps}
+        contextUsed={82_000}
+        contextMax={100_000}
+        layout="dense"
+      />,
+    )
+    expect(warn.lastFrame() ?? '').toContain('compact soon')
+    warn.unmount()
+
+    const error = render(
+      <StatusPanel
+        {...baseProps}
+        contextUsed={92_000}
+        contextMax={100_000}
+        layout="dense"
+      />,
+    )
+    expect(error.lastFrame() ?? '').toContain('compact now')
+  })
 })

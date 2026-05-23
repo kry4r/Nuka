@@ -216,6 +216,10 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const contextTitle = props.contextMax > 0
     ? `${fmtTokens(props.contextUsed)}/${fmtTokens(props.contextMax)}`
     : ''
+  const contextPressure =
+    ctxPct >= 0.9 ? 'compact now'
+      : ctxPct >= 0.8 ? 'compact soon'
+      : null
   const parts: Array<{ id: string; node: React.JSX.Element }> = []
 
   if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', node: <Text color={accent}>{modeBadge(props.mode, iconMode)}</Text> })
@@ -239,6 +243,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
           <Text color={muted}>context: </Text>
           <Text color={ctxColor}>{progressBar(props.contextUsed, props.contextMax)} {Math.floor(ctxPct * 100)}%</Text>
           {contextTitle.length > 0 && <Text color={muted}> {contextTitle}</Text>}
+          {contextPressure && <Text color={ctxColor}> {contextPressure}</Text>}
         </>
       ),
     })

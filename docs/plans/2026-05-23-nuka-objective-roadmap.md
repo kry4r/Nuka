@@ -173,7 +173,9 @@ Checklist:
 - [x] Enable local microcompact through CLI wiring.
   - Primary files: `src/core/config/microCompact.ts`, `src/cli.tsx`, `test/core/config/microCompact.test.ts`
   - Acceptance: CLI passes `{ keepRecent }` into `runAgent` by default, honors `compact.microCompact.keepRecent`, and disables the pre-provider pass when `compact.microCompact.enabled: false`.
-- [ ] Add warning-state UX before context pressure becomes a hard failure.
+- [x] Add warning-state UX before context pressure becomes a hard failure.
+  - Primary files: `src/tui/Status/StatusPanel.tsx`, `test/tui/Status.harness.test.tsx`
+  - Acceptance: context usage >=80% shows `compact soon`, >=90% shows `compact now`, while low-pressure statuslines stay quiet; Ink capture verifies the high-context row remains a single concise line.
 - [x] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
   - Primary files: `src/core/compact/compact.ts`, `src/cli.tsx`, `test/core/compact/compact.test.ts`
   - Acceptance: manual compact can apply the same local microcompact cleanup to the retained window after summary/native compaction succeeds, and CLI passes the configured microcompact options into `/compact`.
