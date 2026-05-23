@@ -59,6 +59,8 @@ export interface SubagentDefinition {
   isolation?: 'inherit' | 'worktree'
   /** If true, this agent should be launched through spawn_agent by default. */
   background?: boolean
+  /** Optional permission mode override for the sub-agent session. */
+  permissionMode?: 'plan'
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -95,6 +97,7 @@ const SubagentFileSchema = z
     memory: z.enum(['user', 'project', 'local']).optional(),
     isolation: z.enum(['inherit', 'worktree']).optional(),
     background: z.boolean().optional(),
+    permissionMode: z.enum(['plan']).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -151,6 +154,7 @@ function assembleDefinition(
   if (parsed.memory !== undefined) def.memory = parsed.memory
   if (parsed.isolation !== undefined) def.isolation = parsed.isolation
   if (parsed.background !== undefined) def.background = parsed.background
+  if (parsed.permissionMode !== undefined) def.permissionMode = parsed.permissionMode
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -213,6 +217,7 @@ function parseMarkdownAgent(content: string): unknown {
     memory: parsed.frontmatter['memory'],
     isolation: parsed.frontmatter['isolation'],
     background: normalizeFrontmatterBoolean(parsed.frontmatter['background']),
+    permissionMode: parsed.frontmatter['permissionMode'],
   }
 }
 
@@ -230,6 +235,7 @@ export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
     ...(sub.memory !== undefined ? { memory: sub.memory } : {}),
     ...(sub.isolation !== undefined ? { isolation: sub.isolation } : {}),
     ...(sub.background !== undefined ? { background: sub.background } : {}),
+    ...(sub.permissionMode !== undefined ? { permissionMode: sub.permissionMode } : {}),
     ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }

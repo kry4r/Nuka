@@ -52,6 +52,13 @@ function makeTool(name: string, run?: Tool['run']): Tool {
   }
 }
 
+function makeWriteTool(name: string, run?: Tool['run']): Tool {
+  return {
+    ...makeTool(name, run),
+    needsPermission: () => 'write',
+  }
+}
+
 describe('dispatchAgent', () => {
   const permissionCache = new PermissionCache()
   const permission = new PermissionChecker(() => permissionCache, async () => ({ allowed: true }))
@@ -168,6 +175,39 @@ describe('dispatchAgent', () => {
     expect(result.output).toBe('cannot')
     expect(result.isError).toBe(false)
     expect(result.turns).toBe(2)
+  })
+
+  it('applies agent permissionMode=plan to sub-agent tool permission checks', async () => {
+    const registry = new ToolRegistry()
+    let editRan = false
+    registry.register(makeWriteTool('Edit', async () => {
+      editRan = true
+      return { output: 'edited', isError: false }
+    }))
+    const provider = stubProvider([
+      [
+        { type: 'tool_use_start', id: 't1', name: 'Edit' },
+        { type: 'tool_use_stop', id: 't1', input: { path: '/x', old: 'a', replacement: 'b' } },
+        { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+      [
+        { type: 'text_delta', text: 'blocked' },
+        { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+    ])
+    const result = await dispatchAgent({
+      agent: makeAgent({ allowedTools: ['Edit'], permissionMode: 'plan' }),
+      task: 'edit it',
+      registry,
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+    })
+
+    expect(editRan).toBe(false)
+    expect(result.output).toBe('blocked')
+    expect(result.isError).toBe(false)
   })
 
   it('includes context after task when provided', async () => {

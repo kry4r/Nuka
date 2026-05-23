@@ -176,6 +176,26 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.background).toBe(true)
   })
 
+  it('loads Nuka permissionMode frontmatter', async () => {
+    const filePath = join(dir, 'planner.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: planner',
+        'description: plans without writes',
+        'permissionMode: plan',
+        '---',
+        '',
+        'You plan but do not edit.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.permissionMode).toBe('plan')
+  })
+
   it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
     const filePath = join(dir, 'foreground.md')
     await writeFile(
@@ -366,6 +386,16 @@ describe('loadSubagentFile — invalid shape', () => {
       background: 'sometimes',
     })
     await expect(loadSubagentFile(fp)).rejects.toThrow(/background/)
+  })
+
+  it('throws when permissionMode is invalid', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      permissionMode: 'acceptEdits',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/permissionMode/)
   })
 
   it('throws on unknown/extra field (strict schema)', async () => {
@@ -571,6 +601,7 @@ describe('subagentToAgentDef', () => {
       memory: 'project',
       isolation: 'worktree',
       background: true,
+      permissionMode: 'plan',
       keywords: ['implement'],
       sourcePath: '/tmp/worker.md',
     })
@@ -588,6 +619,7 @@ describe('subagentToAgentDef', () => {
       memory: 'project',
       isolation: 'worktree',
       background: true,
+      permissionMode: 'plan',
       keywords: ['implement'],
     })
   })

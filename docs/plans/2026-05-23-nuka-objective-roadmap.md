@@ -68,7 +68,7 @@ Checklist:
   - Parity matrix:
     | Capability | Nuka-Code behavior | Current Nuka status | Next Nuka action |
     | --- | --- | --- | --- |
-    | Agent definitions | Markdown/JSON agents with tools, disallowedTools, model, effort, permissionMode, mcpServers, hooks, maxTurns, skills, memory, background, isolation | Partial: YAML/JSON/Markdown loader supports tools/disallowedTools alias, model, maxTurns, maxTokens, temperature, keywords, memory, isolation, background | Add `skills`, `permissionMode` only if corresponding Nuka runtime support exists; keep unsupported keys rejected until implemented |
+    | Agent definitions | Markdown/JSON agents with tools, disallowedTools, model, effort, permissionMode, mcpServers, hooks, maxTurns, skills, memory, background, isolation | Partial: YAML/JSON/Markdown loader supports tools/disallowedTools alias, model, maxTurns, maxTokens, temperature, keywords, memory, isolation, background, permissionMode=plan | Add `skills` and broader `permissionMode` values only if corresponding Nuka runtime support exists; keep unsupported keys rejected until implemented |
     | Synchronous subagents | `AgentTool` can run foreground and return final result with usage/tool count | Present: `dispatch_agent` runs isolated sub-session and returns final output/usage internally | Keep as baseline; expose richer metadata later only if model benefits |
     | Background subagents | `run_in_background` / agent `background` registers stable `agentId`, returns output file and can be queried later | Present foundation: `spawn_agent` wraps `dispatchAgent` in `TaskManager.enqueue(local_agent)`, returns `task_id`/`agent_id`/output file; agent definitions can mark `background: true`; `/task run` remains separate | Add richer progress metadata next |
     | Task output/stop | Output and kill by async agent id/output path | Present foundation: `TaskOutput`/`TaskStop` address by task id or stable `agent_id`; `wait_agent`/`close_agent` expose agent-oriented aliases | Keep behavior centralized in task tools while adding resume/send later |
@@ -155,6 +155,9 @@ Checklist:
 - [x] Preserve loose-file subagent runtime metadata during registration.
   - Primary files: `src/core/agents/types.ts`, `src/core/agents/subagentLoader.ts`, `src/core/agents/dispatchTool.ts`, `src/cli.tsx`, `test/core/agents/subagentLoader.test.ts`, `test/core/agents/dispatchTool.test.ts`
   - Acceptance: loose-file registration uses a shared `subagentToAgentDef` mapper so `memory`, `isolation`, `background`, and other runtime metadata are not dropped before `resolveAgentDef`; markdown frontmatter accepts `background: true | false` and quoted boolean strings; `dispatch_agent` refuses synchronous execution for `background: true` agents with a direct `spawn_agent` instruction.
+- [x] Support subagent `permissionMode: plan`.
+  - Primary files: `src/core/agents/types.ts`, `src/core/agents/subagentLoader.ts`, `src/core/agents/dispatch.ts`, `test/core/agents/subagentLoader.test.ts`, `test/core/agents/dispatch.test.ts`
+  - Acceptance: loose-file and plugin schemas accept only the locally implemented `permissionMode: plan`; the mapper preserves it; subagent tool permission checks receive `mode: "plan"` so Write/Edit/Bash/destructive/open-world tools are rejected by the existing PermissionChecker.
 - [x] Port useful built-in agents: general, explore, plan, verification, statusline setup, and Claude-Code guide equivalents where they fit Nuka.
   - [x] Add first Nuka-Code-style fast read-only code exploration agent as `core:explorer`.
   - [x] Add Nuka-Code-style independent verification agent as `core:verifier`.

@@ -370,6 +370,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
           hint: tool.needsPermission(call.input),
           input: call.input,
           annotations: tool.annotations,
+          mode: agent.permissionMode ?? session.mode,
         })
         let result: ToolResult
         if (!decision.allowed) {
