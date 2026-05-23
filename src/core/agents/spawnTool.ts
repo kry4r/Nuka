@@ -11,6 +11,7 @@ import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
+import { resolveToolCwd } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import type { Message } from '../message/types'
 import type { LocalAgentSpec, Task } from '../tasks/types'
@@ -117,6 +118,7 @@ export function makeSpawnAgentTool(deps: {
           : undefined,
         input.context,
       )
+      const cwd = resolveToolCwd(deps.worktreeStore, process.cwd())
 
       const task = deps.taskManager.enqueue({
         kind: 'local_agent',
@@ -126,6 +128,7 @@ export function makeSpawnAgentTool(deps: {
         ...(context !== undefined ? { context } : {}),
         providerId: parentSession?.providerId,
         model: resolved.model ?? parentSession?.model,
+        cwd,
         agentRunner: async function* (signal) {
           const result = await dispatchAgent({
             agent: resolved,

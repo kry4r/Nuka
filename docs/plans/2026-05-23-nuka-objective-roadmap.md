@@ -100,7 +100,7 @@ Checklist:
 - [x] Add a foundation `resume_agent` API over local-agent task metadata.
   - Primary files: `src/core/agents/agentLifecycleTools.ts`, `src/core/agents/spawnTool.ts`, `src/core/tasks/types.ts`, `src/cli.tsx`, `test/core/agents/agentLifecycleTools.test.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `resume_agent` accepts `agent_id` and follow-up `prompt`, selects the newest matching local-agent task, rebuilds a fresh `dispatchAgent` runner from the current registered agent definition, enqueues a new local-agent execution with the same stable `agent_id`, inherited agent name/provider/model/context metadata, `resumed: true`, and returns `status=resumed`, new `task_id`, `agent_id`, source task id, and output file.
-  - Limitation: this is not yet Nuka-Code-equivalent true resume; it does not reconstruct transcript, content replacement state, or worktree path.
+  - Limitation: this is not yet Nuka-Code-equivalent true resume; it does not reconstruct full provider-visible transcript or content replacement state.
 - [x] Persist local-agent resume metadata into task sidecars.
   - Primary files: `src/core/tasks/meta.ts`, `test/core/tasks/meta.test.ts`
   - Acceptance: `fromTask()` writes local-agent `agentName`, follow-up task prompt, merged context, `resumed`, provider id, and model to `<task>.meta.json`, so future cross-process resume work has a metadata baseline.
@@ -136,6 +136,9 @@ Checklist:
 - [x] Let `resume_agent` / `send_agent` include persisted transcript context when available.
   - Primary files: `src/core/agents/agentLifecycleTools.ts`, `test/core/agents/agentLifecycleTools.test.ts`
   - Acceptance: persisted local-agent resumes read `<task>.transcript.json`, include the previous user/assistant transcript summary in the follow-up context, and still fall back to meta-only context when the transcript sidecar is missing.
+- [x] Persist and recover local-agent cwd/worktree metadata for resume.
+  - Primary files: `src/core/tasks/types.ts`, `src/core/tasks/meta.ts`, `src/core/agents/spawnTool.ts`, `src/core/agents/agentLifecycleTools.ts`, `test/core/tasks/meta.test.ts`, `test/core/tasks/manager.test.ts`, `test/core/agents/spawnTool.test.ts`, `test/core/agents/agentLifecycleTools.test.ts`
+  - Acceptance: `spawn_agent` records the effective active worktree cwd into local-agent task specs; task meta and transcript sidecars persist `cwd`; persisted `resume_agent` rebuilds a new local-agent task with the prior cwd metadata, narrowing the gap to true worktree-aware resume.
 - [x] Add forked-context support with explicit write-scope and parent-session inheritance rules.
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `spawn_agent(..., fork_context: true)` injects a textual parent-session context summary into the child `local_agent` context and preserves explicit caller context; recursion guard still prevents subagents from forking further.

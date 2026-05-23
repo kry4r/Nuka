@@ -445,6 +445,7 @@ describe('agent lifecycle wrapper tools', () => {
       agentContext: 'persisted context',
       providerId: 'p',
       model: 'm',
+      cwd: '/tmp/persisted-worktree',
     })
     writeTranscript(home, {
       id: 'old-task',
@@ -498,6 +499,7 @@ describe('agent lifecycle wrapper tools', () => {
       task: 'continue from disk',
       providerId: 'p',
       model: 'm',
+      cwd: '/tmp/persisted-worktree',
       resumed: true,
     })
     expect(specs[0]!.context).toContain('persisted context')

@@ -124,6 +124,7 @@ describe('TaskManager', () => {
       context: 'prior context',
       providerId: 'p',
       model: 'm',
+      cwd: '/tmp/nuka-agent-cwd',
       agentRunner: async function* () {
         yield { text: 'final answer' }
       },
@@ -138,6 +139,7 @@ describe('TaskManager', () => {
       agentName: 'core:reviewer',
       providerId: 'p',
       model: 'm',
+      cwd: '/tmp/nuka-agent-cwd',
       messages: [
         { role: 'user', content: 'inspect this\n\nprior context' },
         { role: 'assistant', content: 'final answer' },

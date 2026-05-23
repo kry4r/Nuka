@@ -17,6 +17,7 @@ import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
+import { resolveToolCwd } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import { dispatchAgent } from './dispatch'
 
@@ -353,6 +354,7 @@ async function enqueueAgentFollowup(
     ?? `${agentName}: ${prompt.slice(0, 80)}`
   const providerId = seed.providerId
   const model = resolved.model ?? seed.model
+  const cwd = seed.cwd ?? resolveToolCwd(deps.worktreeStore, process.cwd())
   const parentSession = providerId && model ? { providerId, model } : undefined
   const activeStyle = deps.outputStyle ? deps.outputStyle() : null
   const task = deps.taskManager.enqueue({
@@ -365,6 +367,7 @@ async function enqueueAgentFollowup(
     resumed: true,
     providerId,
     model,
+    cwd,
     ...(seed.hookRegistry ? { hookRegistry: seed.hookRegistry } : {}),
     ...(seed.taskSessionId ? { taskSessionId: seed.taskSessionId } : {}),
     agentRunner: async function* (signal) {
@@ -408,6 +411,7 @@ type ResumeSeed =
       context?: string
       providerId?: string
       model?: string
+      cwd?: string
       hookRegistry?: HookRegistry
       taskSessionId?: string
     }
@@ -434,6 +438,7 @@ function findResumeSeed(deps: ResumeAgentDeps, agentId: string): ResumeSeed {
       context: prior.context,
       providerId: prior.providerId,
       model: prior.model,
+      cwd: prior.cwd,
       hookRegistry: prior.hookRegistry,
       taskSessionId: prior.taskSessionId,
     }
@@ -465,6 +470,7 @@ function findResumeSeed(deps: ResumeAgentDeps, agentId: string): ResumeSeed {
     )),
     providerId: persisted.providerId,
     model: persisted.model,
+    cwd: persisted.cwd,
   }
 }
 

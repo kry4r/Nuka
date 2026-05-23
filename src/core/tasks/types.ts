@@ -97,6 +97,8 @@ export type LocalAgentSpec = {
    */
   providerId?: string
   model?: string
+  /** Effective cwd/worktree path for this local-agent execution. */
+  cwd?: string
 }
 
 export type InProcessTeammateSpec = {

@@ -283,6 +283,9 @@ describe('makeSpawnAgentTool', () => {
       chunks.push(chunk.text)
     }
     expect(chunks.join('')).toContain('done')
+    expect(tasks.specs[0]).toMatchObject({
+      cwd: '/tmp/nuka-spawn-worktree',
+    })
     expect(hookContexts).toEqual(['subagent:/tmp/nuka-spawn-worktree'])
     expect(cwdSeen).toEqual(['/tmp/nuka-spawn-worktree'])
   })

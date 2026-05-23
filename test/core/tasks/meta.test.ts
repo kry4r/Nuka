@@ -54,6 +54,7 @@ describe('task meta sidecar', () => {
         resumed: true,
         providerId: 'p',
         model: 'm',
+        cwd: '/tmp/nuka-worktree',
         agentRunner: async function* () { yield { text: 'ok' } },
       },
     })
@@ -67,6 +68,7 @@ describe('task meta sidecar', () => {
       resumed: true,
       providerId: 'p',
       model: 'm',
+      cwd: '/tmp/nuka-worktree',
     })
   })
 

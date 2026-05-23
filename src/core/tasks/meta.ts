@@ -18,6 +18,7 @@ export type TaskMeta = {
   resumed?: boolean
   providerId?: string
   model?: string
+  cwd?: string
   finalOutput?: string
   teamName?: string
   progress?: ProgressTrackerSnapshot
@@ -34,6 +35,7 @@ export type TaskTranscript = {
   agentName?: string
   providerId?: string
   model?: string
+  cwd?: string
   messages: TaskTranscriptMessage[]
 }
 
@@ -126,6 +128,7 @@ export function fromTask(t: Task): TaskMeta {
     resumed: localAgent?.resumed,
     providerId: localAgent?.providerId,
     model: localAgent?.model,
+    cwd: localAgent?.cwd,
     finalOutput: localAgent && TERMINAL_STATES.has(t.state)
       ? readFinalOutput(t.outputFile)
       : undefined,
@@ -166,6 +169,7 @@ export function transcriptFromMeta(meta: TaskMeta): TaskTranscript | undefined {
     agentName: meta.agentName,
     providerId: meta.providerId,
     model: meta.model,
+    cwd: meta.cwd,
     messages,
   }
 }
