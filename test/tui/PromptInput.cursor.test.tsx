@@ -55,6 +55,7 @@ describe('PromptInput terminal cursor', () => {
         y: expect.any(Number),
       })
       expect(declaredPositions.at(-1)!.x).toBeGreaterThanOrEqual(7)
+      expect(declaredPositions.at(-1)!.y).toBe(1)
     } finally {
       handle.unmount()
     }

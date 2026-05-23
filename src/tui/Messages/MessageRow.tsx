@@ -109,6 +109,16 @@ export function MessageRow(props: {
 }): React.JSX.Element | null {
   const { m } = props
   if (m.role === 'system') return null
+  if (m.role === 'responses_compaction') {
+    return (
+      <Box flexDirection="row">
+        <Text color={P.fgMuted} bold>▎ </Text>
+        <Box flexGrow={1}>
+          <Text dimColor>context compacted · {m.output.length} Responses item{m.output.length === 1 ? '' : 's'}</Text>
+        </Box>
+      </Box>
+    )
+  }
   const barColor = m.role === 'user' ? P.success : m.role === 'assistant' ? P.error : P.accentCool
 
   if (m.role === 'tool') {
@@ -122,7 +132,7 @@ export function MessageRow(props: {
         ? m.content
         : m.content.map(b => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n')
     return (
-      <Box flexDirection="row" marginY={1}>
+      <Box flexDirection="row">
         <Text color={barColor} bold>▎ </Text>
         <Box flexDirection="column" flexGrow={1}>
           <Markdown source={toolContent} />
@@ -134,7 +144,7 @@ export function MessageRow(props: {
   if (m.role === 'assistant') {
     const blocks = m.content
     return (
-      <Box flexDirection="row" marginY={1}>
+      <Box flexDirection="row">
         <Text color={barColor} bold>▎ </Text>
         <Box flexDirection="column" flexGrow={1}>
           {blocks.map((b: any, i: number) => {
@@ -210,7 +220,7 @@ export function MessageRow(props: {
   // lines previously rendered painted-per-character.
   const text = m.content.map((b: any) => (b.type === 'text' ? b.text : '')).join('')
   return (
-    <Box flexDirection="row" marginY={1}>
+    <Box flexDirection="row">
       <Text color={barColor} bold>▎ </Text>
       <Box flexGrow={1}>
         <Text color={P.fg}>{text}</Text>

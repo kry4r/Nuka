@@ -51,14 +51,23 @@ function assistant(text: string): AssistantMessage {
   }
 }
 
+function assistantToolUse(id: string, name = 'Read'): AssistantMessage {
+  return {
+    role: 'assistant',
+    id: nextId(),
+    ts: idCounter,
+    content: [{ type: 'tool_use', id, name, input: { path: 'a.ts' } }],
+  }
+}
+
 function system(text: string): SystemMessage {
   return { role: 'system', content: text }
 }
 
-function tool(output: string): ToolMessage {
+function tool(output: string, toolUseId = nextId()): ToolMessage {
   return {
     role: 'tool',
-    toolUseId: nextId(),
+    toolUseId,
     content: output,
     isError: false,
     id: nextId(),
@@ -401,6 +410,26 @@ describe('maybeAutoCompact — tool messages', () => {
     expect(result.compacted).toBe(true)
     // The last 3 messages should still be present in order at the end.
     expect(result.messages.slice(-3)).toEqual(messages.slice(-3))
+  })
+
+  it('expands the preserved tail backward so tool_result is not kept without its tool_use', async () => {
+    const messages: Message[] = [
+      user('old-' + 'x'.repeat(400)),
+      assistant('old reply-' + 'y'.repeat(400)),
+      assistantToolUse('call_1'),
+      tool('result-' + 'z'.repeat(400), 'call_1'),
+      user('follow up'),
+      assistant('final answer'),
+    ]
+
+    const result = await maybeAutoCompact(messages, {
+      triggerTokens: 100,
+      targetTokens: 50_000,
+      preserveRecent: 3,
+    })
+
+    expect(result.compacted).toBe(true)
+    expect(result.messages.slice(-4)).toEqual(messages.slice(2))
   })
 })
 

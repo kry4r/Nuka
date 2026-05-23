@@ -61,4 +61,17 @@ export type SystemMessage = {
   content: string
 }
 
-export type Message = UserMessage | AssistantMessage | ToolMessage | SystemMessage
+export type ResponsesCompactionMessage = {
+  role: 'responses_compaction'
+  provider: 'openai'
+  output: unknown[]
+  id: string
+  ts: number
+}
+
+export type Message =
+  | UserMessage
+  | AssistantMessage
+  | ToolMessage
+  | SystemMessage
+  | ResponsesCompactionMessage

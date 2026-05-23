@@ -1,0 +1,372 @@
+import { describe, expect, it, beforeEach } from 'vitest'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import { makeWaitAgentTool, makeCloseAgentTool, makeResumeAgentTool } from '../../../src/core/agents/agentLifecycleTools'
+import type { Tool, ToolContext, ToolResult } from '../../../src/core/tools/types'
+import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
+import { writeMeta } from '../../../src/core/tasks/meta'
+import { AgentRegistry } from '../../../src/core/agents/registry'
+import { ToolRegistry } from '../../../src/core/tools/registry'
+import type { ResolvedAgentDef } from '../../../src/core/agents/types'
+import type { LLMProvider } from '../../../src/core/provider/types'
+import type { ProviderResolver } from '../../../src/core/provider/resolver'
+import { PermissionChecker } from '../../../src/core/permission/checker'
+import { PermissionCache } from '../../../src/core/permission/cache'
+
+const ctx = (): ToolContext => ({
+  signal: new AbortController().signal,
+  cwd: process.cwd(),
+})
+
+function makeDelegate<I>(name: string): Tool<I> & { calls: I[] } {
+  const calls: I[] = []
+  return {
+    name,
+    description: 'delegate',
+    parameters: { type: 'object', properties: {} },
+    source: 'builtin',
+    tags: ['core'],
+    needsPermission: () => 'none',
+    run: async (input: I): Promise<ToolResult> => {
+      calls.push(input)
+      return { isError: false, output: `${name} ok` }
+    },
+    calls,
+  }
+}
+
+function mkAgent(pluginName: string, name: string): ResolvedAgentDef {
+  return {
+    name,
+    description: 'agent',
+    systemPrompt: 'system',
+    maxTurns: 20,
+    pluginName,
+  }
+}
+
+function mkProvider(seenPrompts: string[]): LLMProvider {
+  return {
+    id: 'p',
+    format: 'openai',
+    async *stream(req) {
+      const user = req.messages.find(m => m.role === 'user')
+      if (user?.role === 'user') {
+        seenPrompts.push(user.content.map(b => b.type === 'text' ? b.text : '').join(''))
+      }
+      yield { type: 'text_delta', text: 'resumed-response' }
+      yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+    },
+    async listRemoteModels() { return [] },
+  } as LLMProvider
+}
+
+function mkResolver(p: LLMProvider): ProviderResolver {
+  return {
+    resolveFor: () => ({ provider: p, model: 'm' }),
+    listProviders: () => [{ id: 'p' } as unknown as never],
+  } as unknown as ProviderResolver
+}
+
+describe('agent lifecycle wrapper tools', () => {
+  let home: string
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'nuka-resume-agent-'))
+  })
+
+  it('wait_agent delegates to TaskOutput with block=true and agent_id', async () => {
+    const outputTool = makeDelegate<Record<string, unknown>>('TaskOutput')
+    const tool = makeWaitAgentTool(outputTool)
+
+    expect(tool.name).toBe('wait_agent')
+    expect(tool.tags).toContain('agent')
+    expect(tool.tags).toContain('tasks')
+    expect(tool.annotations?.readOnly).toBe(true)
+
+    const result = await tool.run(
+      { agent_id: 'agent-123', timeout_ms: 2500, lines: 25 },
+      ctx(),
+    )
+
+    expect(result.isError).toBe(false)
+    expect(result.output).toBe('TaskOutput ok')
+    expect(outputTool.calls).toEqual([
+      {
+        agent_id: 'agent-123',
+        block: true,
+        timeout_ms: 2500,
+        lines: 25,
+      },
+    ])
+  })
+
+  it('wait_agent supports task_id as a compatibility escape hatch', async () => {
+    const outputTool = makeDelegate<Record<string, unknown>>('TaskOutput')
+    const tool = makeWaitAgentTool(outputTool)
+
+    await tool.run(
+      { task_id: 'task-1', timeout_ms: 0 },
+      ctx(),
+    )
+
+    expect(outputTool.calls).toEqual([
+      {
+        task_id: 'task-1',
+        block: true,
+        timeout_ms: 0,
+      },
+    ])
+  })
+
+  it('close_agent delegates to TaskStop by agent_id', async () => {
+    const stopTool = makeDelegate<Record<string, unknown>>('TaskStop')
+    const tool = makeCloseAgentTool(stopTool)
+
+    expect(tool.name).toBe('close_agent')
+    expect(tool.tags).toContain('agent')
+    expect(tool.tags).toContain('tasks')
+    expect(tool.annotations?.readOnly).toBe(false)
+
+    const result = await tool.run({ agent_id: 'agent-123' }, ctx())
+
+    expect(result.isError).toBe(false)
+    expect(result.output).toBe('TaskStop ok')
+    expect(stopTool.calls).toEqual([{ agent_id: 'agent-123' }])
+  })
+
+  it('close_agent supports task_id as a compatibility escape hatch', async () => {
+    const stopTool = makeDelegate<Record<string, unknown>>('TaskStop')
+    const tool = makeCloseAgentTool(stopTool)
+
+    await tool.run({ task_id: 'task-1' }, ctx())
+
+    expect(stopTool.calls).toEqual([{ task_id: 'task-1' }])
+  })
+
+  it('resume_agent enqueues a new local_agent execution for the newest matching agent_id', async () => {
+    const specs: LocalAgentSpec[] = []
+    const existing: Task = {
+      id: 'task-1',
+      kind: 'local_agent',
+      description: 'core:reviewer: original',
+      state: 'completed',
+      outputFile: '/tmp/task-1.log',
+      agentId: 'agent-123',
+      spec: {
+        kind: 'local_agent',
+        agentId: 'agent-123',
+        agentName: 'core:reviewer',
+        task: 'original',
+        context: 'old context',
+        description: 'core:reviewer: original',
+        agentRunner: async function* () { yield { text: 'old' } },
+      },
+    }
+    const manager = {
+      get: (id: string) => id === existing.id ? existing : undefined,
+      list: () => [existing],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'task-2',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/task-2.log',
+          agentId: spec.agentId ?? 'agent-task-2',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer'))
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider([])),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    const result = await tool.run({
+      agent_id: 'agent-123',
+      prompt: 'continue from here',
+      context: 'new facts',
+    }, ctx())
+
+    expect(result.isError).toBe(false)
+    expect(specs).toHaveLength(1)
+    expect(specs[0]).toMatchObject({
+      kind: 'local_agent',
+      agentId: 'agent-123',
+      agentName: 'core:reviewer',
+      task: 'continue from here',
+      context: ['old context', 'new facts'].join('\n\n'),
+      resumed: true,
+      providerId: undefined,
+      model: undefined,
+    })
+    expect(specs[0]!.description).toBe('core:reviewer: continue from here')
+    expect(result.output as string).toContain('status=resumed')
+    expect(result.output as string).toContain('task_id=task-2')
+    expect(result.output as string).toContain('agent_id=agent-123')
+    expect(result.output as string).toContain('agent=core:reviewer')
+    expect(result.output as string).toContain('resumed_from=task-1')
+  })
+
+  it('resume_agent rejects unknown agent ids without enqueueing', async () => {
+    const manager = {
+      get: () => undefined,
+      list: () => [],
+      enqueue: () => {
+        throw new Error('should not enqueue')
+      },
+    }
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      agents: new AgentRegistry(),
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider([])),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    const result = await tool.run({ agent_id: 'missing', prompt: 'continue' }, ctx())
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain("No background task with agent id 'missing'")
+  })
+
+  it('resume_agent rebuilt runner dispatches the new prompt, not the previous closure', async () => {
+    const specs: LocalAgentSpec[] = []
+    const seenPrompts: string[] = []
+    const existing: Task = {
+      id: 'task-1',
+      kind: 'local_agent',
+      description: 'core:reviewer: original',
+      state: 'completed',
+      outputFile: '/tmp/task-1.log',
+      agentId: 'agent-123',
+      spec: {
+        kind: 'local_agent',
+        agentId: 'agent-123',
+        agentName: 'core:reviewer',
+        task: 'original',
+        context: 'old context',
+        description: 'core:reviewer: original',
+        agentRunner: async function* () { yield { text: 'old-closure-output' } },
+      },
+    }
+    const manager = {
+      get: (id: string) => id === existing.id ? existing : undefined,
+      list: () => [existing],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'task-2',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/task-2.log',
+          agentId: spec.agentId ?? 'agent-task-2',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer'))
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider(seenPrompts)),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    await tool.run({
+      agent_id: 'agent-123',
+      prompt: 'continue from here',
+      context: 'new facts',
+    }, ctx())
+
+    const chunks: string[] = []
+    for await (const chunk of specs[0]!.agentRunner(new AbortController().signal)) {
+      chunks.push(chunk.text)
+    }
+
+    expect(chunks.join('')).toContain('resumed-response')
+    expect(chunks.join('')).not.toContain('old-closure-output')
+    expect(seenPrompts[0]).toContain('continue from here')
+    expect(seenPrompts[0]).toContain('old context')
+    expect(seenPrompts[0]).toContain('new facts')
+  })
+
+  it('resume_agent can rebuild from persisted task metadata when task is not in memory', async () => {
+    const specs: LocalAgentSpec[] = []
+    const seenPrompts: string[] = []
+    writeMeta(home, {
+      id: 'old-task',
+      kind: 'local_agent',
+      state: 'completed',
+      startedAt: 10,
+      finishedAt: 20,
+      agentId: 'agent-persisted',
+      agentName: 'core:reviewer',
+      agentTask: 'old prompt',
+      agentContext: 'persisted context',
+      providerId: 'p',
+      model: 'm',
+    })
+    const manager = {
+      get: () => undefined,
+      list: () => [],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'new-task',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/new-task.log',
+          agentId: spec.agentId ?? 'agent-new-task',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer'))
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      home,
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider(seenPrompts)),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    const result = await tool.run({
+      agent_id: 'agent-persisted',
+      prompt: 'continue from disk',
+      context: 'new disk facts',
+    }, ctx())
+
+    expect(result.isError).toBe(false)
+    expect(result.output as string).toContain('resumed_from=old-task')
+    expect(specs[0]).toMatchObject({
+      agentId: 'agent-persisted',
+      agentName: 'core:reviewer',
+      task: 'continue from disk',
+      context: ['persisted context', 'new disk facts'].join('\n\n'),
+      providerId: 'p',
+      model: 'm',
+      resumed: true,
+    })
+
+    for await (const _chunk of specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+    expect(seenPrompts[0]).toContain('continue from disk')
+    expect(seenPrompts[0]).toContain('persisted context')
+    expect(seenPrompts[0]).toContain('new disk facts')
+  })
+})

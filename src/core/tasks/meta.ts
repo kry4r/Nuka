@@ -11,7 +11,13 @@ export type TaskMeta = {
   state: TaskState
   startedAt: number
   finishedAt?: number
+  agentId?: string
   agentName?: string
+  agentTask?: string
+  agentContext?: string
+  resumed?: boolean
+  providerId?: string
+  model?: string
   teamName?: string
   progress?: ProgressTrackerSnapshot
   lastEventSeq?: number
@@ -39,14 +45,48 @@ export function readMeta(home: string, id: string): TaskMeta | undefined {
   }
 }
 
+export function listMeta(home: string): TaskMeta[] {
+  let entries: string[]
+  const dir = tasksDir(home)
+  try {
+    entries = fs.readdirSync(dir)
+  } catch {
+    return []
+  }
+  const out: TaskMeta[] = []
+  for (const entry of entries) {
+    if (!entry.endsWith('.meta.json')) continue
+    const id = entry.slice(0, -'.meta.json'.length)
+    const meta = readMeta(home, id)
+    if (meta) out.push(meta)
+  }
+  return out
+}
+
+export function findLatestMetaByAgentId(
+  home: string,
+  agentId: string,
+): TaskMeta | undefined {
+  return listMeta(home)
+    .filter(meta => meta.agentId === agentId)
+    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0]
+}
+
 export function fromTask(t: Task): TaskMeta {
+  const localAgent = t.spec.kind === 'local_agent' ? t.spec : undefined
   return {
     id: t.id,
     kind: t.kind,
     state: t.state,
     startedAt: t.startedAt ?? Date.now(),
     finishedAt: t.finishedAt,
-    agentName: t.agentName,
+    agentId: t.agentId,
+    agentName: t.agentName ?? localAgent?.agentName,
+    agentTask: localAgent?.task,
+    agentContext: localAgent?.context,
+    resumed: localAgent?.resumed,
+    providerId: localAgent?.providerId,
+    model: localAgent?.model,
     teamName: t.teamName,
     progress: t.progress,
   }

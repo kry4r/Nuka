@@ -24,9 +24,9 @@ describe('Phase 12 submenu', () => {
     const h = mountApp({ target: 'app', slash, config: cfg })
     try {
       await wait()
-      // Baseline: Status panel visible (anchor on the cost row — ⏱ removed in Phase 13).
+      // Baseline: Statusline visible.
       const baseline = h.frames().pop() ?? ''
-      expect(baseline).toMatch(/\$0\.0000/)
+      expect(baseline).toMatch(/∴ context:/)
       expect(baseline).toMatch(/│ >/) // PromptInput visible
 
       // Open /settings — full submenu.
@@ -39,14 +39,14 @@ describe('Phase 12 submenu', () => {
       expect(open.toLowerCase()).toContain('settings')
       expect(open).toContain('Provider')
       expect(open).toContain('StatusBar')
-      // Status panel hidden (mode badge gone).
-      expect(open).not.toMatch(/⬢ idle/)
+      // Status panel hidden.
+      expect(open).not.toMatch(/∴ context:/)
 
       // Esc closes the submenu and we return to normal.
       h.stdin.write('\u001B') // ESC
       await wait(60)
       const closed = h.frames().pop() ?? ''
-      expect(closed).toMatch(/⬢ idle/)
+      expect(closed).toMatch(/∴ context:/)
     } finally {
       h.unmount()
     }

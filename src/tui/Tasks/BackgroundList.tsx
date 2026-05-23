@@ -62,6 +62,7 @@ export function BackgroundList({ tasks, maxItems }: BackgroundListProps): React.
           <Text color={task.state === 'completed' || task.state === 'failed' || task.state === 'killed' ? fgMuted : fgColor}>
             {task.description}
           </Text>
+          {task.agentId && <Text color={fgMuted}>{task.agentId}</Text>}
         </Box>
       ))}
       {overflow > 0 && (

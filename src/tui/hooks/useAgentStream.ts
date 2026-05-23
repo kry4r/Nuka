@@ -21,6 +21,10 @@ export type AgentStreamDeps = {
   ) => AsyncIterable<AgentEvent>
 }
 
+export type SendResult =
+  | { ok: true }
+  | { ok: false; error: Error; busy?: boolean }
+
 /**
  * Append/extend a `text` ContentBlock on the in-flight assistant. Returns a
  * new AssistantMessage so React detects the state change.
@@ -47,7 +51,8 @@ export function useAgentStream(deps: AgentStreamDeps): {
   progressByToolId: Record<string, string[]>
   running: boolean
   streamingAssistant: AssistantMessage | null
-  send: (text: string, opts?: SendOpts) => Promise<void>
+  send: (text: string, opts?: SendOpts) => Promise<SendResult>
+  isRunningNow: () => boolean
   cancel: () => void
   reset: () => void
 } {
@@ -56,12 +61,22 @@ export function useAgentStream(deps: AgentStreamDeps): {
   const [running, setRunning] = useState(false)
   const [streamingAssistant, setStreamingAssistant] = useState<AssistantMessage | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const runningRef = useRef(false)
 
   const send = useCallback(async (text: string, opts?: SendOpts) => {
+    if (runningRef.current) {
+      return {
+        ok: false,
+        busy: true,
+        error: new Error('Agent is already running. The message was not sent.'),
+      }
+    }
     const ac = new AbortController()
     abortRef.current = ac
+    runningRef.current = true
     setRunning(true)
     setStreamingAssistant(null)
+    let result: SendResult = { ok: true }
     try {
       // Only forward `images` when present so the legacy text-only path
       // observes the identical `{ text }` shape it had before.
@@ -86,13 +101,20 @@ export function useAgentStream(deps: AgentStreamDeps): {
         }
       }
     } catch (err) {
-      setEvents(prev => [...prev, { type: 'error', error: err as Error }])
+      const error = err instanceof Error ? err : new Error(String(err))
+      setEvents(prev => [...prev, { type: 'error', error }])
       setStreamingAssistant(null)
+      result = { ok: false, error }
     } finally {
+      runningRef.current = false
       setRunning(false)
       setStreamingAssistant(null)
+      abortRef.current = null
     }
+    return result
   }, [deps])
+
+  const isRunningNow = useCallback(() => runningRef.current, [])
 
   const cancel = useCallback(() => {
     abortRef.current?.abort()
@@ -104,5 +126,5 @@ export function useAgentStream(deps: AgentStreamDeps): {
     setStreamingAssistant(null)
   }, [])
 
-  return { events, progressByToolId, running, streamingAssistant, send, cancel, reset }
+  return { events, progressByToolId, running, streamingAssistant, send, isRunningNow, cancel, reset }
 }

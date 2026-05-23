@@ -1,7 +1,7 @@
 // src/core/compact/compact.ts
 import type { Session } from '../session/types'
 import type { LLMProvider } from '../provider/types'
-import type { AssistantMessage, Message } from '../message/types'
+import type { AssistantMessage, Message, ResponsesCompactionMessage } from '../message/types'
 import { ulid } from 'ulid'
 
 export const COMPACT_SUMMARY_MARKER = '[[compact-summary]]'
@@ -36,6 +36,30 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
   const cutBoundaryIndex = boundaries[boundaries.length - keepTurns]!
   const older = session.messages.slice(0, cutBoundaryIndex)
   const kept = session.messages.slice(cutBoundaryIndex)
+
+  if (opts.provider.compact) {
+    const compacted = await opts.provider.compact(
+      {
+        model: opts.model,
+        system: COMPACT_SYSTEM,
+        messages: older,
+        tools: [],
+        maxTokens: 800,
+      },
+      new AbortController().signal,
+    )
+    if (compacted.output.length > 0) {
+      const summary: ResponsesCompactionMessage = {
+        role: 'responses_compaction',
+        provider: 'openai',
+        output: compacted.output,
+        id: ulid(),
+        ts: Date.now(),
+      }
+      session.messages = [summary, ...kept]
+      return
+    }
+  }
 
   let summaryText = ''
   const stream = opts.provider.stream(

@@ -54,6 +54,21 @@ export function truncateLeftToFit(s: string, maxWidth: number): string {
 }
 
 type Position = { x: number; y: number }
+type CursorLayout = Position & { yOffset: number }
+
+function visibleInput(input: string): string {
+  return input.replace(/[\u0000-\u001f\u007f]/g, '')
+}
+
+function isNavigationSequence(input: string, key: Record<string, unknown>): boolean {
+  if (key.pageUp || key.pageDown || key.home || key.end) return true
+  return input === '\u001B[5~'
+    || input === '\u001B[6~'
+    || input === '\u001B[H'
+    || input === '\u001B[F'
+    || input === '\u001B[1~'
+    || input === '\u001B[4~'
+}
 
 function getAbsolutePosition(node: DOMElement | null): Position | null {
   let current: DOMElement | undefined = node ?? undefined
@@ -69,6 +84,31 @@ function getAbsolutePosition(node: DOMElement | null): Position | null {
   }
 
   return { x, y }
+}
+
+function getRootHeight(node: DOMElement | null): number | null {
+  let current: DOMElement | undefined = node ?? undefined
+  let root: DOMElement | undefined = current
+
+  while (current?.parentNode) {
+    current = current.parentNode
+    root = current
+  }
+
+  return root?.yogaNode?.getComputedHeight() ?? null
+}
+
+function getFullscreenCursorYOffset(
+  node: DOMElement | null,
+  stdout: NodeJS.WriteStream | undefined,
+): number {
+  const rows = typeof stdout?.rows === 'number' ? stdout.rows : undefined
+  if (stdout?.isTTY !== true || rows === undefined || rows <= 0) return 0
+
+  const rootHeight = getRootHeight(node)
+  // Ink omits the trailing newline when output fills the terminal. Cursor
+  // movement then starts on the last output row, so absolute y needs +1.
+  return rootHeight !== null && rootHeight >= rows ? 1 : 0
 }
 
 export type PromptInputProps = {
@@ -112,8 +152,8 @@ export type PromptInputProps = {
 export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const history = useInputHistory()
   const inputLineRef = useRef<DOMElement | null>(null)
-  const inputLinePositionRef = useRef<Position | null>(null)
-  const [inputLinePosition, setInputLinePosition] = useState<Position | null>(null)
+  const inputLineLayoutRef = useRef<CursorLayout | null>(null)
+  const [inputLineLayout, setInputLineLayout] = useState<CursorLayout | null>(null)
   const { setCursorPosition } = useCursor()
 
   // Env-gated user-overridable keybinding resolver. When NUKA_KEYBINDINGS is
@@ -285,6 +325,16 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
 
   useInput((input, key) => {
     if (props.disabled) return
+    if (isNavigationSequence(input, key)) {
+      props.onUserInput?.()
+      return
+    }
+    const returnIndex = input.search(/[\r\n]/)
+    const inputBeforeReturn = returnIndex >= 0 ? input.slice(0, returnIndex) : ''
+    const isReturn = key.return || returnIndex >= 0
+    const valueAtReturn = inputBeforeReturn.length > 0
+      ? props.value + inputBeforeReturn
+      : props.value
 
     // Iter MMMM — every user input edge resets the awaySummary idle
     // watcher. Called *before* mode-specific branches so vim, mention,
@@ -308,9 +358,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       if (action !== null) {
         switch (action) {
           case 'chat:submit':
-            if (props.value.trim()) {
-              history.push(props.value)
-              props.onSubmit(props.value)
+            if (valueAtReturn.trim()) {
+              history.push(valueAtReturn)
+              props.onSubmit(valueAtReturn)
             }
             return
           case 'chat:cancel':
@@ -372,10 +422,10 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       }
       if (!isInsert) {
         // Normal/Visual mode — eat all keys; submit only on Enter from normal.
-        if (key.return) {
-          if (props.value.trim()) {
-            history.push(props.value)
-            props.onSubmit(props.value)
+        if (isReturn) {
+          if (valueAtReturn.trim()) {
+            history.push(valueAtReturn)
+            props.onSubmit(valueAtReturn)
           }
           return
         }
@@ -387,8 +437,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         if (key.downArrow) { applyVimKey({ kind: 'char', ch: 'j' }); return }
         if (key.leftArrow) { applyVimKey({ kind: 'char', ch: 'h' }); return }
         if (key.rightArrow) { applyVimKey({ kind: 'char', ch: 'l' }); return }
-        if (input && !key.ctrl && !key.meta) {
-          for (const ch of input) applyVimKey({ kind: 'char', ch })
+        const printable = visibleInput(input)
+        if (printable && !key.ctrl && !key.meta) {
+          for (const ch of printable) applyVimKey({ kind: 'char', ch })
           return
         }
         return
@@ -397,10 +448,10 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       // Enter still submits via the legacy history+onSubmit logic below; up/down
       // arrows still walk history. We return early so the legacy character-append
       // path doesn't double-apply.
-      if (key.return) {
-        if (props.value.trim()) {
-          history.push(props.value)
-          props.onSubmit(props.value)
+      if (isReturn) {
+        if (valueAtReturn.trim()) {
+          history.push(valueAtReturn)
+          props.onSubmit(valueAtReturn)
         }
         return
       }
@@ -419,8 +470,9 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         history.reset()
         return
       }
-      if (input && !key.ctrl && !key.meta) {
-        for (const ch of input) applyVimKey({ kind: 'char', ch })
+      const printable = visibleInput(input)
+      if (printable && !key.ctrl && !key.meta) {
+        for (const ch of printable) applyVimKey({ kind: 'char', ch })
         history.reset()
         return
       }
@@ -462,7 +514,7 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
         }
         return
       }
-      if (key.return) {
+      if (isReturn) {
         acceptMention()
         return
       }
@@ -504,14 +556,14 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
     }
 
     // Normal mode
-    if (key.return) {
-      if (props.value.trim()) {
+    if (isReturn) {
+      if (valueAtReturn.trim()) {
         // If in slash list mode and a candidate is highlighted but the typed
         // text doesn't exactly match a command, expand to the highlighted one.
-        let toSubmit = props.value
-        const argHintMode = slashActive && props.value.includes(' ')
+        let toSubmit = valueAtReturn
+        const argHintMode = slashActive && valueAtReturn.includes(' ')
         if (slashActive && !argHintMode && slashCandidates.length > 0) {
-          const exact = slashCandidates.find(c => '/' + c.name === props.value)
+          const exact = slashCandidates.find(c => '/' + c.name === valueAtReturn)
           if (!exact) {
             const chosen = slashCandidates[slashCursor]
             if (chosen) toSubmit = '/' + chosen.name
@@ -539,12 +591,13 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
       setCursorOffset(nextValue.length)
       return
     }
-    if (!key.ctrl && !key.meta && input) {
+    const printable = visibleInput(input)
+    if (!key.ctrl && !key.meta && printable) {
       history.reset()
       // @-trigger detection is performed inside usePromptMention via
       // (input, cursorOffset). We just append the character and update
       // the cursor — the hook does the rest.
-      const nextValue = props.value + input
+      const nextValue = props.value + printable
       props.onChange(nextValue)
       setCursorOffset(nextValue.length)
     }
@@ -585,16 +638,22 @@ export function PromptInput(props: PromptInputProps): React.JSX.Element {
   const cursorColumn = promptPrefixWidth + stringWidth(valueText)
 
   useLayoutEffect(() => {
-    const next = getAbsolutePosition(inputLineRef.current)
-    const prev = inputLinePositionRef.current
-    if (prev?.x === next?.x && prev?.y === next?.y) return
-    inputLinePositionRef.current = next
-    setInputLinePosition(next)
+    const position = getAbsolutePosition(inputLineRef.current)
+    const next = position
+      ? {
+          ...position,
+          yOffset: getFullscreenCursorYOffset(inputLineRef.current, stdout),
+        }
+      : null
+    const prev = inputLineLayoutRef.current
+    if (prev?.x === next?.x && prev?.y === next?.y && prev?.yOffset === next?.yOffset) return
+    inputLineLayoutRef.current = next
+    setInputLineLayout(next)
   })
 
   setCursorPosition(
-    showCursor && inputLinePosition
-      ? { x: inputLinePosition.x + cursorColumn, y: inputLinePosition.y }
+    showCursor && inputLineLayout
+      ? { x: inputLineLayout.x + cursorColumn, y: inputLineLayout.y + inputLineLayout.yOffset }
       : undefined,
   )
 

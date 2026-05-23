@@ -8,12 +8,12 @@ import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render } from 'ink-testing-library'
 
-import { useAgentStream, type AgentStreamDeps } from '../../../src/tui/hooks/useAgentStream'
+import { useAgentStream, type AgentStreamDeps, type SendResult } from '../../../src/tui/hooks/useAgentStream'
 import type { AgentEvent } from '../../../src/core/agent/events'
 import type { ImageContentBlock } from '../../../src/core/message/types'
 
 type Probe = {
-  current: ((text: string, opts?: { images?: readonly ImageContentBlock[] }) => Promise<void>) | null
+  current: ((text: string, opts?: { images?: readonly ImageContentBlock[] }) => Promise<SendResult>) | null
 }
 
 function makeProbe(deps: AgentStreamDeps): Probe {

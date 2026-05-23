@@ -1,23 +1,8 @@
 // src/tui/Status/StatusPanel.tsx
 //
-// Phase 13 §4.2 — unified Status zone with two-column dense layout,
-// icon/text mode, expanded context row, and no time tracking.
-//
-// Dense layout: two columns separated by │
-//   left  = [mode, model, cwd]
-//   right = [context, cost, counts]
-//
-// Compact layout: two rows
-//   row1 = mode/model/cwd/context  · -separated
-//   row2 = cost/counts             · -separated
-//
-// Oneline layout: single line, all segments · -separated.
-//
-// iconMode: 'icon' (default) uses glyphs ⬢/▰▱/⚙ etc.
-//           'text' uses plain labels [idle]/context:/cost: etc.
-//
-// Narrow-terminal degradation (<80 cols): dense -> compact,
-// compact -> oneline. Automatic.
+// Claude-status inspired statusline: one calm row by default, space-separated
+// fields, terse git indicators, and a compact context bar. The old layout
+// modes remain as preferences but no mode renders the prior two-column block.
 //
 // A 7th optional row renders the legacy `config.statusLine`
 // format-string (id `status-line`) for users who depended on the
@@ -45,6 +30,7 @@ export type StatusPanelProps = {
   mode: StatusMode
   model: string
   providerId: string
+  providerName?: string
   /** Reasoning effort (low/medium/high), undefined when unset. */
   effort?: 'low' | 'medium' | 'high'
   cwd: string
@@ -86,8 +72,6 @@ export type StatusPanelProps = {
   planMode?: boolean
 }
 
-const NARROW_THRESHOLD = 80
-
 function fmtTokens(n: number): string {
   if (n < 1000) return String(n)
   const v = n / 1000
@@ -96,8 +80,8 @@ function fmtTokens(n: number): string {
 
 /**
  * §4.2.3 — mode badge.
- * icon mode: '⬢ idle' / '⬢ running' etc.
- * text mode: '[idle]' / '[running]' etc.
+ * Idle mode is intentionally omitted to match claude-status' quiet baseline.
+ * Non-idle mode still renders as '⬢ running' or '[running]'.
  */
 function modeBadge(mode: StatusMode, iconMode: IconMode): string {
   const label = mode === 'awaiting-user' ? 'awaiting' : mode
@@ -109,26 +93,21 @@ function modeBadge(mode: StatusMode, iconMode: IconMode): string {
 
 function shortenCwd(cwd: string): string {
   // Truncate from the left so the leaf directory stays visible.
-  return cwd.length > 40 ? '…' + cwd.slice(cwd.length - 39) : cwd
+  const home = process.env.HOME
+  const display = home && cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd
+  return display.length > 42 ? '…' + display.slice(display.length - 41) : display
 }
 
 function progressBar(used: number, max: number): string {
-  if (max <= 0) return '▱'.repeat(8)
+  if (max <= 0) return '░'.repeat(10)
   const pct = Math.max(0, Math.min(1, used / max))
-  const filled = Math.round(pct * 8)
-  return '▰'.repeat(filled) + '▱'.repeat(8 - filled)
+  const filled = Math.floor(pct * 10)
+  return '█'.repeat(filled) + '░'.repeat(10 - filled)
 }
 
 function backgroundCount(tm?: TaskManager): number {
   if (!tm) return 0
   return tm.list().filter(t => t.state === 'running' || t.state === 'pending').length
-}
-
-function autoDegrade(layout: StatusLayout, columns: number): StatusLayout {
-  if (columns >= NARROW_THRESHOLD) return layout
-  if (layout === 'dense') return 'compact'
-  if (layout === 'compact') return 'oneline'
-  return 'oneline'
 }
 
 export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
@@ -138,10 +117,10 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const accent = tColors.primary ?? defaultPalette.primary
   const warn = tColors.warn ?? defaultPalette.warn
   const error = tColors.error ?? defaultPalette.error
+  const success = tColors.success ?? defaultPalette.success
 
   const { stdout } = useStdout()
   const columns = stdout?.columns ?? 80
-  const layout = autoDegrade(props.layout, columns)
   const iconMode: IconMode = props.iconMode ?? 'icon'
 
   const hidden = new Set(props.hiddenSegments ?? [])
@@ -189,112 +168,13 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
 
   // ---- Compute segment text (id-keyed) ----
   const ctxPct = props.contextMax > 0 ? props.contextUsed / props.contextMax : 0
-  const ctxColor = ctxPct > 0.95 ? error : ctxPct > 0.8 ? warn : muted
+  const ctxColor = ctxPct >= 0.8 ? error : ctxPct >= 0.6 ? warn : success
   const dirtyMark = props.gitBranch?.dirty ? '●' : ''
-  const branchText = props.gitBranch
-    ? `${shortenCwd(props.cwd)}  ${props.gitBranch.branch}${dirtyMark}`
-    : shortenCwd(props.cwd)
-
-  // Build context line: <bar>  <used>k/<max>k · <pct>% · in:<n>k out:<n>k
-  // The 8-char block-fill bar is retained in both icon and text modes per spec §3.
-  // In text mode a "context: " prefix is prepended; in icon mode the bar leads.
-  const renderContextText = (): string => {
-    const bar = progressBar(props.contextUsed, props.contextMax)
-    const usedFmt = fmtTokens(props.contextUsed)
-    const maxFmt = fmtTokens(props.contextMax)
-    const pctFmt = `${Math.round(ctxPct * 100)}%`
-    const inTok = props.inputTokens ?? 0
-    const outTok = props.outputTokens ?? 0
-
-    if (iconMode === 'icon') {
-      return `${bar}  ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
-    }
-    // text mode: same bar + data but with a label prefix
-    return `context: ${bar}  ${usedFmt}/${maxFmt} · ${pctFmt} · in:${fmtTokens(inTok)} out:${fmtTokens(outTok)}`
-  }
-
-  // §4.2.3 counts segment
-  const renderCountsText = (): string => {
-    const plugins = props.pluginCount
-      + (props.sessionPluginCount > 0 ? props.sessionPluginCount : 0)
-    const bg = backgroundCount(props.taskManager)
-    if (iconMode === 'icon') {
-      return `⚙ ${plugins} plugins · ${props.agentInFlight} agents · ${bg} background`
-    }
-    return `plugins:${plugins} · agents:${props.agentInFlight} · bg:${bg}`
-  }
-
-  // P0 #11 — In dense layout the left column is roughly half the width,
-  // and the model row also carries provider + optional effort. Pre-truncate
-  // the model name so the dense row never wraps.
-  // Budget: ~one third of the terminal minus a small allowance for borders
-  // and the " · provider" suffix.
-  const modelSuffixBudget = props.providerId.length
-    + (props.effort ? ` · effort:${props.effort}`.length : 0)
-    + 3 // " · " separator before provider.
-  const modelBudget = Math.max(8, Math.floor(columns / 3) - modelSuffixBudget)
-  const displayModel = layout !== 'oneline'
-    ? truncateByWidth(props.model, modelBudget)
-    : props.model
-
-  const segments: Array<{ id: string; render: () => React.JSX.Element }> = [
-    {
-      id: 'mode',
-      render: () => <Text color={accent} bold>{modeBadge(props.mode, iconMode)}</Text>,
-    },
-  ]
-
-  // Iter DDDD — plan-mode badge. Only injected when `planMode === true`
-  // so the segment list (and column/row layout maths) stays untouched
-  // for the common "normal mode" path. Coloured with `warn` to match
-  // the existing dirty-git marker (visually loud, semantically a hint
-  // that an enforcement gate is active). Inserted right after `mode`
-  // so it appears next to the existing status badge in every layout.
-  if (props.planMode) {
-    segments.push({
-      id: 'plan',
-      render: () => <Text color={warn} bold>[PLAN MODE]</Text>,
-    })
-  }
-
-  segments.push(
-    {
-      id: 'model',
-      render: () => (
-        <Text color={muted}>
-          {displayModel} · {props.providerId}
-          {props.effort ? ` · effort:${props.effort}` : ''}
-        </Text>
-      ),
-    },
-    {
-      id: 'cwd',
-      render: () => (
-        <Text color={props.gitBranch?.dirty ? warn : muted}>{branchText}</Text>
-      ),
-    },
-    {
-      id: 'context',
-      render: () => (
-        <Text color={ctxColor}>{renderContextText()}</Text>
-      ),
-    },
-    {
-      id: 'cost',
-      render: () => {
-        if (iconMode === 'icon') {
-          return <Text color={accent}>${props.cost.toFixed(4)}</Text>
-        }
-        return <Text color={accent}>cost:${props.cost.toFixed(4)}</Text>
-      },
-    },
-    {
-      id: 'counts',
-      render: () => (
-        <Text color={muted}>{renderCountsText()}</Text>
-      ),
-    },
-  )
+  const branchText = props.gitBranch?.branch
+    ? `${props.gitBranch.branch}${dirtyMark}`
+    : null
+  const providerLabel = (props.providerName?.trim() || props.providerId || '—').trim()
+  const providerModel = `${providerLabel}/${truncateByWidth(props.model, Math.max(12, Math.floor(columns * 0.24)))}`
 
   // Also accept 'cost-time' in hidden set for backward compat (maps to 'cost').
   const effectiveHidden = new Set<string>()
@@ -302,13 +182,14 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     effectiveHidden.add(h === 'cost-time' ? 'cost' : h)
   }
 
-  const visible = segments.filter(s => !effectiveHidden.has(s.id))
+  const visibleIds = ['mode', 'plan', 'cwd', 'model', 'context', 'cost', 'counts']
+    .filter(id => !effectiveHidden.has(id))
   const showStatusLineRow = !!props.statusLineConfig && !hidden.has('status-line')
 
   // Compute status-line text once (template only — command output appended separately).
   const renderStatusLineRow = (): React.JSX.Element => {
     const ctx: StatusLineCtx = {
-      provider: props.providerId,
+      provider: providerLabel,
       model: props.model,
       ctxPct: ctxPct * 100,
       cost: props.cost,
@@ -323,104 +204,86 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     return <Text color={muted}>{display}</Text>
   }
 
-  if (visible.length === 0 && !showStatusLineRow) return null
+  const has = (id: string): boolean => visibleIds.includes(id)
+  const plugins = props.pluginCount + (props.sessionPluginCount > 0 ? props.sessionPluginCount : 0)
+  const bg = backgroundCount(props.taskManager)
+  const hasCounts = plugins > 0 || props.agentInFlight > 0 || bg > 0
+  const countText = [
+    plugins > 0 ? `${plugins} plugins` : null,
+    props.agentInFlight > 0 ? `${props.agentInFlight} agents` : null,
+    bg > 0 ? `${bg} bg` : null,
+  ].filter((x): x is string => x !== null).join(' ')
+  const contextTitle = props.contextMax > 0
+    ? `${fmtTokens(props.contextUsed)}/${fmtTokens(props.contextMax)}`
+    : ''
+  const parts: Array<{ id: string; node: React.JSX.Element }> = []
 
-  // ---- Render by layout ----
-
-  if (layout === 'dense') {
-    // Two-column layout: left=[mode,plan,model,cwd], right=[context,cost,counts]
-    // Iter DDDD — `plan` slots into the left column right after `mode`
-    // so the badge is visually adjacent to the existing status badge.
-    const leftIds = new Set(['mode', 'plan', 'model', 'cwd'])
-    const rightIds = new Set(['context', 'cost', 'counts'])
-    const leftCol = visible.filter(s => leftIds.has(s.id))
-    const rightCol = visible.filter(s => rightIds.has(s.id))
-
-    // If both columns have content, render them side by side.
-    if (leftCol.length > 0 && rightCol.length > 0) {
-      return (
-        <Box flexDirection="column" paddingX={1} flexShrink={0}>
-          <Box flexDirection="row">
-            <Box flexDirection="column" flexBasis="50%" flexShrink={1}>
-              {leftCol.map(s => (
-                <Box key={s.id}>{s.render()}</Box>
-              ))}
-            </Box>
-            <Box flexShrink={0}>
-              <Text color={muted}> │ </Text>
-            </Box>
-            <Box flexDirection="column" flexBasis="50%" flexShrink={1}>
-              {rightCol.map(s => (
-                <Box key={s.id}>{s.render()}</Box>
-              ))}
-            </Box>
-          </Box>
-          {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
-        </Box>
-      )
-    }
-    // Degenerate: only one side has visible segments — fall back to single column.
-    return (
-      <Box flexDirection="column" paddingX={1} flexShrink={0}>
-        {visible.map(s => (
-          <Box key={s.id}>{s.render()}</Box>
-        ))}
-        {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
-      </Box>
-    )
+  if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', node: <Text color={accent}>{modeBadge(props.mode, iconMode)}</Text> })
+  if (has('plan') && props.planMode) parts.push({ id: 'plan', node: <Text color={warn} bold>[PLAN MODE]</Text> })
+  if (has('cwd')) parts.push({ id: 'cwd', node: <Text color={accent}>{shortenCwd(props.cwd)}</Text> })
+  if (has('cwd') && branchText) parts.push({ id: 'git', node: <Text color={props.gitBranch?.dirty ? warn : muted}>{branchText}</Text> })
+  if (has('model')) {
+    parts.push({
+      id: 'model',
+      node: <Text color={muted}>{providerModel}{props.effort ? ` ${props.effort}` : ''}</Text>,
+    })
   }
-
-  if (layout === 'compact') {
-    // Fold: row1 = mode/plan/model/cwd/context, row2 = cost/counts
-    // Iter DDDD — `plan` rides with the mode/model row so a narrow
-    // terminal still surfaces the badge above the fold.
-    const row1Ids = new Set(['mode', 'plan', 'model', 'cwd', 'context'])
-    const row1 = visible.filter(s => row1Ids.has(s.id))
-    const row2 = visible.filter(s => !row1Ids.has(s.id))
-    const sep = <Text color={muted}> · </Text>
-    return (
-      <Box flexDirection="column" paddingX={1} flexShrink={0}>
-        {row1.length > 0 && (
-          <Box flexWrap="wrap" width="100%">
-            {row1.map((s, i) => (
-              <React.Fragment key={s.id}>
-                {i > 0 && sep}
-                {s.render()}
-              </React.Fragment>
-            ))}
-          </Box>
-        )}
-        {row2.length > 0 && (
-          <Box flexWrap="wrap" width="100%">
-            {row2.map((s, i) => (
-              <React.Fragment key={s.id}>
-                {i > 0 && sep}
-                {s.render()}
-              </React.Fragment>
-            ))}
-          </Box>
-        )}
-        {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
-      </Box>
-    )
-  }
-
-  // oneline
-  const sep = <Text color={muted}> · </Text>
-  return (
-    <Box paddingX={1} flexWrap="wrap" width="100%" flexShrink={0}>
-      {visible.map((s, i) => (
-        <React.Fragment key={s.id}>
-          {i > 0 && sep}
-          {s.render()}
-        </React.Fragment>
-      ))}
-      {showStatusLineRow && (
+  if (has('cost') && props.cost > 0) parts.push({ id: 'cost', node: <Text color={muted}>${props.cost.toFixed(4)}</Text> })
+  if (has('counts') && hasCounts) parts.push({ id: 'counts', node: <Text color={muted}>{countText}</Text> })
+  if (has('context')) {
+    parts.push({
+      id: 'context',
+      node: (
         <>
-          {visible.length > 0 && sep}
-          {renderStatusLineRow()}
+          <Text color={muted}>∴ </Text>
+          <Text color={muted}>context: </Text>
+          <Text color={ctxColor}>{progressBar(props.contextUsed, props.contextMax)} {Math.floor(ctxPct * 100)}%</Text>
+          {contextTitle.length > 0 && <Text color={muted}> {contextTitle}</Text>}
         </>
-      )}
+      ),
+    })
+  }
+
+  if (parts.length === 0 && !showStatusLineRow) return null
+
+  if (props.layout === 'compact' && columns < 72 && parts.length > 3) {
+    const first = parts.filter(p => p.id === 'mode' || p.id === 'plan' || p.id === 'cwd' || p.id === 'git')
+    const second = parts.filter(p => !first.includes(p))
+    return (
+      <Box flexDirection="column" paddingX={1} flexShrink={0}>
+        {first.length > 0 && (
+          <Box height={1} overflow="hidden">
+            {first.map((s, i) => (
+              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' ? 1 : 0}>
+                {s.node}
+              </Box>
+            ))}
+          </Box>
+        )}
+        {second.length > 0 && (
+          <Box height={1} overflow="hidden">
+            {second.map((s, i) => (
+              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'model' ? 1 : 0}>
+                {s.node}
+              </Box>
+            ))}
+          </Box>
+        )}
+        {showStatusLineRow && <Box>{renderStatusLineRow()}</Box>}
+      </Box>
+    )
+  }
+
+  return (
+    <Box flexDirection="column" paddingX={1} flexShrink={0}>
+      <Box height={1} overflow="hidden">
+        {parts.map((s, i) => (
+          <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'model' ? 1 : 0}>
+            {s.node}
+          </Box>
+        ))}
+      </Box>
+      {showStatusLineRow && <Box height={1} overflow="hidden">{renderStatusLineRow()}</Box>}
     </Box>
   )
 }

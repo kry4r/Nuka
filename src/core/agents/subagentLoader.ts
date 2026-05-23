@@ -9,13 +9,9 @@
 //   • cwd/.nuka/subagents/         — project-scoped definitions
 //   • home/.nuka/subagents/        — user-scoped definitions
 //
-// The on-disk schema is deliberately a strict subset of Nuka-Code's
-// agent JSON shape — required `name` + `description` + `systemPrompt`,
-// plus optional `tools` (allowlist alias for the in-memory
-// `allowedTools` field), `model`, `allowedTools`, `deniedTools`,
-// `maxTurns`, `keywords`, `maxTokens`, `temperature`. Extra fields are
-// rejected by the Zod schema (`strict()`) so a typo doesn't silently
-// produce a malformed subagent.
+// YAML/JSON files use Nuka's explicit `systemPrompt` field. Markdown files
+// use the Nuka-Code shape: YAML frontmatter for metadata and the body as the
+// system prompt.
 //
 // Per-file errors in `loadSubagentsFromDir` are isolated — one bad file
 // surfaces in `errors[]` and the rest of the batch still loads. Missing
@@ -83,6 +79,7 @@ const SubagentFileSchema = z
     tools: z.array(z.string()).optional(),
     allowedTools: z.array(z.string()).optional(),
     deniedTools: z.array(z.string()).optional(),
+    disallowedTools: z.array(z.string()).optional(),
     model: z.string().min(1).optional(),
     maxTurns: z.number().int().positive().optional(),
     maxTokens: z.number().int().positive().optional(),
@@ -90,6 +87,13 @@ const SubagentFileSchema = z
     keywords: z.array(z.string()).optional(),
   })
   .strict()
+  .refine(
+    (d) => !(d.deniedTools !== undefined && d.disallowedTools !== undefined),
+    {
+      message:
+        "specify either 'deniedTools' or 'disallowedTools' — not both (they are aliases)",
+    },
+  )
   .refine(
     (d) => !(d.tools !== undefined && d.allowedTools !== undefined),
     {
@@ -127,7 +131,8 @@ function assembleDefinition(
     sourcePath: filePath,
   }
   if (tools !== undefined) def.tools = tools
-  if (parsed.deniedTools !== undefined) def.deniedTools = parsed.deniedTools
+  const deniedTools = parsed.deniedTools ?? parsed.disallowedTools
+  if (deniedTools !== undefined) def.deniedTools = deniedTools
   if (parsed.model !== undefined) def.model = parsed.model
   if (parsed.maxTurns !== undefined) def.maxTurns = parsed.maxTurns
   if (parsed.maxTokens !== undefined) def.maxTokens = parsed.maxTokens
@@ -144,6 +149,9 @@ function assembleDefinition(
  */
 function parseByExtension(filePath: string, content: string): unknown {
   const ext = extname(filePath).toLowerCase()
+  if (ext === '.md') {
+    return parseMarkdownAgent(content)
+  }
   if (ext === '.json') {
     try {
       return JSON.parse(content) as unknown
@@ -161,8 +169,66 @@ function parseByExtension(filePath: string, content: string): unknown {
     }
   }
   throw new Error(
-    `unsupported file extension '${ext}' — only .yaml, .yml, and .json are recognised`,
+    `unsupported file extension '${ext}' — only .md, .yaml, .yml, and .json are recognised`,
   )
+}
+
+function parseMarkdownAgent(content: string): unknown {
+  const parsed = parseMarkdownFrontmatter(content)
+  if (!parsed) {
+    throw new Error('missing markdown frontmatter')
+  }
+  if (!parsed.body.trim()) {
+    throw new Error('markdown body must contain the system prompt')
+  }
+  return {
+    ...parsed.frontmatter,
+    systemPrompt: parsed.body.trim(),
+    tools: normalizeToolList(parsed.frontmatter['tools']),
+    allowedTools: normalizeToolList(parsed.frontmatter['allowedTools']),
+    deniedTools: normalizeToolList(parsed.frontmatter['deniedTools']),
+    disallowedTools: normalizeToolList(parsed.frontmatter['disallowedTools']),
+  }
+}
+
+function parseMarkdownFrontmatter(content: string): { frontmatter: Record<string, unknown>; body: string } | null {
+  const normalized = content.replace(/^\uFEFF/, '')
+  if (!normalized.startsWith('---\n') && !normalized.startsWith('---\r\n')) return null
+  const closeMatch = /\r?\n---\r?\n/.exec(normalized.slice(3))
+  if (!closeMatch) return null
+  const closeStart = 3 + closeMatch.index
+  const bodyStart = closeStart + closeMatch[0].length
+  const yamlText = normalized.slice(3, closeStart).replace(/^\r?\n/, '')
+  let raw: unknown
+  try {
+    raw = parseYaml(yamlText) as unknown
+  } catch (err) {
+    throw new Error(`failed to parse markdown frontmatter: ${(err as Error).message}`)
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('markdown frontmatter must be an object')
+  }
+  return {
+    frontmatter: raw as Record<string, unknown>,
+    body: normalized.slice(bodyStart),
+  }
+}
+
+function normalizeToolList(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return []
+  const items = Array.isArray(value) ? value : [value]
+  const out: string[] = []
+  for (const item of items) {
+    if (typeof item !== 'string') continue
+    for (const part of item.split(',')) {
+      const trimmed = part.trim()
+      if (trimmed.length === 0) continue
+      if (trimmed === '*') return undefined
+      out.push(trimmed)
+    }
+  }
+  return out
 }
 
 /**
@@ -210,7 +276,7 @@ export async function loadSubagentFile(
   }
 }
 
-const ACCEPTED_EXTENSIONS = new Set(['.yaml', '.yml', '.json'])
+const ACCEPTED_EXTENSIONS = new Set(['.md', '.yaml', '.yml', '.json'])
 
 async function listSubagentFiles(
   dirPath: string,
@@ -277,6 +343,11 @@ export async function loadSubagentsFromDir(
 
   for (const filePath of files) {
     try {
+      if (extname(filePath).toLowerCase() === '.md') {
+        const content = await readFile(filePath, 'utf8')
+        const parsedMarkdown = parseMarkdownFrontmatter(content)
+        if (!parsedMarkdown || typeof parsedMarkdown.frontmatter['name'] !== 'string') continue
+      }
       const def = await loadSubagentFile(filePath)
       const prev = byName.get(def.name)
       if (prev !== undefined) {

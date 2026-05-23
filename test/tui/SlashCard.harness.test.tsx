@@ -85,21 +85,21 @@ describe('SlashCard grouped dropdown', () => {
     const h = mountApp({ target: 'app', slash })
     try {
       await wait()
-      // Baseline frame includes the StatusPanel rows (mode badge / elapsed / counts).
+      // Baseline frame includes the statusline.
       const baseline = h.frames().pop() ?? ''
-      expect(baseline).toMatch(/⬢ idle|⏱|plugins/)
+      expect(baseline).toMatch(/∴ context:/)
       // Open the submenu.
       h.stdin.write('/')
       await h.waitFor({ contains: '/help' })
       const open = h.frames().pop() ?? ''
       expect(open).toContain('/help')
-      // While open, StatusPanel is replaced — the elapsed-time row is not visible.
-      expect(open).not.toMatch(/⏱\s+\d/)
+      // While open, statusline stays visible behind the slash card.
+      expect(open).toMatch(/∴ context:/)
       // Close the submenu.
       h.stdin.write('\u007F') // backspace
-      await h.waitFor({ regex: '⬢ idle|⏱|plugins' })
+      await h.waitFor({ regex: '∴ context:' })
       const closed = h.frames().pop() ?? ''
-      expect(closed).toMatch(/⬢ idle|⏱|plugins/)
+      expect(closed).toMatch(/∴ context:/)
     } finally {
       h.unmount()
     }

@@ -86,6 +86,57 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.systemPrompt).toBe('Test.')
   })
 
+  it('loads a Nuka-Code style markdown file with frontmatter', async () => {
+    const filePath = join(dir, 'explore.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: explore',
+        'description: read the codebase and report findings',
+        'tools:',
+        '  - Read',
+        '  - Grep',
+        'model: inherit',
+        'maxTurns: 7',
+        '---',
+        '',
+        'You are a read-only explorer.',
+        'Return concise findings.',
+      ].join('\n'),
+      'utf8',
+    )
+    const def = await loadSubagentFile(filePath)
+    expect(def.name).toBe('explore')
+    expect(def.description).toBe('read the codebase and report findings')
+    expect(def.systemPrompt).toBe('You are a read-only explorer.\nReturn concise findings.')
+    expect(def.tools).toEqual(['Read', 'Grep'])
+    expect(def.model).toBe('inherit')
+    expect(def.maxTurns).toBe(7)
+  })
+
+  it('maps Nuka-Code disallowedTools frontmatter to deniedTools', async () => {
+    const filePath = join(dir, 'verify.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: verify',
+        'description: verify code changes',
+        'tools: "*"',
+        'disallowedTools:',
+        '  - Write',
+        '  - Bash',
+        '---',
+        'You verify.',
+      ].join('\n'),
+      'utf8',
+    )
+    const def = await loadSubagentFile(filePath)
+    expect(def.tools).toBeUndefined()
+    expect(def.deniedTools).toEqual(['Write', 'Bash'])
+  })
+
   it('accepts allowedTools as an alias for tools', async () => {
     const filePath = join(dir, 'auditor.json')
     await writeFile(
@@ -272,6 +323,31 @@ describe('loadSubagentsFromDir', () => {
     const res = await loadSubagentsFromDir(dir)
     expect(res.loaded).toHaveLength(1)
     expect(res.errors).toEqual([])
+  })
+
+  it('ignores markdown files without frontmatter during directory scans', async () => {
+    await writeFile(
+      join(dir, 'good.md'),
+      ['---', 'name: good', 'description: g', '---', 'prompt'].join('\n'),
+    )
+    await writeFile(join(dir, 'README.md'), '# subagents\n\nProject notes only.')
+    const res = await loadSubagentsFromDir(dir)
+    expect(res.errors).toEqual([])
+    expect(res.loaded.map((d) => d.name)).toEqual(['good'])
+  })
+
+  it('ignores markdown frontmatter documents without agent name during directory scans', async () => {
+    await writeFile(
+      join(dir, 'good.md'),
+      ['---', 'name: good', 'description: g', '---', 'prompt'].join('\n'),
+    )
+    await writeFile(
+      join(dir, 'notes.md'),
+      ['---', 'title: subagent notes', '---', '# Notes only'].join('\n'),
+    )
+    const res = await loadSubagentsFromDir(dir)
+    expect(res.errors).toEqual([])
+    expect(res.loaded.map((d) => d.name)).toEqual(['good'])
   })
 
   it('scans nested directories when recursive: true (default)', async () => {

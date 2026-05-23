@@ -25,10 +25,10 @@ describe('Phase 12 layout', () => {
       // chrome — assert presence of the input frame rather than a free-
       // standing `>` line, since ink-testing-library renders the box).
       expect(frame).toMatch(/│ >/)
-      // Status panel two-column dense layout — assert two anchor segments.
-      // Phase 13: ⏱ removed (time tracking gone); check for cost segment instead.
-      expect(frame).toMatch(/⬢ idle/)
-      expect(frame).toMatch(/\$0\.0000/)
+      // Statusline visible: claude-status style keeps idle/cost-zero quiet
+      // and anchors on the context segment instead of the old mode badge.
+      expect(frame).toMatch(/∴ context:/)
+      expect(frame).not.toMatch(/⬢ idle/)
     } finally {
       h.unmount()
     }

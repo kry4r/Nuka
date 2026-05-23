@@ -29,7 +29,7 @@ import { SettingsCommand } from '../../src/slash/settings'
 import { ModelCommand } from '../../src/slash/model'
 
 // Anchor strings rendered in each zone — used to assert visibility.
-const STATUS_ANCHOR = /⬢ idle|⬢ awaiting/   // Status panel mode badge
+const STATUS_ANCHOR = /∴ context:|\[awaiting\]|⬢ awaiting/ // Statusline
 const PROMPT_ANCHOR = /│ >/                   // PromptInput border + cursor
 const SLASH_LIST_ANCHOR = /\/settings/        // CommandList row
 const ARG_HINT_ANCHOR = /Usage/               // ArgHint card
@@ -100,7 +100,7 @@ describe('Phase 12 M6 — UIState e2e harness', () => {
 
       // --- Step 5: submenu(full) → normal ------------------------------------
       h.stdin.write('\u001B')                      // Esc closes submenu
-      await h.waitFor({ regex: '⬢ idle' })
+      await h.waitFor({ regex: '∴ context:' })
       const f4 = h.frames().pop() ?? ''
       expect(f4).toMatch(STATUS_ANCHOR)            // Status back
       expect(f4).toMatch(PROMPT_ANCHOR)            // Prompt back
@@ -129,7 +129,7 @@ describe('Phase 12 M6 — UIState e2e harness', () => {
       const decision = await decisionPromise
       expect(decision.allowed).toBe(false)
 
-      await h.waitFor({ regex: '⬢ idle' })
+      await h.waitFor({ regex: '∴ context:' })
       const f6 = h.frames().pop() ?? ''
       expect(f6).toMatch(STATUS_ANCHOR)
       expect(f6).toMatch(PROMPT_ANCHOR)

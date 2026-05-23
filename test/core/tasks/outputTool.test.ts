@@ -31,6 +31,9 @@ class FakeManager implements TaskOutputManagerLike {
   set(t: Task): void {
     this.tasks.set(t.id, t)
   }
+  list(): Task[] {
+    return Array.from(this.tasks.values()).reverse()
+  }
   get(id: string): Task | undefined {
     return this.tasks.get(id)
   }
@@ -52,6 +55,7 @@ function makeTask(opts: {
   state?: TaskState
   outputFile: string
   description?: string
+  agentId?: string
 }): Task {
   return {
     id: opts.id ?? 'aa11bb22',
@@ -59,6 +63,7 @@ function makeTask(opts: {
     description: opts.description ?? 'demo task',
     state: opts.state ?? 'running',
     outputFile: opts.outputFile,
+    agentId: opts.agentId,
     spec: {
       kind: 'local_bash',
       description: opts.description ?? 'demo task',
@@ -81,7 +86,7 @@ describe('TaskOutput tool', () => {
     const tool = makeTaskOutputTool(new FakeManager())
     const r = await tool.run({ task_id: '' }, ctx())
     expect(r.isError).toBe(true)
-    expect(r.output).toContain('task_id is required')
+    expect(r.output).toContain('task_id or agent_id is required')
   })
 
   it('errors when no task with the id is registered', async () => {
@@ -89,6 +94,13 @@ describe('TaskOutput tool', () => {
     const r = await tool.run({ task_id: 'nope', block: false }, ctx())
     expect(r.isError).toBe(true)
     expect(r.output).toContain("No background task with id 'nope'")
+  })
+
+  it('errors when no task with the agent_id is registered', async () => {
+    const tool = makeTaskOutputTool(new FakeManager())
+    const r = await tool.run({ agent_id: 'agent-missing', block: false }, ctx())
+    expect(r.isError).toBe(true)
+    expect(r.output).toContain("No background task with agent id 'agent-missing'")
   })
 
   it('non-blocking: returns current state and trailing output', async () => {
@@ -108,6 +120,97 @@ describe('TaskOutput tool', () => {
     expect(text).toContain('retrieval_status=success')
     expect(text).toContain('third line')
     expect(text).toContain('description=still running')
+  })
+
+  it('includes agent_id when the task is backed by a local subagent', async () => {
+    const home = await newTmpDir()
+    const outputFile = path.join(home, '.nuka', 'tasks', 'agent.log')
+    await writeOutput(outputFile, 'agent output\n')
+
+    const m = new FakeManager()
+    m.set(makeTask({
+      id: 'agent',
+      outputFile,
+      state: 'completed',
+      description: 'subagent task',
+      agentId: 'agent-1234abcd',
+    }))
+
+    const tool = makeTaskOutputTool(m)
+    const r = await tool.run({ task_id: 'agent', block: false }, ctx())
+    expect(r.isError).toBe(false)
+    expect(r.output as string).toContain('agent_id=agent-1234abcd')
+  })
+
+  it('reads output by agent_id when task_id is omitted', async () => {
+    const home = await newTmpDir()
+    const oldOutputFile = path.join(home, '.nuka', 'tasks', 'old-agent.log')
+    const newOutputFile = path.join(home, '.nuka', 'tasks', 'new-agent.log')
+    await writeOutput(oldOutputFile, 'old run\n')
+    await writeOutput(newOutputFile, 'new run\n')
+
+    const m = new FakeManager()
+    m.set(makeTask({
+      id: 'old-agent-task',
+      outputFile: oldOutputFile,
+      state: 'completed',
+      agentId: 'agent-stable',
+    }))
+    m.set(makeTask({
+      id: 'new-agent-task',
+      outputFile: newOutputFile,
+      state: 'running',
+      agentId: 'agent-stable',
+    }))
+
+    const tool = makeTaskOutputTool(m)
+    const r = await tool.run(
+      { agent_id: 'agent-stable', block: false },
+      ctx(),
+    )
+    expect(r.isError).toBe(false)
+    const text = r.output as string
+    expect(text).toContain('task_id=new-agent-task')
+    expect(text).toContain('agent_id=agent-stable')
+    expect(text).toContain('new run')
+    expect(text).not.toContain('old run')
+  })
+
+  it('prefers task_id when both task_id and agent_id are present', async () => {
+    const home = await newTmpDir()
+    const primaryFile = path.join(home, '.nuka', 'tasks', 'primary.log')
+    const agentFile = path.join(home, '.nuka', 'tasks', 'agent.log')
+    await writeOutput(primaryFile, 'primary output\n')
+    await writeOutput(agentFile, 'agent output\n')
+
+    const m = new FakeManager()
+    m.set(makeTask({
+      id: 'primary-task',
+      outputFile: primaryFile,
+      state: 'completed',
+      agentId: 'agent-primary',
+    }))
+    m.set(makeTask({
+      id: 'agent-task',
+      outputFile: agentFile,
+      state: 'completed',
+      agentId: 'agent-secondary',
+    }))
+
+    const tool = makeTaskOutputTool(m)
+    const r = await tool.run(
+      {
+        task_id: 'primary-task',
+        agent_id: 'agent-secondary',
+        block: false,
+      },
+      ctx(),
+    )
+    expect(r.isError).toBe(false)
+    const text = r.output as string
+    expect(text).toContain('task_id=primary-task')
+    expect(text).toContain('primary output')
+    expect(text).not.toContain('agent output')
   })
 
   it('non-blocking on a terminal task: shows exit code', async () => {

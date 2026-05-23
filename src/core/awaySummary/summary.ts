@@ -97,7 +97,11 @@ export type AwaySummaryResult = {
  * usable text content. Returns null if the message contributes nothing.
  */
 function renderMessageForPrompt(message: Message): string | null {
-  if (message.role === 'system' || message.role === 'tool') return null
+  if (
+    message.role === 'system' ||
+    message.role === 'tool' ||
+    message.role === 'responses_compaction'
+  ) return null
   const textParts: string[] = []
   for (const block of message.content) {
     if (block.type === 'text' && block.text.trim().length > 0) {

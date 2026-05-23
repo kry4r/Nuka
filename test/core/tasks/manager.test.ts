@@ -36,9 +36,22 @@ describe('TaskManager', () => {
       agentRunner: async function* () { /* yields nothing */ },
     })
     expect(t.id).toMatch(/^[0-9a-f]{8}$/)
+    expect(t.agentId).toMatch(/^agent-[0-9a-f]{8}$/)
     expect(t.kind).toBe('local_agent')
     expect(t.state).toBe('running')
     expect(t.outputFile).toBe(path.join(home, '.nuka', 'tasks', `${t.id}.log`))
+  })
+
+  it('preserves an explicit local_agent agentId supplied by the caller', () => {
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'named agent',
+      agentId: 'agent-custom-1',
+      agentRunner: async function* () { /* yields nothing */ },
+    })
+    expect(t.agentId).toBe('agent-custom-1')
+    expect(m.get(t.id)?.agentId).toBe('agent-custom-1')
   })
 
   it('list() returns enqueued tasks (newest first)', async () => {

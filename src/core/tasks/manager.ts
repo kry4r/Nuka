@@ -96,6 +96,7 @@ export class TaskManager {
       state: 'pending',
       outputFile,
       spec,
+      ...(spec.kind === 'local_agent' ? { agentId: spec.agentId ?? `agent-${id}` } : {}),
     }
     this.tasks.set(id, task)
     this.bus?.emit('task', { type: 'task.created', task: { ...task } })

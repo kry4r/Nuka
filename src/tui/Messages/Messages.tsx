@@ -1,6 +1,6 @@
 // src/tui/Messages/Messages.tsx
 import React from 'react'
-import { Box } from 'ink'
+import { Box, Text } from 'ink'
 import { MessageRow } from './MessageRow'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
 import type { Message } from '../../core/message/types'
@@ -51,6 +51,7 @@ function buildToolResultsById(items: Message[]): Map<string, { output: string; i
 export function Messages(props: {
   items: Message[]
   streaming: Message | null
+  scrollOffset?: number
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
@@ -75,9 +76,18 @@ export function Messages(props: {
     const budget = props.availableRows - prologueRows
     tailLimit = Math.min(TAIL_N, Math.max(TAIL_FLOOR, budget))
   }
-  const liveTail = props.items.length > tailLimit
-    ? props.items.slice(props.items.length - tailLimit)
-    : props.items
+  const offset = Math.max(0, Math.min(props.scrollOffset ?? 0, Math.max(0, props.items.length - 1)))
+  const end = props.items.length - offset
+  const start = Math.max(0, end - tailLimit)
+  const liveTail = props.items.slice(start, end)
+  const hiddenAbove = start
+  const hiddenBelow = props.items.length - end
+  const hasScroll = props.items.length > liveTail.length
+  const scrollHint: string | null = hasScroll
+    ? hiddenBelow > 0
+      ? `↑ ${hiddenAbove} older · ↓ ${hiddenBelow} newer`
+      : `↑ ${hiddenAbove} older`
+    : null
 
   return (
     // Bottom-align the live transcript inside the conversation zone. When the
@@ -87,6 +97,13 @@ export function Messages(props: {
     <Box flexDirection="column" flexGrow={1} justifyContent="flex-end" overflow="hidden">
       <Box flexDirection="column" flexShrink={0}>
         {showPrologue && <Box>{props.prologue}</Box>}
+        {scrollHint !== null && (
+          <Box marginBottom={1}>
+            <Box flexShrink={0}>
+              <MessageScrollHint text={scrollHint} />
+            </Box>
+          </Box>
+        )}
         {liveTail.map((m, i) => (
           <MessageRow
             key={'id' in m ? m.id : `live-${i}`}
@@ -97,7 +114,7 @@ export function Messages(props: {
             resolveToolAnnotations={props.resolveToolAnnotations}
           />
         ))}
-        {props.streaming && (
+        {props.streaming && offset === 0 && (
           <MessageRow
             m={props.streaming}
             toolResultsById={toolResultsById}
@@ -107,6 +124,29 @@ export function Messages(props: {
           />
         )}
       </Box>
+    </Box>
+  )
+}
+
+function MessageScrollHint(props: { text: string }): React.JSX.Element {
+  return (
+    <Box>
+      <Box marginRight={1}>
+        <MessageHintDot />
+      </Box>
+      <MessageHintText text={props.text} />
+    </Box>
+  )
+}
+
+function MessageHintDot(): React.JSX.Element {
+  return <Box width={2} />
+}
+
+function MessageHintText(props: { text: string }): React.JSX.Element {
+  return (
+    <Box>
+      <Text dimColor>{props.text}</Text>
     </Box>
   )
 }

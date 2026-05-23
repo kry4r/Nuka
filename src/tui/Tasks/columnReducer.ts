@@ -24,10 +24,10 @@ function classify(kind: Task['kind']): ColumnKind {
   switch (kind) {
     case 'in_process_teammate': return 'subagent'
     case 'remote_agent': return 'subagent'
+    case 'local_agent': return 'subagent'
     case 'local_bash':
     case 'local_shell':
     case 'dream':
-    case 'local_agent':
     default: return 'background'
   }
 }
@@ -57,7 +57,7 @@ export function columnReducer(state: ColumnsState, rec: { topic: string; payload
     return addRow(state, col, {
       id: p.task.id,
       primary: p.task.agentName ?? p.task.description,
-      secondary: p.task.teamName ?? p.task.kind,
+      secondary: p.task.teamName ?? p.task.agentId ?? p.task.kind,
       status: p.task.state,
       startedAt: p.task.startedAt,
     })

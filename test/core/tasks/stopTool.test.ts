@@ -13,6 +13,7 @@ function makeTask(opts: {
   state?: TaskState
   description?: string
   exitCode?: number
+  agentId?: string
 }): Task {
   return {
     id: opts.id ?? 'task-1',
@@ -20,6 +21,7 @@ function makeTask(opts: {
     description: opts.description ?? 'demo',
     state: opts.state ?? 'running',
     outputFile: '/tmp/nuka-test-output.log',
+    agentId: opts.agentId,
     spec: {
       kind: 'local_bash',
       description: opts.description ?? 'demo',
@@ -39,6 +41,9 @@ class FakeManager implements TaskStopManagerLike {
 
   set(t: Task): void {
     this.tasks.set(t.id, t)
+  }
+  list(): Task[] {
+    return Array.from(this.tasks.values()).reverse()
   }
   get(id: string): Task | undefined {
     return this.tasks.get(id)
@@ -60,11 +65,12 @@ describe('TaskStop tool', () => {
     expect(tool.annotations?.readOnly).toBe(false)
   })
 
-  it('errors when neither task_id nor shell_id is provided', async () => {
+  it('errors when neither task_id nor shell_id nor agent_id is provided', async () => {
     const tool = makeTaskStopTool(new FakeManager())
     const r = await tool.run({}, ctx())
     expect(r.isError).toBe(true)
     expect(r.output).toContain('task_id')
+    expect(r.output).toContain('agent_id')
   })
 
   it('errors when the task is unknown', async () => {
@@ -72,6 +78,13 @@ describe('TaskStop tool', () => {
     const r = await tool.run({ task_id: 'ghost' }, ctx())
     expect(r.isError).toBe(true)
     expect(r.output).toContain("No background task with id 'ghost'")
+  })
+
+  it('errors when the agent_id is unknown', async () => {
+    const tool = makeTaskStopTool(new FakeManager())
+    const r = await tool.run({ agent_id: 'agent-ghost' }, ctx())
+    expect(r.isError).toBe(true)
+    expect(r.output).toContain("No background task with agent id 'agent-ghost'")
   })
 
   it('cancels a running task via manager.cancel', async () => {
@@ -95,6 +108,18 @@ describe('TaskStop tool', () => {
     expect(m.cancelMock).toHaveBeenCalledWith('sh1')
   })
 
+  it('cancels the newest matching task by agent_id', async () => {
+    const m = new FakeManager()
+    m.set(makeTask({ id: 'old-agent-task', state: 'running', agentId: 'agent-stable' }))
+    m.set(makeTask({ id: 'new-agent-task', state: 'running', agentId: 'agent-stable' }))
+    const tool = makeTaskStopTool(m)
+    const r = await tool.run({ agent_id: 'agent-stable' }, ctx())
+    expect(r.isError).toBe(false)
+    expect(m.cancelMock).toHaveBeenCalledWith('new-agent-task')
+    expect(m.cancelMock).not.toHaveBeenCalledWith('old-agent-task')
+    expect(r.output).toContain('Stopped task new-agent-task')
+  })
+
   it('prefers task_id when both task_id and shell_id are present', async () => {
     const m = new FakeManager()
     m.set(makeTask({ id: 'primary', state: 'running' }))
@@ -102,6 +127,20 @@ describe('TaskStop tool', () => {
     const tool = makeTaskStopTool(m)
     const r = await tool.run(
       { task_id: 'primary', shell_id: 'secondary' },
+      ctx(),
+    )
+    expect(r.isError).toBe(false)
+    expect(m.cancelMock).toHaveBeenCalledWith('primary')
+    expect(m.cancelMock).not.toHaveBeenCalledWith('secondary')
+  })
+
+  it('prefers task_id over agent_id', async () => {
+    const m = new FakeManager()
+    m.set(makeTask({ id: 'primary', state: 'running', agentId: 'agent-primary' }))
+    m.set(makeTask({ id: 'secondary', state: 'running', agentId: 'agent-secondary' }))
+    const tool = makeTaskStopTool(m)
+    const r = await tool.run(
+      { task_id: 'primary', agent_id: 'agent-secondary' },
       ctx(),
     )
     expect(r.isError).toBe(false)

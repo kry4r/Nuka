@@ -59,6 +59,20 @@ export type AgentChunk = { text: string }
 export type LocalAgentSpec = {
   kind: 'local_agent'
   description: string
+  /** Qualified agent definition name, for lifecycle/resume UI. */
+  agentName?: string
+  /** Original task prompt for this execution. */
+  task?: string
+  /** Optional context supplied with the task prompt. */
+  context?: string
+  /** True when this execution resumes a prior logical subagent. */
+  resumed?: boolean
+  /**
+   * Stable subagent identity. Defaults to `agent-<task id>` when omitted.
+   * Kept separate from task id so future resume/send/wait APIs can address
+   * the logical agent while TaskManager keeps owning execution records.
+   */
+  agentId?: string
   /** Returns an async iterable of textual chunks. The runner persists
    *  each chunk to the task's outputFile in order. */
   agentRunner: (signal: AbortSignal) => AsyncIterable<AgentChunk>
@@ -139,6 +153,7 @@ export type Task = {
   outputFile: string
   spec: TaskSpec
   error?: string
+  agentId?: string
   agentName?: string
   teamName?: string
   progress?: ProgressTrackerSnapshot

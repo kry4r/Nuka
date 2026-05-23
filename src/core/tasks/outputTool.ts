@@ -23,8 +23,12 @@
 import type { Tool } from '../tools/types'
 import { defineTool } from '../tools/define'
 import { tailOutput } from './persist'
-import type { TaskManager } from './manager'
 import type { Task, TaskState } from './types'
+import {
+  cleanLookupId,
+  findTaskByAgentId,
+  type TaskLookupManagerLike,
+} from './lookup'
 
 /**
  * The subset of {@link TaskManager} we depend on. Letting tests pass a
@@ -33,11 +37,14 @@ import type { Task, TaskState } from './types'
  */
 export type TaskOutputManagerLike = {
   get(id: string): Task | undefined
+  list(): Task[]
   on(event: 'change', cb: (t: Task) => void): () => void
 }
 
 export type TaskOutputToolInput = {
-  task_id: string
+  task_id?: string
+  /** Stable local subagent ID. Used only when task_id is omitted. */
+  agent_id?: string
   /** When true, poll until the task settles or `timeout_ms` elapses. */
   block?: boolean
   /** Max wait when `block === true`. Defaults to 30s; clamped to [0, 600_000]. */
@@ -62,6 +69,30 @@ function isTerminal(state: TaskState): boolean {
   return TERMINAL_STATES.has(state)
 }
 
+function resolveTask(
+  manager: TaskLookupManagerLike,
+  input: Pick<TaskOutputToolInput, 'task_id' | 'agent_id'>,
+): { task?: Task; error?: string } {
+  const taskId = cleanLookupId(input.task_id)
+  if (taskId) {
+    const task = manager.get(taskId)
+    if (!task) return { error: `No background task with id '${taskId}'.` }
+    return { task }
+  }
+
+  const agentId = cleanLookupId(input.agent_id)
+  if (!agentId) {
+    return { error: 'task_id or agent_id is required.' }
+  }
+  const task = findTaskByAgentId(manager, agentId)
+  if (!task) {
+    return {
+      error: `No background task with agent id '${agentId}'.`,
+    }
+  }
+  return { task }
+}
+
 function renderOutput(
   task: Task,
   outputLines: string[],
@@ -72,6 +103,7 @@ function renderOutput(
   parts.push(`kind=${task.kind}`)
   parts.push(`state=${task.state}`)
   parts.push(`retrieval_status=${status}`)
+  if (task.agentId) parts.push(`agent_id=${task.agentId}`)
   if (task.exitCode !== undefined) parts.push(`exit_code=${task.exitCode}`)
   if (task.error) parts.push(`error=${task.error}`)
   parts.push(`description=${task.description}`)
@@ -145,14 +177,20 @@ export function makeTaskOutputTool(
   return defineTool<TaskOutputToolInput>({
     name: 'TaskOutput',
     description:
-      'Read stdout/stderr and current state of a background task by its ID. Returns the last N lines of output plus task metadata (state, exit code, error). With block=true (default), waits up to timeout_ms for the task to finish. Use TaskList (or the /tasks slash) to discover IDs.',
+      'Read stdout/stderr and current state of a background task by task_id, or by stable local subagent agent_id. Returns the last N lines of output plus task metadata (state, exit code, error). With block=true (default), waits up to timeout_ms for the task to finish. Use TaskList (or the /tasks slash) to discover IDs.',
     parameters: {
       type: 'object',
-      required: ['task_id'],
       properties: {
         task_id: {
           type: 'string',
-          description: 'Background task ID (from TaskManager.list()).',
+          description:
+            'Background task ID (from TaskManager.list()). Takes precedence over agent_id.',
+          minLength: 1,
+        },
+        agent_id: {
+          type: 'string',
+          description:
+            'Stable local subagent ID. Used when task_id is omitted; the newest matching execution record is selected.',
           minLength: 1,
         },
         block: {
@@ -178,12 +216,13 @@ export function makeTaskOutputTool(
     tags: ['core', 'tasks'],
     needsPermission: () => 'none',
     annotations: { readOnly: true, parallelSafe: true },
-    searchHint: ['task', 'output', 'log', 'background', 'stdout', 'stderr'],
+    searchHint: ['task', 'agent', 'output', 'log', 'background', 'stdout', 'stderr'],
     async run(input, ctx) {
-      const id = input.task_id?.trim()
-      if (!id) {
-        return { isError: true, output: 'task_id is required' }
+      const resolved = resolveTask(manager, input)
+      if (resolved.error || !resolved.task) {
+        return { isError: true, output: resolved.error ?? 'task_id or agent_id is required.' }
       }
+      const id = resolved.task.id
       const block = input.block !== false
       const timeoutMs = Math.max(
         0,
@@ -194,13 +233,7 @@ export function makeTaskOutputTool(
         Math.min(MAX_LINES, input.lines ?? DEFAULT_LINES),
       )
 
-      let task = manager.get(id)
-      if (!task) {
-        return {
-          isError: true,
-          output: `No background task with id '${id}'.`,
-        }
-      }
+      let task = resolved.task
 
       let status: TaskOutputRetrievalStatus = 'success'
       if (block && !isTerminal(task.state)) {

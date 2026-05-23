@@ -5,6 +5,7 @@ import { findTemplate } from '../../../src/core/onboarding/templates'
 
 const ANTHROPIC = findTemplate('anthropic')!
 const OPENAI = findTemplate('openai')!
+const CUSTOM = findTemplate('custom')!
 
 describe('onboarding wizard reducer', () => {
   it('welcome + start → pickProvider', () => {
@@ -61,6 +62,38 @@ describe('onboarding wizard reducer', () => {
       expect(s.config.apiKey).toBe('sk-x')
       expect(s.config.selectedModel).toBe('gpt-5')
       expect(s.config.models).toEqual(['gpt-5', 'gpt-4o'])
+    }
+  })
+
+  it('custom provider derives providerId from configured name', () => {
+    const picked = reducer(
+      { kind: 'pickProvider', choices: [] },
+      { type: 'pickedProvider', template: CUSTOM },
+    )
+    expect(picked.kind).toBe('customDetails')
+    if (picked.kind !== 'customDetails') return
+
+    const withDetails = reducer(picked, {
+      type: 'enteredCustom',
+      details: {
+        name: 'Xiaomi Mimo',
+        format: 'openai',
+        baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+        model: 'mimo-v2-pro',
+      },
+    })
+    expect(withDetails.kind).toBe('apiKey')
+    if (withDetails.kind !== 'apiKey') return
+
+    const verifying = reducer(withDetails, { type: 'enteredKey', key: 'sk-custom' })
+    expect(verifying.kind).toBe('verifying')
+    if (verifying.kind !== 'verifying') return
+
+    const done = reducer(verifying, { type: 'probeOk' })
+    expect(done.kind).toBe('done')
+    if (done.kind === 'done') {
+      expect(done.config.providerId).toBe('xiaomi-mimo')
+      expect(done.config.name).toBe('Xiaomi Mimo')
     }
   })
 

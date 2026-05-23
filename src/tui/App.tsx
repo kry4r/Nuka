@@ -67,6 +67,8 @@ import { useTasksColumns } from './Tasks/useTasksColumns'
 import { focusReducer, initialFocus } from './Tasks/focusReducer'
 import { eventBus } from '../core/events/bus'
 import { useTerminalSize } from './hooks/useTerminalSize'
+import { truncateByWidth } from '../core/stringWidth'
+import { defaultPalette as P } from './theme'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -223,6 +225,55 @@ export function uiReducer(state: UIState, action: UIAction): UIState {
   }
 }
 
+function WorkingIndicator(props: { model: string; queued: number }): React.JSX.Element {
+  const suffix = props.queued > 0 ? ` · ${props.queued} queued` : ''
+  return (
+    <Box paddingX={1}>
+      <Text color={P.accentCool} bold>working</Text>
+      <Text color={P.fgMuted}> · {truncateByWidth(props.model, 48)}{suffix}</Text>
+    </Box>
+  )
+}
+
+function ErrorIndicator(props: { message: string }): React.JSX.Element {
+  return (
+    <Box paddingX={1}>
+      <Text color={P.error} bold>error</Text>
+      <Text color={P.fgMuted}> · {truncateByWidth(props.message.replace(/[\r\n]+/g, ' '), 80)}</Text>
+    </Box>
+  )
+}
+
+function isPageUpInput(input: string, key: Record<string, unknown>): boolean {
+  return key.pageUp === true || input === '\u001B[5~'
+}
+
+function isPageDownInput(input: string, key: Record<string, unknown>): boolean {
+  return key.pageDown === true || input === '\u001B[6~'
+}
+
+function isHomeInput(input: string, key: Record<string, unknown>): boolean {
+  return key.home === true || input === '\u001B[H' || input === '\u001B[1~'
+}
+
+function isEndInput(input: string, key: Record<string, unknown>): boolean {
+  return key.end === true || input === '\u001B[F' || input === '\u001B[4~'
+}
+
+function syncSessionSelectionFromConfig(session: Session, config: Config): void {
+  const activeProviderId = config.active?.providerId ?? ''
+  const activeProvider = config.providers.find(p => p.id === activeProviderId)
+  if (!activeProviderId || !activeProvider) return
+
+  const providerChanged = session.providerId !== activeProviderId
+  session.providerId = activeProviderId
+
+  const configuredModel = activeProvider.selectedModel ?? activeProvider.models?.[0] ?? ''
+  if (providerChanged || !session.model || (configuredModel && session.model !== configuredModel)) {
+    session.model = configuredModel
+  }
+}
+
 export type AppProps = {
   sessions: SessionManager
   /**
@@ -325,6 +376,7 @@ export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp()
   const [session, setSession] = useState<Session>(() => props.sessions.active()!)
   const [input, setInput] = useState('')
+  const [messageScrollOffset, setMessageScrollOffset] = useState(0)
   // Iter MMMM — stable poke callback wired into PromptInput.onUserInput.
   // When props.idleHook is undefined (no provider configured, or under
   // test) `pokeIdle` is a no-op, so PromptInput needs no special-casing.
@@ -361,9 +413,20 @@ export function App(props: AppProps): React.JSX.Element {
   const bumpTasksTick = useCallback(() => setTasksTick(t => t + 1), [])
   const bumpMessages = useCallback(() => {
     setMessageTick(t => t + 1)
+    setMessageScrollOffset(0)
     // Also refresh tasks panel so in-flight subagent list stays current.
     setTasksTick(t => t + 1)
   }, [])
+
+  const appendAssistantNotice = useCallback((text: string, idPrefix = 'notice') => {
+    appendMessage(session, {
+      role: 'assistant',
+      content: [{ type: 'text', text }],
+      id: `${idPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: Date.now(),
+    })
+    bumpMessages()
+  }, [session, bumpMessages])
 
   // Subscribe to TaskManager changes to keep Tasks panel reactive.
   useEffect(() => {
@@ -574,7 +637,7 @@ export function App(props: AppProps): React.JSX.Element {
       pendingImages = result.images
     }
 
-    if (stream.running) {
+    if (stream.isRunningNow()) {
       // Queued path stays text-only: there is no place to stash the
       // structured image attachment alongside a queued prompt today, so
       // dropping silently is the least surprising behaviour. The user
@@ -582,8 +645,11 @@ export function App(props: AppProps): React.JSX.Element {
       session.queue.push(text)
       return
     }
-    await stream.send(text, pendingImages.length > 0 ? { images: pendingImages } : undefined)
-  }, [props, session, stream, handleSlashEffect, exit])
+    const sendResult = await stream.send(text, pendingImages.length > 0 ? { images: pendingImages } : undefined)
+    if (!sendResult.ok && !sendResult.busy) {
+      appendAssistantNotice(`[error]\n${sendResult.error.message}`, 'agent-error')
+    }
+  }, [props, session, stream, handleSlashEffect, exit, appendAssistantNotice])
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
 
@@ -638,6 +704,25 @@ export function App(props: AppProps): React.JSX.Element {
       }
       lastEscRef.current = now
       return
+    }
+    if (uiState.kind === 'normal' && !stream.running) {
+      const maxOffset = Math.max(0, session.messages.length - 1)
+      if (isPageUpInput(inputKey, key)) {
+        setMessageScrollOffset(v => Math.min(maxOffset, v + Math.max(5, Math.floor(conversationAvailableRows / 2))))
+        return
+      }
+      if (isPageDownInput(inputKey, key)) {
+        setMessageScrollOffset(v => Math.max(0, v - Math.max(5, Math.floor(conversationAvailableRows / 2))))
+        return
+      }
+      if (isHomeInput(inputKey, key)) {
+        setMessageScrollOffset(maxOffset)
+        return
+      }
+      if (isEndInput(inputKey, key)) {
+        setMessageScrollOffset(0)
+        return
+      }
     }
     // Phase 13 M4 — Tab enters Tasks focus mode when Tasks panel is non-empty;
     // also exits focus mode when already focused.
@@ -731,6 +816,13 @@ export function App(props: AppProps): React.JSX.Element {
   // appends the final AssistantMessage to session.messages, the hook clears
   // streamingAssistant so the static row replaces the live one seamlessly.
   const streamingMsg = stream.streamingAssistant
+  const lastErrorEvent = (() => {
+    for (let i = stream.events.length - 1; i >= 0; i--) {
+      const ev = stream.events[i]
+      if (ev?.type === 'error') return ev.error
+    }
+    return null
+  })()
   const justCompacted = stream.events.some(e => e.type === 'auto_compacted')
   // contextUsed = the most recent assistant turn's `inputTokens` — that
   // represents the actual size of the current context window, NOT the
@@ -747,6 +839,7 @@ export function App(props: AppProps): React.JSX.Element {
   })()
   const contextMax = props.config.compact?.contextWindow ?? 200_000
   const pc = props.providers.getProviderConfig(session.providerId)
+  const providerDisplayName = pc?.name?.trim() || session.providerId || '—'
   const cost = pc ? computeCost(pc, session.model, session.totalUsage) : 0
   const hintMode: 'idle' | 'running' | 'awaiting-user' =
     uiState.kind === 'submenu' ? 'awaiting-user'
@@ -874,6 +967,7 @@ export function App(props: AppProps): React.JSX.Element {
         <Messages
           items={session.messages}
           streaming={streamingMsg}
+          scrollOffset={messageScrollOffset}
           expandedAgentCallIds={expandedAgentCallIds}
           resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
           resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}
@@ -992,6 +1086,15 @@ export function App(props: AppProps): React.JSX.Element {
       {!submenuInline && promptVisible && (
         <CronMissedBanner notice={cronMissed} dismissed={cronBannerDismissed} />
       )}
+      {!submenuInline && promptVisible && stream.running && (
+        <WorkingIndicator
+          model={`${providerDisplayName} · ${session.model}`}
+          queued={session.queue.size()}
+        />
+      )}
+      {!submenuInline && promptVisible && !stream.running && lastErrorEvent !== null && (
+        <ErrorIndicator message={lastErrorEvent.message} />
+      )}
       {/* SlashCard expands UPWARD above the prompt — it sits BEFORE PromptInput
           in source order so the suggestion list stacks above the input box. */}
       {slashActive && props.slash && promptVisible && (
@@ -1027,6 +1130,7 @@ export function App(props: AppProps): React.JSX.Element {
           mode={hintMode}
           model={session.model}
           providerId={session.providerId || '—'}
+          providerName={providerDisplayName}
           effort={props.config.effort}
           cwd={props.cwd}
           gitBranch={props.gitBranch}
@@ -1062,6 +1166,8 @@ export function App(props: AppProps): React.JSX.Element {
                 mutate(obj)
                 mutate(props.config as unknown as Record<string, unknown>)
               })
+              props.providers.refreshConfig(props.config)
+              syncSessionSelectionFromConfig(session, props.config)
               bumpMessages()
             }}
             onSelect={(providerId, model) => {
@@ -1115,6 +1221,8 @@ export function App(props: AppProps): React.JSX.Element {
                   // needing a full app reload.
                   mutate(props.config as unknown as Record<string, unknown>)
                 })
+                props.providers.refreshConfig(props.config)
+                syncSessionSelectionFromConfig(session, props.config)
                 bumpMessages()
               } catch (err) {
                 // Phase 13 — gracefully surface I/O errors (ENOSPC, EACCES,
@@ -1159,6 +1267,14 @@ export function App(props: AppProps): React.JSX.Element {
             onDone={async (patch) => {
               try {
                 await saveWizardPatch(os.homedir(), patch)
+                const { loadConfig } = await import('../core/config/load')
+                const nextConfig = await loadConfig({ home: os.homedir(), cwd: props.cwd })
+                Object.assign(props.config as unknown as Record<string, unknown>, nextConfig)
+                props.providers.refreshConfig(props.config)
+                session.providerId = nextConfig.active.providerId
+                const activeProvider = nextConfig.providers.find(p => p.id === nextConfig.active.providerId)
+                session.model = activeProvider?.selectedModel ?? activeProvider?.models?.[0] ?? session.model
+                bumpMessages()
               } catch (err) {
                 // Surface failures (zod validation, FS errors, etc.) as an
                 // assistant message instead of silently swallowing them.

@@ -151,6 +151,8 @@ export function roughTokenCountEstimationForMessage(message: Message): number {
         : sumBlocks(message.content)
     case 'system':
       return roughTokenCountEstimation(message.content)
+    case 'responses_compaction':
+      return roughTokenCountEstimation(safeStringify(message.output))
   }
 }
 

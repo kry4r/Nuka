@@ -47,7 +47,7 @@ export function extractTextForCompaction(messages: readonly Message[]): string {
       parts.push(m.content)
       continue
     }
-    if (m.role === 'tool') continue
+    if (m.role === 'tool' || m.role === 'responses_compaction') continue
     for (const b of m.content) {
       if (b.type === 'text') parts.push(b.text)
     }
@@ -384,10 +384,47 @@ function partitionForCompaction(
     if (m.role === 'system') systems.push(m)
     else nonSystem.push(m)
   }
-  const cut = Math.max(0, nonSystem.length - preserveRecent)
+  const cut = adjustCutForToolPairs(
+    nonSystem,
+    Math.max(0, nonSystem.length - preserveRecent),
+  )
   const middle = nonSystem.slice(0, cut)
   const tail = nonSystem.slice(cut)
   return { systems, middle, tail }
+}
+
+function adjustCutForToolPairs(messages: readonly Message[], initialCut: number): number {
+  let cut = initialCut
+  let changed = true
+  while (changed && cut > 0) {
+    changed = false
+    const tailToolResults = toolResultIds(messages.slice(cut))
+    if (tailToolResults.size === 0) break
+
+    for (let i = cut - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (!m || m.role !== 'assistant') continue
+      if (assistantUsesAnyTool(m, tailToolResults)) {
+        cut = i
+        changed = true
+        break
+      }
+    }
+  }
+  return cut
+}
+
+function toolResultIds(messages: readonly Message[]): Set<string> {
+  const ids = new Set<string>()
+  for (const m of messages) {
+    if (m.role === 'tool') ids.add(m.toolUseId)
+  }
+  return ids
+}
+
+function assistantUsesAnyTool(message: Message, ids: ReadonlySet<string>): boolean {
+  if (message.role !== 'assistant') return false
+  return message.content.some(block => block.type === 'tool_use' && ids.has(block.id))
 }
 
 /**

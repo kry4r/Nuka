@@ -97,4 +97,27 @@ describe('BackgroundList', () => {
     expect(f).toContain('bash task')
     expect(f).toContain('agent task')
   })
+
+  it('shows a stable agent id for local_agent tasks', () => {
+    const task: Task = {
+      id: 't2',
+      kind: 'local_agent',
+      description: 'agent task',
+      state: 'running',
+      outputFile: '/tmp/t2.log',
+      agentId: 'agent-1234abcd',
+      spec: {
+        kind: 'local_agent',
+        description: 'agent task',
+        agentId: 'agent-1234abcd',
+        agentRunner: async function* () {},
+      },
+    }
+    const { lastFrame } = render(
+      React.createElement(BackgroundList, { tasks: [task], maxItems: 10 })
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('agent task')
+    expect(f).toContain('agent-1234abcd')
+  })
 })

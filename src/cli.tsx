@@ -116,6 +116,8 @@ import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
 import { AgentRegistry } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
+import { makeSpawnAgentTool } from './core/agents/spawnTool'
+import { makeCloseAgentTool, makeResumeAgentTool, makeWaitAgentTool } from './core/agents/agentLifecycleTools'
 import { makeCoordinateAgentsTool } from './core/tools/coordinator/coordinateAgentsTool'
 import type { Tool as ToolType } from './core/tools/types'
 import { dispatchAgent } from './core/agents/dispatch'
@@ -926,8 +928,12 @@ async function runInteractive(): Promise<void> {
   // TaskManager so the model can read stdout/state and kill background tasks.
   // (Complements iter G's TaskCreate/List/Get/Update which operate on the
   //  agent-facing TODO list in src/core/tasks/store.ts.)
-  tools.register(makeTaskOutputTool(taskManager) as any)
-  tools.register(makeTaskStopTool(taskManager) as any)
+  const taskOutputTool = makeTaskOutputTool(taskManager)
+  const taskStopTool = makeTaskStopTool(taskManager)
+  tools.register(taskOutputTool as any)
+  tools.register(taskStopTool as any)
+  tools.register(makeWaitAgentTool(taskOutputTool) as any)
+  tools.register(makeCloseAgentTool(taskStopTool) as any)
 
   // Phase 14c §6.5 — autoDream periodic memdir consolidation.
   // Ticks every 30 minutes; all three gates must pass before enqueuing a dream task.
@@ -1164,6 +1170,31 @@ async function runInteractive(): Promise<void> {
       worktreeStore: getWorktreeStore(),
       // Output styles: same resolver the main loop uses, so a single
       // `NUKA_OUTPUT_STYLE` setting steers both contexts consistently.
+      outputStyle: resolveActiveOutputStyleNow,
+    }) as any,
+  )
+  tools.register(
+    makeSpawnAgentTool({
+      agents,
+      registry: tools,
+      providerResolver: providers,
+      permission,
+      taskManager,
+      hookRegistry,
+      worktreeStore: getWorktreeStore(),
+      outputStyle: resolveActiveOutputStyleNow,
+    }) as any,
+  )
+  tools.register(
+    makeResumeAgentTool({
+      taskManager,
+      home,
+      agents,
+      registry: tools,
+      providerResolver: providers,
+      permission,
+      hookRegistry,
+      worktreeStore: getWorktreeStore(),
       outputStyle: resolveActiveOutputStyleNow,
     }) as any,
   )
@@ -1447,4 +1478,3 @@ async function runInteractive(): Promise<void> {
     })
   }
 }
-

@@ -8,7 +8,7 @@ export type ProviderTemplateId = 'anthropic' | 'openai' | 'custom'
 
 export type ProviderTemplate = {
   /** stable, machine-readable id */
-  id: ProviderTemplateId
+  id: string
   /** provider format used by the resolver/clients */
   type: 'anthropic' | 'openai'
   /** display name */

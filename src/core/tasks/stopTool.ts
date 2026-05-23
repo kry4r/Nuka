@@ -14,6 +14,11 @@
 import type { Tool } from '../tools/types'
 import { defineTool } from '../tools/define'
 import type { Task, TaskState } from './types'
+import {
+  cleanLookupId,
+  findTaskByAgentId,
+  type TaskLookupManagerLike,
+} from './lookup'
 
 /**
  * Minimal manager surface needed by TaskStop. The full {@link TaskManager}
@@ -21,6 +26,7 @@ import type { Task, TaskState } from './types'
  */
 export type TaskStopManagerLike = {
   get(id: string): Task | undefined
+  list(): Task[]
   cancel(id: string): Promise<void>
 }
 
@@ -31,6 +37,8 @@ export type TaskStopToolInput = {
    * callsites. If both are set, `task_id` wins.
    */
   shell_id?: string
+  /** Stable local subagent ID. Used only when task_id and shell_id are omitted. */
+  agent_id?: string
 }
 
 const TERMINAL_STATES: ReadonlySet<TaskState> = new Set([
@@ -43,20 +51,45 @@ function isTerminal(state: TaskState): boolean {
   return TERMINAL_STATES.has(state)
 }
 
+function resolveTask(
+  manager: TaskLookupManagerLike,
+  input: TaskStopToolInput,
+): { task?: Task; error?: string } {
+  const directId = cleanLookupId(input.task_id) ?? cleanLookupId(input.shell_id)
+  if (directId) {
+    const task = manager.get(directId)
+    if (!task) return { error: `No background task with id '${directId}'.` }
+    return { task }
+  }
+
+  const agentId = cleanLookupId(input.agent_id)
+  if (!agentId) {
+    return {
+      error: 'task_id (or deprecated shell_id) or agent_id is required.',
+    }
+  }
+
+  const task = findTaskByAgentId(manager, agentId)
+  if (!task) {
+    return { error: `No background task with agent id '${agentId}'.` }
+  }
+  return { task }
+}
+
 export function makeTaskStopTool(
   manager: TaskStopManagerLike,
 ): Tool<TaskStopToolInput> {
   return defineTool<TaskStopToolInput>({
     name: 'TaskStop',
     description:
-      'Kill a running background task by ID. Sends a termination signal and waits for the runner to settle. No-op on tasks that are already completed / failed / killed (returns the existing state). Use TaskList or the /tasks slash to discover IDs.',
+      'Kill a running background task by task_id, deprecated shell_id, or stable local subagent agent_id. Sends a termination signal and waits for the runner to settle. No-op on tasks that are already completed / failed / killed (returns the existing state). Use TaskList or the /tasks slash to discover IDs.',
     aliases: ['KillShell'],
     parameters: {
       type: 'object',
       properties: {
         task_id: {
           type: 'string',
-          description: 'Background task ID to stop.',
+          description: 'Background task ID to stop. Takes precedence.',
           minLength: 1,
         },
         shell_id: {
@@ -65,30 +98,30 @@ export function makeTaskStopTool(
             'Deprecated alias for task_id, retained for KillShell compatibility.',
           minLength: 1,
         },
+        agent_id: {
+          type: 'string',
+          description:
+            'Stable local subagent ID. Used when task_id and shell_id are omitted; the newest matching execution record is selected.',
+          minLength: 1,
+        },
       },
     },
     source: 'builtin',
     tags: ['core', 'tasks'],
     needsPermission: () => 'none',
     annotations: { readOnly: false },
-    searchHint: ['task', 'stop', 'kill', 'background', 'cancel'],
+    searchHint: ['task', 'agent', 'stop', 'kill', 'background', 'cancel'],
     async run(input) {
-      const id = (input.task_id ?? input.shell_id ?? '').trim()
-      if (!id) {
+      const resolved = resolveTask(manager, input)
+      if (resolved.error || !resolved.task) {
         return {
           isError: true,
-          output: 'task_id (or deprecated shell_id) is required.',
+          output: resolved.error ?? 'task_id (or deprecated shell_id) or agent_id is required.',
         }
       }
 
-      const before = manager.get(id)
-      if (!before) {
-        return {
-          isError: true,
-          output: `No background task with id '${id}'.`,
-        }
-      }
-
+      const before = resolved.task
+      const id = before.id
       if (isTerminal(before.state)) {
         const exit =
           before.exitCode !== undefined ? ` (exit ${before.exitCode})` : ''

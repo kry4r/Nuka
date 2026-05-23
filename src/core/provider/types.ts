@@ -22,6 +22,13 @@ export type LLMRequest = {
   effort?: Effort
 }
 
+export type ProviderCompactResult = {
+  implementation: 'responses_compact'
+  output: unknown[]
+  usage?: TokenUsage
+  responseId?: string
+}
+
 export type ProviderEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'tool_use_start'; id: string; name: string }
@@ -39,4 +46,5 @@ export interface LLMProvider {
   stream(req: LLMRequest, signal: AbortSignal): AsyncIterable<ProviderEvent>
   listRemoteModels(): Promise<string[]>
   countTokens?(messages: Message[]): Promise<number>
+  compact?(req: LLMRequest, signal: AbortSignal): Promise<ProviderCompactResult>
 }

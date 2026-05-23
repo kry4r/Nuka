@@ -18,20 +18,18 @@ export type ProviderResolverOpts = {
 export class ProviderResolver {
   private byId = new Map<string, LLMProvider>()
   private configs = new Map<string, ProviderConfig>()
+  private overrides = new Map<string, LLMProvider>()
 
   constructor(cfg: Config, opts: ProviderResolverOpts = {}) {
-    for (const pc of cfg.providers) {
-      this.configs.set(pc.id, pc)
-      this.byId.set(pc.id, this.buildInstance(pc))
-    }
     if (opts.providers) {
       const entries = opts.providers instanceof Map
         ? [...opts.providers.entries()]
         : Object.entries(opts.providers)
       for (const [id, p] of entries) {
-        this.byId.set(id, p)
+        this.overrides.set(id, p)
       }
     }
+    this.refreshConfig(cfg)
   }
 
   private buildInstance(pc: ProviderConfig): LLMProvider {
@@ -53,6 +51,19 @@ export class ProviderResolver {
 
   listProviders(): ProviderConfig[] {
     return [...this.configs.values()]
+  }
+
+  refreshConfig(cfg: Config): void {
+    this.configs = new Map()
+    const nextById = new Map<string, LLMProvider>()
+    for (const pc of cfg.providers) {
+      this.configs.set(pc.id, pc)
+      nextById.set(pc.id, this.overrides.get(pc.id) ?? this.buildInstance(pc))
+    }
+    for (const [id, provider] of this.overrides) {
+      if (!nextById.has(id)) nextById.set(id, provider)
+    }
+    this.byId = nextById
   }
 
   listModels(providerId: string): string[] {

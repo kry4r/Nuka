@@ -1,19 +1,3 @@
-// test/tui/planModeBadge.test.tsx
-//
-// Iter DDDD — TUI plan-mode badge.
-//
-// Verifies that StatusPanel renders the `[PLAN MODE]` text badge only
-// when its `planMode` prop is true, and that the badge:
-//   1. is absent in the normal (`planMode={false}` / undefined) path
-//   2. appears in every layout mode (dense / compact / oneline)
-//   3. reacts to prop changes (rerender flips the badge on/off)
-//   4. uses bold yellow/warn-style text so it's visually loud
-//
-// The component itself doesn't subscribe to PlanModeState directly —
-// App.tsx owns that subscription and forwards `session.mode === 'plan'`
-// as a boolean prop, so testing StatusPanel in isolation is sufficient
-// for the rendering contract.
-
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
@@ -23,6 +7,7 @@ const baseProps = {
   mode: 'idle' as const,
   model: 'opus-4.7',
   providerId: 'anthropic',
+  providerName: 'Anthropic',
   cwd: '/home/me/proj',
   gitBranch: { branch: 'main', dirty: false },
   contextUsed: 12_000,
@@ -37,108 +22,69 @@ const baseProps = {
   iconMode: 'icon' as const,
 } as const
 
-describe('StatusPanel plan-mode badge (Iter DDDD)', () => {
-  it('omits the [PLAN MODE] badge when planMode is undefined', () => {
-    const { lastFrame } = render(
-      <StatusPanel {...baseProps} layout="dense" />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).not.toContain('[PLAN MODE]')
-    expect(f).not.toContain('PLAN MODE')
+describe('StatusPanel plan-mode badge', () => {
+  it('omits the plan badge when planMode is undefined or false', () => {
+    const a = render(<StatusPanel {...baseProps} layout="dense" />)
+    expect(a.lastFrame() ?? '').not.toContain('[PLAN MODE]')
+    a.unmount()
+
+    const b = render(<StatusPanel {...baseProps} layout="dense" planMode={false} />)
+    expect(b.lastFrame() ?? '').not.toContain('[PLAN MODE]')
+    expect(b.lastFrame() ?? '').toContain('Anthropic/opus-4.7')
+    b.unmount()
   })
 
-  it('omits the [PLAN MODE] badge when planMode is false', () => {
-    const { lastFrame } = render(
-      <StatusPanel {...baseProps} layout="dense" planMode={false} />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).not.toContain('[PLAN MODE]')
-    // The other segments still render so we know the panel didn't bail.
-    expect(f).toContain('⬢ idle')
-    expect(f).toContain('opus-4.7')
+  it('renders [PLAN MODE] in every layout preference', () => {
+    for (const layout of ['dense', 'compact', 'oneline'] as const) {
+      const { lastFrame, unmount } = render(
+        <StatusPanel {...baseProps} layout={layout} planMode />,
+      )
+      const f = lastFrame() ?? ''
+      expect(f).toContain('[PLAN MODE]')
+      expect(f).toContain('Anthropic/opus-4')
+      unmount()
+    }
   })
 
-  it('renders [PLAN MODE] in the dense layout when planMode is true', () => {
-    const { lastFrame } = render(
-      <StatusPanel {...baseProps} layout="dense" planMode={true} />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('[PLAN MODE]')
-    // Normal status segments still render alongside the badge.
-    expect(f).toContain('⬢ idle')
-    expect(f).toContain('opus-4.7')
-    expect(f).toContain('main')
-  })
-
-  it('renders [PLAN MODE] in the compact layout when planMode is true', () => {
-    const { lastFrame } = render(
-      <StatusPanel {...baseProps} layout="compact" planMode={true} />,
-    )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('[PLAN MODE]')
-    // Compact layout keeps the badge above the fold next to mode/model.
-    expect(f).toContain('⬢ idle')
-    expect(f).toContain('opus-4.7')
-  })
-
-  it('renders [PLAN MODE] in the oneline layout when planMode is true', () => {
-    const { lastFrame } = render(
-      <StatusPanel {...baseProps} layout="oneline" planMode={true} />,
-    )
-    const f = lastFrame() ?? ''
-    // Oneline can wrap under ink-testing-library, so we only assert the
-    // badge string is present somewhere in the frame.
-    expect(f).toContain('PLAN MODE')
-  })
-
-  it('reacts to prop changes (rerender flips the badge on/off)', () => {
+  it('reacts to prop changes', () => {
     const { lastFrame, rerender } = render(
       <StatusPanel {...baseProps} layout="dense" planMode={false} />,
     )
     expect(lastFrame() ?? '').not.toContain('[PLAN MODE]')
 
-    rerender(
-      <StatusPanel {...baseProps} layout="dense" planMode={true} />,
-    )
+    rerender(<StatusPanel {...baseProps} layout="dense" planMode />)
     expect(lastFrame() ?? '').toContain('[PLAN MODE]')
 
-    rerender(
-      <StatusPanel {...baseProps} layout="dense" planMode={false} />,
-    )
+    rerender(<StatusPanel {...baseProps} layout="dense" planMode={false} />)
     expect(lastFrame() ?? '').not.toContain('[PLAN MODE]')
   })
 
   it('badge is hidden when the user adds `plan` to hiddenSegments', () => {
-    // Although there's no UI today that toggles this, the segment
-    // honours `hiddenSegments` like every other id — useful for users
-    // who want plan mode signalled only via the `/plan` slash command.
     const { lastFrame } = render(
       <StatusPanel
         {...baseProps}
         layout="dense"
-        planMode={true}
+        planMode
         hiddenSegments={['plan']}
       />,
     )
     const f = lastFrame() ?? ''
     expect(f).not.toContain('[PLAN MODE]')
-    expect(f).toContain('⬢ idle')
+    expect(f).toContain('Anthropic/opus-4.7')
   })
 
-  it('badge coexists with text-mode icon style', () => {
+  it('coexists with text-mode style', () => {
     const { lastFrame } = render(
       <StatusPanel
         {...baseProps}
+        mode="running"
         layout="dense"
-        planMode={true}
+        planMode
         iconMode="text"
       />,
     )
     const f = lastFrame() ?? ''
-    // text mode replaces the glyph mode badge with [idle] but still
-    // renders the plan-mode badge using bracket notation, so both
-    // bracketed strings appear.
-    expect(f).toContain('[idle]')
+    expect(f).toContain('[running]')
     expect(f).toContain('[PLAN MODE]')
   })
 })

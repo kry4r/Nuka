@@ -10,6 +10,29 @@ describe('columnReducer', () => {
     expect(s1.subagent.rows[0]!.id).toBe('t1')
   })
 
+  it('task.created adds local_agent rows to subagent column with agent id context', () => {
+    const s0 = initialColumns()
+    const s1 = columnReducer(s0, {
+      topic: 'task',
+      payload: {
+        type: 'task.created',
+        task: {
+          id: 't1',
+          kind: 'local_agent',
+          description: 'review code',
+          state: 'running',
+          outputFile: '',
+          agentId: 'agent-1234abcd',
+          spec: {} as never,
+        } as never,
+      },
+    })
+    expect(s1.subagent.rows.length).toBe(1)
+    expect(s1.background.rows.length).toBe(0)
+    expect(s1.subagent.rows[0]!.primary).toBe('review code')
+    expect(s1.subagent.rows[0]!.secondary).toBe('agent-1234abcd')
+  })
+
   it('task.state updates row status', () => {
     const s0 = initialColumns()
     const s1 = columnReducer(s0, { topic: 'task', payload: { type: 'task.created', task: { id: 't1', kind: 'local_bash', description: 'd', state: 'running', outputFile: '', spec: {} as never } as never } })
