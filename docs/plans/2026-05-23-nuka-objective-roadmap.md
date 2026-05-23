@@ -248,6 +248,12 @@ Checklist:
 - [x] Reject features that are mostly decorative unless they directly improve TUI comprehension.
   - Evidence: rejected/deferred section in `docs/plans/2026-05-23-upstream-feature-intake.md`.
 
+### Accepted Feature Implementation Log
+
+- [x] Add Codex-style read-only thread view facade over persisted Nuka sessions.
+  - Primary files: `src/core/session/threadView.ts`, `src/core/session/history/index.ts`, `test/core/session/threadView.test.ts`
+  - Acceptance: callers can read a stored session as a `thread/read`-style metadata view without resuming it, optionally include reconstructed user-turn groups, and page turns with JSON cursors plus ascending/descending direction. This is a foundation for later `thread/fork` / true resume rather than a new UI yet.
+
 ---
 
 ## Track 4 - Human TUI Redesign
