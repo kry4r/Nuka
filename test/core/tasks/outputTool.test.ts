@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { makeTaskOutputTool, type TaskOutputManagerLike } from '../../../src/core/tasks/outputTool'
 import type { Task, TaskState } from '../../../src/core/tasks/types'
+import { writeMeta } from '../../../src/core/tasks/meta'
 
 const ctx = () => ({ signal: new AbortController().signal, cwd: process.cwd() })
 
@@ -101,6 +102,32 @@ describe('TaskOutput tool', () => {
     const r = await tool.run({ agent_id: 'agent-missing', block: false }, ctx())
     expect(r.isError).toBe(true)
     expect(r.output).toContain("No background task with agent id 'agent-missing'")
+  })
+
+  it('falls back to persisted local-agent final output when agent_id is no longer in memory', async () => {
+    const home = await newTmpDir()
+    writeMeta(home, {
+      id: 'old-agent-task',
+      kind: 'local_agent',
+      state: 'completed',
+      startedAt: 10,
+      finishedAt: 20,
+      agentId: 'agent-persisted',
+      agentName: 'core:reviewer',
+      agentTask: 'inspect old result',
+      finalOutput: 'persisted final answer',
+    })
+
+    const tool = makeTaskOutputTool(new FakeManager(), { home })
+    const r = await tool.run({ agent_id: 'agent-persisted', block: false }, ctx())
+
+    expect(r.isError).toBe(false)
+    const text = r.output as string
+    expect(text).toContain('task_id=old-agent-task')
+    expect(text).toContain('state=completed')
+    expect(text).toContain('agent_id=agent-persisted')
+    expect(text).toContain('description=core:reviewer: inspect old result')
+    expect(text).toContain('persisted final answer')
   })
 
   it('non-blocking: returns current state and trailing output', async () => {

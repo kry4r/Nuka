@@ -24,6 +24,7 @@ import type { Tool } from '../tools/types'
 import { defineTool } from '../tools/define'
 import { tailOutput } from './persist'
 import type { Task, TaskState } from './types'
+import { findLatestMetaByAgentId, type TaskMeta } from './meta'
 import {
   cleanLookupId,
   findTaskByAgentId,
@@ -55,6 +56,10 @@ export type TaskOutputToolInput = {
 
 export type TaskOutputRetrievalStatus = 'success' | 'timeout' | 'not_found'
 
+export type TaskOutputToolOpts = {
+  home?: string
+}
+
 const DEFAULT_LINES = 200
 const DEFAULT_TIMEOUT_MS = 30_000
 const MAX_LINES = 5_000
@@ -71,8 +76,9 @@ function isTerminal(state: TaskState): boolean {
 
 function resolveTask(
   manager: TaskLookupManagerLike,
+  opts: TaskOutputToolOpts,
   input: Pick<TaskOutputToolInput, 'task_id' | 'agent_id'>,
-): { task?: Task; error?: string } {
+): { task?: Task; meta?: TaskMeta; error?: string } {
   const taskId = cleanLookupId(input.task_id)
   if (taskId) {
     const task = manager.get(taskId)
@@ -85,12 +91,14 @@ function resolveTask(
     return { error: 'task_id or agent_id is required.' }
   }
   const task = findTaskByAgentId(manager, agentId)
-  if (!task) {
+  if (task) return { task }
+  const meta = opts.home ? findLatestMetaByAgentId(opts.home, agentId) : undefined
+  if (meta?.kind === 'local_agent') return { meta }
+  else {
     return {
       error: `No background task with agent id '${agentId}'.`,
     }
   }
-  return { task }
 }
 
 function renderOutput(
@@ -113,6 +121,26 @@ function renderOutput(
   } else {
     parts.push(outputLines.join('\n'))
   }
+  return parts.join('\n')
+}
+
+function renderPersistedOutput(
+  meta: TaskMeta,
+  status: TaskOutputRetrievalStatus,
+): string {
+  const parts: string[] = []
+  parts.push(`task_id=${meta.id}`)
+  parts.push(`kind=${meta.kind}`)
+  parts.push(`state=${meta.state}`)
+  parts.push(`retrieval_status=${status}`)
+  if (meta.agentId) parts.push(`agent_id=${meta.agentId}`)
+  if (meta.finishedAt !== undefined) parts.push(`finished_at=${meta.finishedAt}`)
+  const description = meta.agentName && meta.agentTask
+    ? `${meta.agentName}: ${meta.agentTask}`
+    : meta.agentTask ?? meta.agentName ?? meta.id
+  parts.push(`description=${description}`)
+  parts.push('---')
+  parts.push(meta.finalOutput?.trim() || '(no output available)')
   return parts.join('\n')
 }
 
@@ -173,6 +201,7 @@ async function waitForTerminal(
 
 export function makeTaskOutputTool(
   manager: TaskOutputManagerLike,
+  opts: TaskOutputToolOpts = {},
 ): Tool<TaskOutputToolInput> {
   return defineTool<TaskOutputToolInput>({
     name: 'TaskOutput',
@@ -218,7 +247,13 @@ export function makeTaskOutputTool(
     annotations: { readOnly: true, parallelSafe: true },
     searchHint: ['task', 'agent', 'output', 'log', 'background', 'stdout', 'stderr'],
     async run(input, ctx) {
-      const resolved = resolveTask(manager, input)
+      const resolved = resolveTask(manager, opts, input)
+      if (resolved.meta) {
+        return {
+          isError: false,
+          output: renderPersistedOutput(resolved.meta, 'success'),
+        }
+      }
       if (resolved.error || !resolved.task) {
         return { isError: true, output: resolved.error ?? 'task_id or agent_id is required.' }
       }

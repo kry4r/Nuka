@@ -109,6 +109,9 @@ Checklist:
 - [x] Persist local-agent final output into task sidecars after completion.
   - Primary files: `src/core/tasks/meta.ts`, `test/core/tasks/manager.test.ts`
   - Acceptance: terminal local-agent sidecars include a bounded `finalOutput` snapshot from the task log, giving later resume/listing work a direct final-result lookup without re-reading the output file first.
+- [x] Let `TaskOutput` / `wait_agent` recover completed local-agent output from sidecars.
+  - Primary files: `src/core/tasks/outputTool.ts`, `src/cli.tsx`, `test/core/tasks/outputTool.test.ts`
+  - Acceptance: when `agent_id` is not present in the in-memory task table, `TaskOutput` falls back to the newest matching local-agent sidecar and returns its `finalOutput` using the same task metadata text format; interactive `wait_agent` inherits this through the registered `TaskOutput` tool.
 - [ ] Decide the public API shape for `fork/send` before implementation.
 - [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.

@@ -928,7 +928,7 @@ async function runInteractive(): Promise<void> {
   // TaskManager so the model can read stdout/state and kill background tasks.
   // (Complements iter G's TaskCreate/List/Get/Update which operate on the
   //  agent-facing TODO list in src/core/tasks/store.ts.)
-  const taskOutputTool = makeTaskOutputTool(taskManager)
+  const taskOutputTool = makeTaskOutputTool(taskManager, { home })
   const taskStopTool = makeTaskStopTool(taskManager)
   tools.register(taskOutputTool as any)
   tools.register(taskStopTool as any)
