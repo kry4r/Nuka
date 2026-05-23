@@ -157,7 +157,10 @@ Checklist:
 - [x] Compare Nuka-Code API-round grouping to Nuka's current pure `maybeAutoCompact` partitioning.
   - Primary files: `src/core/agent/autoCompact.ts`, `test/core/agent/autoCompact.test.ts`
   - Finding: raw-message tail preservation can cut too aggressively inside a single user prompt with multiple assistant API responses; Nuka now supports opt-in `preserveRecentApiRounds` so recent assistant/tool-result rounds stay together while the existing default message-count behavior remains unchanged.
-- [ ] Decide whether Nuka should add microcompact as a separate pre-provider pass or fold it into the existing session-aware wrapper.
+- [x] Decide whether Nuka should add microcompact as a separate pre-provider pass or fold it into the existing session-aware wrapper.
+  - Decision: add Nuka-Code-style local microcompact as a separate pre-provider pass, before each provider stream request, and keep `compactSessionAware` as the heavier post-turn summary/native compact path.
+  - Rationale: microcompact removes or replaces stale tool-result payloads to reduce the next prompt immediately; the current `compactSessionAware` runs only after `turn_end`, so folding microcompact into it would miss the over-budget request that needs the relief. Nuka also does not yet expose provider-level context-management fields in `LLMRequest`, so API/context-management microcompact stays deferred until provider request schemas support it cleanly.
+  - Initial implementation target: pure helper over `Message[]` that clears older `role: "tool"` contents for allowlisted high-volume tools while keeping the newest N tool results and preserving tool ids/error flags; then wire it at the provider-call boundary with focused loop tests.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.
 - [x] Add tests for tool-use/tool-result pairing across compact boundaries.
