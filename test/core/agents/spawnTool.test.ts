@@ -289,4 +289,67 @@ describe('makeSpawnAgentTool', () => {
     expect(hookContexts).toEqual(['subagent:/tmp/nuka-spawn-worktree'])
     expect(cwdSeen).toEqual(['/tmp/nuka-spawn-worktree'])
   })
+
+  it('spawned runner keeps the captured cwd even if the active worktree changes before execution', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const cwdSeen: string[] = []
+    const registry = new ToolRegistry()
+    registry.register({
+      name: 'PeekCwd',
+      description: 'peek cwd',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      needsPermission: () => 'none',
+      run: async (_input, ctx) => {
+        cwdSeen.push(ctx.cwd)
+        return { output: 'cwd-ok', isError: false }
+      },
+    })
+    const provider = mkScriptProvider([
+      [
+        { type: 'tool_use_start', id: 'cwd-1', name: 'PeekCwd' },
+        { type: 'tool_use_stop', id: 'cwd-1', input: {} },
+        { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+      [
+        { type: 'text_delta', text: 'done' },
+        { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+    ])
+    const worktreeStore = createWorktreeStore()
+    const first = worktreeStore.add({
+      path: '/tmp/nuka-first-worktree',
+      originalCwd: process.cwd(),
+    })
+    const second = worktreeStore.add({
+      path: '/tmp/nuka-second-worktree',
+      originalCwd: process.cwd(),
+    })
+    worktreeStore.setActive(first.id)
+    const cache = new PermissionCache()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry,
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => cache, async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore,
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    await tool.run(
+      { agent: 'core:reviewer', task: 'check cwd' },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+    expect(tasks.specs[0]?.cwd).toBe('/tmp/nuka-first-worktree')
+
+    worktreeStore.setActive(second.id)
+    for await (const _chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+
+    expect(cwdSeen).toEqual(['/tmp/nuka-first-worktree'])
+  })
 })

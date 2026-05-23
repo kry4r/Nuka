@@ -139,6 +139,9 @@ Checklist:
 - [x] Persist and recover local-agent cwd/worktree metadata for resume.
   - Primary files: `src/core/tasks/types.ts`, `src/core/tasks/meta.ts`, `src/core/agents/spawnTool.ts`, `src/core/agents/agentLifecycleTools.ts`, `test/core/tasks/meta.test.ts`, `test/core/tasks/manager.test.ts`, `test/core/agents/spawnTool.test.ts`, `test/core/agents/agentLifecycleTools.test.ts`
   - Acceptance: `spawn_agent` records the effective active worktree cwd into local-agent task specs; task meta and transcript sidecars persist `cwd`; persisted `resume_agent` rebuilds a new local-agent task with the prior cwd metadata, narrowing the gap to true worktree-aware resume.
+- [x] Bind background subagent runners to their captured or recovered cwd.
+  - Primary files: `src/core/agents/dispatch.ts`, `src/core/agents/spawnTool.ts`, `src/core/agents/agentLifecycleTools.ts`, `test/core/agents/spawnTool.test.ts`, `test/core/agents/agentLifecycleTools.test.ts`
+  - Acceptance: `dispatchAgent` accepts an execution-level cwd override; `spawn_agent` and persisted `resume_agent` pass the captured/recovered cwd into the rebuilt runner; subagent tool contexts use that cwd even if the parent active worktree changes before execution; subagents can still update their own cwd after `EnterWorktree` / `ExitWorktree`.
 - [x] Add forked-context support with explicit write-scope and parent-session inheritance rules.
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
   - Acceptance: `spawn_agent(..., fork_context: true)` injects a textual parent-session context summary into the child `local_agent` context and preserves explicit caller context; recursion guard still prevents subagents from forking further.

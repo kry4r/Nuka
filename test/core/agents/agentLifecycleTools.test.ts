@@ -9,7 +9,7 @@ import { writeMeta, writeTranscript } from '../../../src/core/tasks/meta'
 import { AgentRegistry } from '../../../src/core/agents/registry'
 import { ToolRegistry } from '../../../src/core/tools/registry'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
-import type { LLMProvider } from '../../../src/core/provider/types'
+import type { LLMProvider, ProviderEvent } from '../../../src/core/provider/types'
 import type { ProviderResolver } from '../../../src/core/provider/resolver'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
@@ -57,6 +57,19 @@ function mkProvider(seenPrompts: string[]): LLMProvider {
       }
       yield { type: 'text_delta', text: 'resumed-response' }
       yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+    },
+    async listRemoteModels() { return [] },
+  } as LLMProvider
+}
+
+function mkScriptProvider(scripts: ProviderEvent[][]): LLMProvider {
+  let i = 0
+  return {
+    id: 'p',
+    format: 'openai',
+    async *stream() {
+      const script = scripts[i++] ?? []
+      for (const ev of script) yield ev
     },
     async listRemoteModels() { return [] },
   } as LLMProvider
@@ -513,5 +526,82 @@ describe('agent lifecycle wrapper tools', () => {
     expect(seenPrompts[0]).toContain('persisted context')
     expect(seenPrompts[0]).toContain('previous final output')
     expect(seenPrompts[0]).toContain('new disk facts')
+  })
+
+  it('resume_agent uses persisted cwd for the rebuilt runner tool context', async () => {
+    const specs: LocalAgentSpec[] = []
+    const cwdSeen: string[] = []
+    writeMeta(home, {
+      id: 'old-task',
+      kind: 'local_agent',
+      state: 'completed',
+      startedAt: 10,
+      finishedAt: 20,
+      agentId: 'agent-persisted',
+      agentName: 'core:reviewer',
+      agentTask: 'old prompt',
+      providerId: 'p',
+      model: 'm',
+      cwd: '/tmp/persisted-worktree',
+    })
+    const manager = {
+      get: () => undefined,
+      list: () => [],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'new-task',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/new-task.log',
+          agentId: spec.agentId ?? 'agent-new-task',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer'))
+    const registry = new ToolRegistry()
+    registry.register({
+      name: 'PeekCwd',
+      description: 'peek cwd',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      tags: ['core'],
+      needsPermission: () => 'none',
+      run: async (_input, toolCtx) => {
+        cwdSeen.push(toolCtx.cwd)
+        return { isError: false, output: 'cwd-ok' }
+      },
+    })
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      home,
+      agents,
+      registry,
+      providerResolver: mkResolver(mkScriptProvider([
+        [
+          { type: 'tool_use_start', id: 'cwd-1', name: 'PeekCwd' },
+          { type: 'tool_use_stop', id: 'cwd-1', input: {} },
+          { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+        ],
+        [
+          { type: 'text_delta', text: 'done' },
+          { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+        ],
+      ])),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+    })
+
+    await tool.run({
+      agent_id: 'agent-persisted',
+      prompt: 'continue from disk',
+    }, ctx())
+
+    for await (const _chunk of specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+    expect(cwdSeen).toEqual(['/tmp/persisted-worktree'])
   })
 })

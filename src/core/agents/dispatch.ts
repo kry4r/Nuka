@@ -77,6 +77,12 @@ export type DispatchAgentOpts = {
    */
   worktreeStore?: WorktreeStore
   /**
+   * Effective cwd captured for this sub-agent execution. Background agents
+   * use this to keep their tool context stable even if the parent session's
+   * active worktree pointer changes before the queued runner starts.
+   */
+  cwd?: string
+  /**
    * User-defined output style resolved upstream from
    * `.nuka/output-styles/*.md`. When supplied, the sub-agent's
    * `agent.systemPrompt` is post-processed via {@link applyOutputStyle}
@@ -128,10 +134,12 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     parentSession,
     hookRegistry,
     worktreeStore,
+    cwd,
     outputStyle,
     agentMemory,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
+  const cwdState = createDispatchCwdState(worktreeStore, cwd)
 
   // Pre-compute the effective system prompt once per dispatch. The
   // sub-agent's declared `systemPrompt` is the base; user-defined
@@ -143,7 +151,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     systemPrompt: agent.systemPrompt,
     agentName: agent.name,
     memory: agent.memory,
-    cwd: resolveToolCwd(worktreeStore, process.cwd()),
+    cwd: cwdState.current(),
     agentMemory,
   })
   const effectiveSystemPrompt = outputStyle
@@ -179,7 +187,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         // sessionStart handlers observe the effective working dir, not the
         // process cwd. Falls back to process.cwd() when no worktree is
         // active (default behaviour).
-        cwd: resolveToolCwd(worktreeStore, process.cwd()),
+        cwd: cwdState.current(),
         resumed: false,
         context: 'subagent',
         agentName: agent.name,
@@ -370,9 +378,10 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
           try {
             result = await tool.run(call.input, {
               signal,
-              cwd: resolveToolCwd(worktreeStore, process.cwd()),
+              cwd: cwdState.current(),
               session,
             })
+            cwdState.afterTool(call.name)
           } catch (err) {
             result = { output: `tool error: ${(err as Error).message}`, isError: true }
           }
@@ -430,6 +439,20 @@ function appendAgentMemoryPrompt(input: {
   }
   if (memoryPrompt.length === 0) return input.systemPrompt
   return `${input.systemPrompt.replace(/\s+$/, '')}\n\n${memoryPrompt}`
+}
+
+function createDispatchCwdState(
+  worktreeStore: WorktreeStore | undefined,
+  initialCwd: string | undefined,
+): { current: () => string; afterTool: (toolName: string) => void } {
+  let override = initialCwd
+  return {
+    current: () => override ?? resolveToolCwd(worktreeStore, process.cwd()),
+    afterTool: (toolName) => {
+      if (!worktreeStore || (toolName !== 'EnterWorktree' && toolName !== 'ExitWorktree')) return
+      override = resolveToolCwd(worktreeStore, initialCwd ?? process.cwd())
+    },
+  }
 }
 
 function finalOutput(assistant: AssistantMessage): string | ToolContentBlock[] {

@@ -138,6 +138,7 @@ export function makeSpawnAgentTool(deps: {
             providerResolver: deps.providerResolver,
             permission: deps.permission,
             signal,
+            cwd,
             ...(parentSession ? { parentSession } : {}),
             ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
             ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
