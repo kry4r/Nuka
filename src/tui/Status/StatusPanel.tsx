@@ -11,7 +11,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { Box, Text, useStdout } from 'ink'
 import { useTheme } from '../../core/theme/context'
-import { truncateByWidth } from '../../core/stringWidth'
+import { stringWidth, truncateByWidth } from '../../core/stringWidth'
 import { defaultPalette } from '../theme'
 import type { StatusLineConfig } from '../../core/config/schema'
 import type { TaskManager } from '../../core/tasks/manager'
@@ -174,7 +174,13 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     ? `${props.gitBranch.branch}${dirtyMark}`
     : null
   const providerLabel = (props.providerName?.trim() || props.providerId || '—').trim()
-  const providerModel = `${providerLabel}/${truncateByWidth(props.model, Math.max(12, Math.floor(columns * 0.24)))}`
+  const modelLabel = truncateByWidth(props.model, Math.max(12, Math.floor(columns * 0.24)))
+  const providerBudget = Math.max(16, Math.floor(columns * 0.32))
+  const providerModelBudget = Math.max(providerBudget + stringWidth(modelLabel) + 1, Math.floor(columns * 0.58))
+  const providerModel = truncateByWidth(
+    `${truncateByWidth(providerLabel, providerBudget)}/${modelLabel}`,
+    providerModelBudget,
+  )
 
   // Also accept 'cost-time' in hidden set for backward compat (maps to 'cost').
   const effectiveHidden = new Set<string>()
@@ -251,6 +257,8 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   if (props.layout === 'compact' && columns < 72 && parts.length > 3) {
     const first = parts.filter(p => p.id === 'mode' || p.id === 'plan' || p.id === 'cwd' || p.id === 'git')
     const second = parts.filter(p => !first.includes(p))
+    const secondMain = columns < 60 ? second.filter(p => p.id !== 'context') : second
+    const secondContext = columns < 60 ? second.filter(p => p.id === 'context') : []
     return (
       <Box flexDirection="column" paddingX={1} flexShrink={0}>
         {first.length > 0 && (
@@ -262,10 +270,19 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
             ))}
           </Box>
         )}
-        {second.length > 0 && (
+        {secondMain.length > 0 && (
           <Box height={1} overflow="hidden">
-            {second.map((s, i) => (
+            {secondMain.map((s, i) => (
               <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={s.id === 'cwd' || s.id === 'context' ? 1 : 0}>
+                {s.node}
+              </Box>
+            ))}
+          </Box>
+        )}
+        {secondContext.length > 0 && (
+          <Box height={1} overflow="hidden">
+            {secondContext.map((s, i) => (
+              <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={1}>
                 {s.node}
               </Box>
             ))}

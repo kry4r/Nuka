@@ -257,5 +257,7 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
   - Progress: wide mode now uses the same summary plus one digest row per active lane, replacing five simultaneous bordered columns.
   - Evidence test: `npm test -- test/tui/Tasks/TasksPanelNew.test.tsx test/integration/phase14b-monitor.test.tsx test/tui/App.panels.test.tsx test/ui-auto/humanTuiBaseline.test.ts`
   - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; 120-column main screen/task panel show a borderless task digest, while 70-column main screen/task panel keep the summary plus focused subagent detail.
-- [ ] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.
+- [x] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.
+  - Evidence test: `npm test -- test/tui/LayoutGuards.harness.test.tsx test/tui/PromptInput.cursorAnsi.test.tsx test/tui/Status.harness.test.tsx test/tui/toolCall.test.tsx`
+  - Coverage: `LayoutGuards.harness` now runs L1 checks for narrow statusline provider/model truncation, bordered tool progress overflow/border bleed, and native cursor declaration in the full App viewport.
 - [ ] Keep `stringWidth` / `truncateByWidth` in every width-sensitive path.
