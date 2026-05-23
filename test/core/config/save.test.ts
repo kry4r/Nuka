@@ -46,4 +46,40 @@ describe('config save', () => {
     expect(txt).toContain('id: p2')
     expect(txt).toContain('id: p1')
   })
+
+  it('addProvider derives stale custom ids from the configured provider name', async () => {
+    const h = home()
+    await addProvider(h, {
+      id: 'custom',
+      name: 'Xiaomi Mimo',
+      format: 'openai',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      models: ['mimo-v2-pro'],
+      selectedModel: 'mimo-v2-pro',
+    })
+
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toContain('id: xiaomi-mimo')
+    expect(txt).toContain('name: Xiaomi Mimo')
+    expect(txt).not.toContain('id: custom')
+  })
+
+  it('addProvider updates active selection when normalizing the first custom provider id', async () => {
+    const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-empty-'))
+    mkdirSync(join(h, '.nuka'))
+    writeFileSync(join(h, '.nuka', 'config.yaml'), 'providers: []\n')
+
+    await addProvider(h, {
+      id: 'custom-2',
+      name: 'DeepSeek Gateway',
+      format: 'openai',
+      baseUrl: 'https://gateway.example.test/v1',
+      models: ['deepseek-chat'],
+    })
+
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toContain('id: deepseek-gateway')
+    expect(txt).toContain('providerId: deepseek-gateway')
+    expect(txt).not.toContain('custom-2')
+  })
 })

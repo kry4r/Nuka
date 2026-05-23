@@ -8,6 +8,21 @@ function globalConfigFile(home: string): string {
   return path.join(home, '.nuka', 'config.yaml')
 }
 
+function providerIdFromName(name: string): string {
+  const id = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return id || 'custom'
+}
+
+function normalizeProviderBeforeSave(provider: ProviderConfig): ProviderConfig {
+  if (!/^custom(?:-\d+)?$/.test(provider.id)) return provider
+  const id = providerIdFromName(provider.name)
+  return { ...provider, id }
+}
+
 async function readConfig(home: string): Promise<any> {
   try {
     const text = await readFile(globalConfigFile(home), 'utf8')
@@ -94,11 +109,12 @@ export async function saveConfigPatch(
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
-  if (list.some(p => p.id === provider.id)) {
-    throw new Error(`provider id already exists: ${provider.id}`)
+  const normalized = normalizeProviderBeforeSave(provider)
+  if (list.some(p => p.id === normalized.id)) {
+    throw new Error(`provider id already exists: ${normalized.id}`)
   }
-  list.push(provider)
+  list.push(normalized)
   obj.providers = list
-  if (!obj.active) obj.active = { providerId: provider.id }
+  if (!obj.active) obj.active = { providerId: normalized.id }
   await writeConfig(home, obj)
 }

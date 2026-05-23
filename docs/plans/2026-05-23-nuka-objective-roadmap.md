@@ -37,6 +37,10 @@
   - Primary files: `src/core/onboarding/wizard.ts`, `src/core/onboarding/templates.ts`, `test/core/onboarding/wizard.test.ts`
   - Acceptance: a custom provider named `Xiaomi Mimo` persists as provider id `xiaomi-mimo` and display name `Xiaomi Mimo`.
 
+- [x] Normalize stale custom provider placeholder ids at config-save boundaries.
+  - Primary files: `src/core/config/save.ts`, `test/core/config/save.test.ts`
+  - Acceptance: saving a provider with placeholder id `custom` or `custom-N` and configured name `Xiaomi Mimo` persists `id: xiaomi-mimo`; active selection uses the normalized id; explicit non-placeholder ids are left unchanged.
+
 - [x] Run final focused verification for the current bugfix set.
   - Command: `npm test -- test/core/provider/openai.test.ts test/core/provider/openai.image.test.ts test/core/onboarding/wizard.test.ts test/core/onboarding/probe.test.ts test/tui/app.test.tsx test/tui/Status.harness.test.tsx test/tui/planModeBadge.test.tsx test/tui/PromptInput.cursorAnsi.test.tsx test/tui/Layout.harness.test.tsx test/tui/Submenu.harness.test.tsx test/tui/UIState.harness.test.tsx test/tui/SlashCard.harness.test.tsx`
   - Command: `git diff --check`
