@@ -23,6 +23,7 @@ import { extname, join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { addAgentMemoryTools, type AgentMemoryScope } from './agentMemory'
+import type { AgentDef } from './types'
 
 /**
  * Public subagent shape after parsing. Maps onto Nuka's internal
@@ -56,6 +57,8 @@ export interface SubagentDefinition {
   memory?: AgentMemoryScope
   /** Optional cwd isolation default for background execution. */
   isolation?: 'inherit' | 'worktree'
+  /** If true, this agent should be launched through spawn_agent by default. */
+  background?: boolean
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -91,6 +94,7 @@ const SubagentFileSchema = z
     temperature: z.number().min(0).max(1).optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
     isolation: z.enum(['inherit', 'worktree']).optional(),
+    background: z.boolean().optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -146,6 +150,7 @@ function assembleDefinition(
   if (parsed.temperature !== undefined) def.temperature = parsed.temperature
   if (parsed.memory !== undefined) def.memory = parsed.memory
   if (parsed.isolation !== undefined) def.isolation = parsed.isolation
+  if (parsed.background !== undefined) def.background = parsed.background
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -207,6 +212,25 @@ function parseMarkdownAgent(content: string): unknown {
     disallowedTools: normalizeToolList(parsed.frontmatter['disallowedTools']),
     memory: parsed.frontmatter['memory'],
     isolation: parsed.frontmatter['isolation'],
+    background: normalizeFrontmatterBoolean(parsed.frontmatter['background']),
+  }
+}
+
+export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
+  return {
+    name: sub.name,
+    description: sub.description,
+    systemPrompt: sub.systemPrompt,
+    maxTurns: sub.maxTurns ?? 20,
+    ...(sub.tools !== undefined ? { allowedTools: sub.tools } : {}),
+    ...(sub.deniedTools !== undefined ? { deniedTools: sub.deniedTools } : {}),
+    ...(sub.model !== undefined ? { model: sub.model } : {}),
+    ...(sub.maxTokens !== undefined ? { maxTokens: sub.maxTokens } : {}),
+    ...(sub.temperature !== undefined ? { temperature: sub.temperature } : {}),
+    ...(sub.memory !== undefined ? { memory: sub.memory } : {}),
+    ...(sub.isolation !== undefined ? { isolation: sub.isolation } : {}),
+    ...(sub.background !== undefined ? { background: sub.background } : {}),
+    ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }
 
@@ -248,6 +272,14 @@ function normalizeToolList(value: unknown): string[] | undefined {
     }
   }
   return out
+}
+
+function normalizeFrontmatterBoolean(value: unknown): unknown {
+  if (value === undefined) return undefined
+  if (value === true || value === false) return value
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return value
 }
 
 /**

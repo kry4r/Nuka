@@ -115,6 +115,14 @@ export function makeDispatchAgentTool(deps: {
           isError: true,
         }
       }
+      if (resolved.background === true) {
+        return {
+          output:
+            `Agent '${resolved.name}' is configured with background=true. ` +
+            `Use spawn_agent with agent='${resolved.name}' to launch it asynchronously.`,
+          isError: true,
+        }
+      }
       const parentSession = ctx.session
         ? { providerId: ctx.session.providerId, model: ctx.session.model }
         : undefined

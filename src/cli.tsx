@@ -124,7 +124,7 @@ import { makeCoordinateAgentsTool } from './core/tools/coordinator/coordinateAge
 import type { Tool as ToolType } from './core/tools/types'
 import { dispatchAgent } from './core/agents/dispatch'
 import { resolveAgentDef } from './core/agents/loader'
-import { loadSubagentsFromDir, defaultSubagentDirs } from './core/agents/subagentLoader'
+import { loadSubagentsFromDir, defaultSubagentDirs, subagentToAgentDef } from './core/agents/subagentLoader'
 import { validatePlugin, formatReport } from './core/plugin/validate'
 import { LspManager } from './core/lsp/manager'
 import { makeLspDiagnosticsTool, makeLspDefinitionTool, makeLspReferencesTool } from './core/lsp/tools'
@@ -1127,22 +1127,7 @@ async function runInteractive(): Promise<void> {
       let registered = 0
       for (const sub of loaded) {
         try {
-          // SubagentDefinition → AgentDef shape. `tools` is the alias
-          // the loose-file spec exposes; map to `allowedTools` so the
-          // existing AgentDefSchema accepts it.
-          const agentDef: Parameters<typeof resolveAgentDef>[0] = {
-            name: sub.name,
-            description: sub.description,
-            systemPrompt: sub.systemPrompt,
-            maxTurns: sub.maxTurns ?? 20,
-            ...(sub.tools !== undefined ? { allowedTools: sub.tools } : {}),
-            ...(sub.deniedTools !== undefined ? { deniedTools: sub.deniedTools } : {}),
-            ...(sub.model !== undefined ? { model: sub.model } : {}),
-            ...(sub.maxTokens !== undefined ? { maxTokens: sub.maxTokens } : {}),
-            ...(sub.temperature !== undefined ? { temperature: sub.temperature } : {}),
-            ...(sub.memory !== undefined ? { memory: sub.memory } : {}),
-            ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
-          }
+          const agentDef = subagentToAgentDef(sub)
           const resolved = await resolveAgentDef(agentDef, dirPath, pluginName)
           agents.register(resolved)
           registered++

@@ -14,6 +14,7 @@ import {
   loadSubagentFile,
   loadSubagentsFromDir,
   defaultSubagentDirs,
+  subagentToAgentDef,
 } from '../../../src/core/agents/subagentLoader'
 
 let dir: string
@@ -153,6 +154,46 @@ describe('loadSubagentFile — happy path', () => {
 
     const def = await loadSubagentFile(filePath)
     expect(def.isolation).toBe('worktree')
+  })
+
+  it('loads Nuka-Code background frontmatter', async () => {
+    const filePath = join(dir, 'verifier.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: verifier',
+        'description: verifies independently',
+        'background: true',
+        '---',
+        '',
+        'You verify in the background.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.background).toBe(true)
+  })
+
+  it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
+    const filePath = join(dir, 'foreground.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: foreground',
+        'description: stays synchronous by default',
+        'background: "false"',
+        '---',
+        '',
+        'You can run in the foreground.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.background).toBe(false)
   })
 
   it('adds memory file tools when memory is enabled with an explicit allowlist', async () => {
@@ -315,6 +356,16 @@ describe('loadSubagentFile — invalid shape', () => {
       isolation: 'container',
     })
     await expect(loadSubagentFile(fp)).rejects.toThrow(/isolation/)
+  })
+
+  it('throws when background mode is invalid', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      background: 'sometimes',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/background/)
   })
 
   it('throws on unknown/extra field (strict schema)', async () => {
@@ -502,5 +553,53 @@ describe('defaultSubagentDirs', () => {
     const paths = defaultSubagentDirs()
     expect(paths.length).toBeGreaterThanOrEqual(1)
     expect(paths[0]).toContain('.nuka/subagents')
+  })
+})
+
+describe('subagentToAgentDef', () => {
+  it('preserves loose-file runtime metadata for registry resolution', () => {
+    const agentDef = subagentToAgentDef({
+      name: 'worker',
+      description: 'implements isolated changes',
+      systemPrompt: 'Implement carefully.',
+      tools: ['Read', 'Edit'],
+      deniedTools: ['Bash'],
+      model: 'inherit',
+      maxTurns: 8,
+      maxTokens: 4096,
+      temperature: 0.2,
+      memory: 'project',
+      isolation: 'worktree',
+      background: true,
+      keywords: ['implement'],
+      sourcePath: '/tmp/worker.md',
+    })
+
+    expect(agentDef).toEqual({
+      name: 'worker',
+      description: 'implements isolated changes',
+      systemPrompt: 'Implement carefully.',
+      allowedTools: ['Read', 'Edit'],
+      deniedTools: ['Bash'],
+      model: 'inherit',
+      maxTurns: 8,
+      maxTokens: 4096,
+      temperature: 0.2,
+      memory: 'project',
+      isolation: 'worktree',
+      background: true,
+      keywords: ['implement'],
+    })
+  })
+
+  it('defaults maxTurns to 20 for loose-file agents', () => {
+    const agentDef = subagentToAgentDef({
+      name: 'reader',
+      description: 'reads code',
+      systemPrompt: 'Read.',
+      sourcePath: '/tmp/reader.md',
+    })
+
+    expect(agentDef.maxTurns).toBe(20)
   })
 })

@@ -9,13 +9,19 @@ import { PermissionCache } from '../../../src/core/permission/cache'
 import { createSession } from '../../../src/core/session/session'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
 
-function mkAgent(pluginName: string, name: string, description: string): ResolvedAgentDef {
+function mkAgent(
+  pluginName: string,
+  name: string,
+  description: string,
+  overrides: Partial<ResolvedAgentDef> = {},
+): ResolvedAgentDef {
   return {
     name,
     description,
     systemPrompt: 'system',
     maxTurns: 20,
     pluginName,
+    ...overrides,
   }
 }
 
@@ -79,6 +85,23 @@ describe('makeDispatchAgentTool', () => {
     )
     expect(result.isError).toBe(false)
     expect(result.output).toBe('subagent-response')
+  })
+
+  it('refuses synchronous dispatch for agents marked background-only', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'verifier', 'verifies independently', { background: true }))
+    const deps = makeDeps(agents)
+    const tool = makeDispatchAgentTool(deps)
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      { agent: 'core:verifier', task: 'verify this' },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain("Agent 'core:verifier' is configured with background=true")
+    expect(result.output as string).toContain('spawn_agent')
   })
 
   it('returns a structured error (not throw) for unknown agent', async () => {

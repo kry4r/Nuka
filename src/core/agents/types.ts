@@ -22,6 +22,7 @@ export const AgentDefSchema = z
     temperature: z.number().min(0).max(1).optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
     isolation: z.enum(['inherit', 'worktree']).optional(),
+    background: z.boolean().optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),
