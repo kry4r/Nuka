@@ -95,6 +95,19 @@ describe('AgentCall', () => {
 })
 
 describe('MessageRow integration with dispatch_agent', () => {
+  it('renders assistant text as quiet indented copy without the turn bar', () => {
+    const msg: AssistantMessage = {
+      role: 'assistant',
+      id: 'a-quiet',
+      ts: 0,
+      content: [{ type: 'text', text: 'assistant plain text' }],
+    }
+    const { lastFrame } = render(<MessageRow m={msg} />)
+    const f = lastFrame() ?? ''
+    expect(f).toContain('  assistant plain text')
+    expect(f).not.toContain('▎ assistant plain text')
+  })
+
   it('renders a dispatch_agent tool_use as an AgentCall with the badge', () => {
     const msg: AssistantMessage = {
       role: 'assistant',

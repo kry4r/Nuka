@@ -144,72 +144,73 @@ export function MessageRow(props: {
   if (m.role === 'assistant') {
     const blocks = m.content
     return (
-      <Box flexDirection="row">
-        <Text color={barColor} bold>▎ </Text>
-        <Box flexDirection="column" flexGrow={1}>
-          {blocks.map((b: any, i: number) => {
-            if (b.type === 'text') {
-              return <Markdown key={i} source={b.text} />
-            }
-            if (b.type === 'tool_use') {
-              if (b.name === DISPATCH_AGENT_TOOL_NAME) {
-                const input = (b.input ?? {}) as { agent?: string; task?: string }
-                const agent = typeof input.agent === 'string' ? input.agent : '(unknown)'
-                const task = typeof input.task === 'string' ? input.task : ''
-                const res = props.toolResultsById?.get(b.id)
-                const status: 'running' | 'ok' | 'error' = !res
-                  ? 'running'
-                  : res.isError ? 'error' : 'ok'
-                return (
-                  <AgentCall
-                    key={i}
-                    agent={agent}
-                    task={task}
-                    status={status}
-                    {...(res ? { result: res.output } : {})}
-                    expanded={props.expandedAgentCallIds?.has(b.id) ?? false}
-                  />
-                )
-              }
-              const source = props.resolveToolSource?.(b.name)
-              const annotations = props.resolveToolAnnotations?.(b.name)
-              const registry = getRegistry()
-              const matchedStyle = matchStyle(b.name, source, [...registry])
-
-              const defaultFallback = (
-                <ToolCall
+      <Box flexDirection="column" flexGrow={1}>
+        {blocks.map((b: any, i: number) => {
+          if (b.type === 'text') {
+            return (
+              <Box key={i} paddingLeft={2}>
+                <Markdown source={b.text} />
+              </Box>
+            )
+          }
+          if (b.type === 'tool_use') {
+            if (b.name === DISPATCH_AGENT_TOOL_NAME) {
+              const input = (b.input ?? {}) as { agent?: string; task?: string }
+              const agent = typeof input.agent === 'string' ? input.agent : '(unknown)'
+              const task = typeof input.task === 'string' ? input.task : ''
+              const res = props.toolResultsById?.get(b.id)
+              const status: 'running' | 'ok' | 'error' = !res
+                ? 'running'
+                : res.isError ? 'error' : 'ok'
+              return (
+                <AgentCall
                   key={i}
-                  name={b.name}
-                  argSummary={summarize(b.input)}
-                  status="ok"
-                  source={source}
-                  annotations={annotations}
+                  agent={agent}
+                  task={task}
+                  status={status}
+                  {...(res ? { result: res.output } : {})}
+                  expanded={props.expandedAgentCallIds?.has(b.id) ?? false}
                 />
               )
-
-              if (matchedStyle) {
-                const styleProps: OutputStyleProps = {
-                  toolName: b.name,
-                  input: b.input,
-                  output: '',
-                  isError: false,
-                }
-                return (
-                  <CustomOutputStyle
-                    key={i}
-                    componentPath={matchedStyle.componentPath}
-                    styleName={matchedStyle.name}
-                    styleProps={styleProps}
-                    fallback={defaultFallback}
-                  />
-                )
-              }
-
-              return defaultFallback
             }
-            return null
-          })}
-        </Box>
+            const source = props.resolveToolSource?.(b.name)
+            const annotations = props.resolveToolAnnotations?.(b.name)
+            const registry = getRegistry()
+            const matchedStyle = matchStyle(b.name, source, [...registry])
+
+            const defaultFallback = (
+              <ToolCall
+                key={i}
+                name={b.name}
+                argSummary={summarize(b.input)}
+                status="ok"
+                source={source}
+                annotations={annotations}
+              />
+            )
+
+            if (matchedStyle) {
+              const styleProps: OutputStyleProps = {
+                toolName: b.name,
+                input: b.input,
+                output: '',
+                isError: false,
+              }
+              return (
+                <CustomOutputStyle
+                  key={i}
+                  componentPath={matchedStyle.componentPath}
+                  styleName={matchedStyle.name}
+                  styleProps={styleProps}
+                  fallback={defaultFallback}
+                />
+              )
+            }
+
+            return defaultFallback
+          }
+          return null
+        })}
       </Box>
     )
   }
