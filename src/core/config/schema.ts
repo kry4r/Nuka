@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 export const ProviderFormatSchema = z.enum(['anthropic', 'openai'])
 export type ProviderFormat = z.infer<typeof ProviderFormatSchema>
+export const EffortLevelSchema = z.enum(['low', 'medium', 'high'])
+export type EffortLevel = z.infer<typeof EffortLevelSchema>
 
 export const PricingSchema = z.object({
   input: z.number().nonnegative(),
@@ -20,6 +22,10 @@ export const ProviderConfigSchema = z.object({
   selectedModel: z.string().optional(),
   extraHeaders: z.record(z.string(), z.string()).optional(),
   pricing: z.record(z.string(), PricingSchema).optional(),
+  effort: z.record(z.string(), z.union([
+    z.boolean(),
+    z.array(EffortLevelSchema).nonempty(),
+  ])).optional(),
 })
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 
@@ -163,7 +169,7 @@ export const RecapConfigSchema = z
   .optional()
 export type RecapConfig = z.infer<typeof RecapConfigSchema>
 
-export const EffortSchema = z.enum(['low', 'medium', 'high']).optional()
+export const EffortSchema = EffortLevelSchema.optional()
 export type Effort = z.infer<typeof EffortSchema>
 
 /**

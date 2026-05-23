@@ -66,4 +66,27 @@ describe('runAgent — effort plumbing', () => {
 
     expect(captured.req?.effort).toBeUndefined()
   })
+
+  it('filters configured effort when the selected model does not support it', async () => {
+    const session = createSession({ providerId: 'p', model: 'gpt-4o-mini' })
+    const captured: { req?: LLMRequest } = {}
+    const provider = captureProvider(captured)
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+
+    for await (const _ of runAgent(
+      { text: 'hi' },
+      session,
+      {
+        provider: { resolveFor: () => ({ provider, model: 'gpt-4o-mini' }) } as any,
+        tools,
+        permission,
+        effort: 'high',
+        resolveEffort: () => undefined,
+      },
+      new AbortController().signal,
+    )) { /* drain */ }
+
+    expect(captured.req?.effort).toBeUndefined()
+  })
 })

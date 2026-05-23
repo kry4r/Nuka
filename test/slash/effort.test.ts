@@ -14,10 +14,12 @@ vi.mock('../../src/core/config/save', () => ({
   addProvider: vi.fn(),
 }))
 
-function makeCtx(model = 'claude-sonnet-4-6'): SlashContext {
+function makeCtx(model = 'claude-sonnet-4-6', providerConfig?: any): SlashContext {
   return {
     sessions: { active: () => ({ id: 's1', model, providerId: 'anthropic' }) } as any,
-    providers: {} as any,
+    providers: {
+      getProviderConfig: (id: string) => id === 'anthropic' ? providerConfig : undefined,
+    } as any,
     config: {} as any,
   }
 }
@@ -69,5 +71,18 @@ describe('/effort command', () => {
     const result = await EffortCommand.run('low', makeCtx('claude-opus-4-7'))
     expect(result.type).toBe('text')
     expect((result as any).text).not.toMatch(/does not support reasoning/)
+  })
+
+  it('uses provider effort capability metadata for warnings', async () => {
+    const result = await EffortCommand.run(
+      'high',
+      makeCtx('mimo-v2-pro', {
+        id: 'anthropic',
+        effort: { 'mimo-v2-pro': ['low', 'medium'] },
+      }),
+    )
+
+    expect(result.type).toBe('text')
+    expect((result as any).text).toMatch(/does not support high effort/)
   })
 })

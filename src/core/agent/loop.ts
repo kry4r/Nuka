@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises'
 import type { Session } from '../session/types'
 import type { AgentEvent } from './events'
-import type { ProviderEvent } from '../provider/types'
+import type { Effort, ProviderEvent } from '../provider/types'
 import type { ProviderResolver } from '../provider/resolver'
 import type { ToolRegistry } from '../tools/registry'
 import type { PermissionChecker } from '../permission/checker'
@@ -118,6 +118,8 @@ export type RunAgentDeps = {
   bus?: EventBus
   /** Reasoning effort hint forwarded to provider.stream() each turn. */
   effort?: 'low' | 'medium' | 'high'
+  /** Optional final provider/model capability filter before each request. */
+  resolveEffort?: (effort: Effort | undefined, model: string) => Effort | undefined
   /**
    * Practical Iter JJJJ — process-wide cron prompt queue. When provided
    * AND `NUKA_CRON_INJECT_PROMPTS=1` is in the environment, the loop
@@ -382,7 +384,7 @@ export async function* runAgent(
         system,
         messages: providerMessages,
         tools: toolSpecs,
-        effort: deps.effort,
+        effort: deps.resolveEffort ? deps.resolveEffort(deps.effort, model) : deps.effort,
       },
       signal,
     )

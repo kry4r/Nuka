@@ -103,6 +103,7 @@ import { compactSession } from './core/compact/compact'
 import type { AutoCompactSessionAwareOpts } from './core/agent/autoCompact'
 import { globalConfigPath } from './core/config/paths'
 import { microCompactOptionsFromConfig } from './core/config/microCompact'
+import { resolveEffortForModel } from './core/config/effort'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
 import { loadAllSkills } from './core/skill/loadDir'
@@ -1376,6 +1377,10 @@ async function runInteractive(): Promise<void> {
       lsp: lspManager,
       costTracker,
       effort: config.effort,
+      resolveEffort: (effort, model) => {
+        const providerConfig = providers.getProviderConfig(session.providerId)
+        return resolveEffortForModel(effort, providerConfig, model)
+      },
       cronPromptQueue,
       // P1 #6 — same singleton the EnterWorktree tool mutates. The loop
       // reads `store.getActive()` on every tool call, so EnterWorktree's

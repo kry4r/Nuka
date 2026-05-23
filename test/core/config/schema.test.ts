@@ -48,6 +48,28 @@ describe('ConfigSchema', () => {
     })
     expect(parsed.providers[0].pricing?.['gpt-5'].input).toBe(2.5)
   })
+
+  it('supports optional per-model effort capability levels', () => {
+    const parsed = ConfigSchema.parse({
+      providers: [
+        {
+          id: 'p1',
+          name: 'x',
+          format: 'openai',
+          baseUrl: 'https://x',
+          models: ['gpt-5', 'gpt-4o-mini'],
+          effort: {
+            'gpt-5': ['low', 'medium', 'high'],
+            'gpt-4o-mini': false,
+          },
+        },
+      ],
+      active: { providerId: 'p1' },
+    })
+
+    expect(parsed.providers[0].effort?.['gpt-5']).toEqual(['low', 'medium', 'high'])
+    expect(parsed.providers[0].effort?.['gpt-4o-mini']).toBe(false)
+  })
 })
 
 describe('ConfigSchema teamId', () => {

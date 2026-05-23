@@ -45,4 +45,25 @@ describe('ProviderResolver', () => {
     expect(r.listModels('p1')).toEqual(['claude-sonnet-4-6'])
     expect(r.listModels('p2')).toEqual(['gpt-5'])
   })
+
+  it('exposes provider config including model effort capabilities', () => {
+    const r = new ProviderResolver({
+      providers: [
+        {
+          id: 'p',
+          name: 'OpenAI',
+          format: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          models: ['gpt-5', 'gpt-4o-mini'],
+          effort: {
+            'gpt-5': ['low', 'medium', 'high'],
+            'gpt-4o-mini': false,
+          },
+        },
+      ],
+      active: { providerId: 'p' },
+    } as Config)
+
+    expect(r.getProviderConfig('p')?.effort?.['gpt-4o-mini']).toBe(false)
+  })
 })

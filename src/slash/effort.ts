@@ -1,5 +1,6 @@
 import os from 'node:os'
 import { saveConfigPatch } from '../core/config/save'
+import { effortCapabilityMessage } from '../core/config/effort'
 import type { Effort } from '../core/config/schema'
 import type { SlashCommand, SlashContext } from './types'
 
@@ -56,10 +57,16 @@ export const EffortCommand: SlashCommand = {
 
     const session = ctx.sessions.active()
     const model = session?.model ?? ''
+    const providerConfig = session ? ctx.providers.getProviderConfig(session.providerId) : undefined
+    const capabilityMessage = effortCapabilityMessage(arg, providerConfig, model)
     const supports = model ? modelSupportsThinking(model) : true
-    const note = supports
-      ? ''
-      : `\nNote: ${model} does not support reasoning/thinking — value saved and will apply on a thinking-capable model.`
+    const fallbackMessage = !capabilityMessage && !supports
+      ? `${model} does not support reasoning/thinking`
+      : undefined
+    const noteMessage = capabilityMessage ?? fallbackMessage
+    const note = noteMessage
+      ? `\nNote: ${noteMessage} — value saved and will apply when supported.`
+      : ''
     return { type: 'text', text: `Effort set to ${arg}.${note}` }
   },
 }

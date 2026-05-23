@@ -43,6 +43,31 @@ active:
     expect(cfg.active.providerId).toBe('p1')
   })
 
+  it('loads provider effort capability metadata', async () => {
+    const home = tmp()
+    mkdirSync(join(home, '.nuka'))
+    writeFileSync(
+      join(home, '.nuka', 'config.yaml'),
+      `providers:
+  - id: p1
+    name: A
+    format: openai
+    baseUrl: https://api.openai.com/v1
+    models: [gpt-5, gpt-4o-mini]
+    effort:
+      gpt-5: [low, medium, high]
+      gpt-4o-mini: false
+active:
+  providerId: p1
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd: tmp() })
+
+    expect(cfg.providers[0].effort?.['gpt-5']).toEqual(['low', 'medium', 'high'])
+    expect(cfg.providers[0].effort?.['gpt-4o-mini']).toBe(false)
+  })
+
   it('cascades non-provider fields from project scope (harness, recap)', async () => {
     const home = tmp()
     mkdirSync(join(home, '.nuka'))
