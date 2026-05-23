@@ -33,6 +33,8 @@ import type { OutputStyle } from '../outputStyles/types'
 import { applyOutputStyle } from '../outputStyles/resolve'
 import { loadAgentMemoryPrompt, type AgentMemoryDeps } from './agentMemory'
 import type { Effort } from '../provider/types'
+import type { Skill } from '../skill/types'
+import { activeToolsForMany } from '../skill/activation'
 
 export type DispatchAgentOpts = {
   agent: ResolvedAgentDef
@@ -101,6 +103,8 @@ export type DispatchAgentOpts = {
    * loader from `agentMemory.ts`.
    */
   agentMemory?: AgentMemoryDeps
+  /** Skill catalog available to sub-agents for agent.skills preloading. */
+  skills?: Skill[]
   /** Optional final provider/model capability filter before each sub-agent request. */
   resolveEffort?: (
     effort: Effort | undefined,
@@ -144,10 +148,12 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     cwd,
     outputStyle,
     agentMemory,
+    skills,
     resolveEffort,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
   const cwdState = createDispatchCwdState(worktreeStore, cwd)
+  const agentSkills = resolveAgentSkills(agent.skills, skills)
 
   // Pre-compute the effective system prompt once per dispatch. The
   // sub-agent's declared `systemPrompt` is the base; user-defined
@@ -162,9 +168,10 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     cwd: cwdState.current(),
     agentMemory,
   })
+  const systemPromptWithSkills = appendSkillPrompts(baseSystemPrompt, agentSkills)
   const effectiveSystemPrompt = outputStyle
-    ? applyOutputStyle(baseSystemPrompt, outputStyle)
-    : baseSystemPrompt
+    ? applyOutputStyle(systemPromptWithSkills, outputStyle)
+    : systemPromptWithSkills
 
   // Build filtered tool registry for the sub-session.
   const filtered: Tool[] = filterTools(registry.list(), {
@@ -173,6 +180,9 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
   })
   const subRegistry = new ToolRegistryClass()
   for (const t of filtered) subRegistry.register(t)
+  const effectiveRegistry = new ToolRegistryClass()
+  const skillFiltered = activeToolsForMany(agentSkills, subRegistry)
+  for (const t of skillFiltered) effectiveRegistry.register(t)
 
   // Fresh session: provider/model inherited unless overridden by agent.model.
   const providerId = parentSession?.providerId ?? providerResolver.listProviders()[0]?.id ?? ''
@@ -257,7 +267,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       const { provider, model: resolvedModel } = providerResolver.resolveFor(session)
       turns++
 
-      const toolSpecs = subRegistry.list().map(t => ({
+      const toolSpecs = effectiveRegistry.list().map(t => ({
         name: t.name,
         description: t.description,
         parameters: t.parameters,
@@ -364,7 +374,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       // Run tool calls serially (sub-agents don't need parallelism for a first cut).
       for (const call of calls) {
         if (signal.aborted) break
-        const tool = subRegistry.find(call.name)
+        const tool = effectiveRegistry.find(call.name)
         if (!tool) {
           const msg = `Unknown tool: ${call.name} (not in agent's allowed set)`
           appendMessage(session, makeToolMessage(call.id, { output: msg, isError: true }))
@@ -455,6 +465,35 @@ function appendAgentMemoryPrompt(input: {
   }
   if (memoryPrompt.length === 0) return input.systemPrompt
   return `${input.systemPrompt.replace(/\s+$/, '')}\n\n${memoryPrompt}`
+}
+
+function resolveAgentSkills(
+  names: string[] | undefined,
+  allSkills: Skill[] | undefined,
+): Skill[] {
+  if (!names || names.length === 0 || !allSkills || allSkills.length === 0) return []
+  const out: Skill[] = []
+  const seen = new Set<string>()
+  for (const name of names) {
+    const skill = findSkillByAgentName(name, allSkills)
+    if (!skill || seen.has(skill.name)) continue
+    seen.add(skill.name)
+    out.push(skill)
+  }
+  return out
+}
+
+function findSkillByAgentName(name: string, allSkills: Skill[]): Skill | undefined {
+  const exact = allSkills.find(skill => skill.name === name)
+  if (exact) return exact
+  const suffix = `:${name}`
+  return allSkills.find(skill => skill.name.endsWith(suffix))
+}
+
+function appendSkillPrompts(systemPrompt: string, skills: Skill[]): string {
+  if (skills.length === 0) return systemPrompt
+  const blocks = skills.map(skill => `[Skill: ${skill.name}]\n\n${skill.body}`)
+  return `${systemPrompt.replace(/\s+$/, '')}\n\n${blocks.join('\n\n')}`
 }
 
 function createDispatchCwdState(

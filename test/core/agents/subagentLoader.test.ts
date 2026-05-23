@@ -254,6 +254,26 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.effort).toBe('high')
   })
 
+  it('loads Nuka-Code skills frontmatter', async () => {
+    const filePath = join(dir, 'skilled.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: skilled',
+        'description: preloads named skills',
+        'skills: test-first, review',
+        '---',
+        '',
+        'You use declared skills.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.skills).toEqual(['test-first', 'review'])
+  })
+
   it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
     const filePath = join(dir, 'foreground.md')
     await writeFile(
@@ -682,6 +702,7 @@ describe('subagentToAgentDef', () => {
       permissionMode: 'plan',
       initialPrompt: 'Read AGENTS.md first.',
       effort: 'high',
+      skills: ['test-first'],
       keywords: ['implement'],
       sourcePath: '/tmp/worker.md',
     })
@@ -702,6 +723,7 @@ describe('subagentToAgentDef', () => {
       permissionMode: 'plan',
       initialPrompt: 'Read AGENTS.md first.',
       effort: 'high',
+      skills: ['test-first'],
       keywords: ['implement'],
     })
   })

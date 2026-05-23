@@ -7,6 +7,7 @@ import type { ProviderResolver } from '../../../src/core/provider/resolver'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Tool } from '../../../src/core/tools/types'
+import type { Skill } from '../../../src/core/skill/types'
 
 function stubProvider(scripts: ProviderEvent[][]): LLMProvider {
   let i = 0
@@ -52,10 +53,28 @@ function makeTool(name: string, run?: Tool['run']): Tool {
   }
 }
 
+function makeTaggedTool(name: string, tags: string[]): Tool {
+  return {
+    ...makeTool(name),
+    tags,
+  }
+}
+
 function makeWriteTool(name: string, run?: Tool['run']): Tool {
   return {
     ...makeTool(name, run),
     needsPermission: () => 'write',
+  }
+}
+
+function makeSkill(overrides: Partial<Skill> = {}): Skill {
+  return {
+    name: 'test-first',
+    when: 'on-session-start',
+    body: 'Write the test before implementation.',
+    source: 'project',
+    path: '/tmp/test-first.md',
+    ...overrides,
   }
 }
 
@@ -294,6 +313,66 @@ describe('dispatchAgent', () => {
     })
 
     expect(seenEffort).toBe('high')
+  })
+
+  it('preloads declared agent skills into the provider system prompt', async () => {
+    let seenSystem = ''
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenSystem = req.system
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    await dispatchAgent({
+      agent: makeAgent({ skills: ['test-first'] }),
+      task: 'implement',
+      registry: new ToolRegistry(),
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+      skills: [makeSkill()],
+    })
+
+    expect(seenSystem).toContain('You are a reviewer.')
+    expect(seenSystem).toContain('[Skill: test-first]')
+    expect(seenSystem).toContain('Write the test before implementation.')
+  })
+
+  it('narrows sub-agent tools using declared skill requirements', async () => {
+    let seenTools: string[] = []
+    const registry = new ToolRegistry()
+    registry.register(makeTaggedTool('CoreTool', ['core']))
+    registry.register(makeTaggedTool('Edit', ['fs.write']))
+    registry.register(makeTaggedTool('Bash', ['exec']))
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenTools = req.tools.map(t => t.name)
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    await dispatchAgent({
+      agent: makeAgent({ skills: ['editor'] }),
+      task: 'implement',
+      registry,
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+      skills: [makeSkill({ name: 'editor', requires: ['fs.write'] })],
+    })
+
+    expect(seenTools.sort()).toEqual(['CoreTool', 'Edit'])
   })
 
   it('appends agent memory prompt to provider system prompt when enabled', async () => {

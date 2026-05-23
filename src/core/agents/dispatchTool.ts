@@ -7,6 +7,7 @@ import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import type { Effort } from '../provider/types'
+import type { Skill } from '../skill/types'
 import type { AgentRegistry } from './registry'
 import { dispatchAgent } from './dispatch'
 import { defineTool } from '../tools/define'
@@ -57,6 +58,8 @@ export function makeDispatchAgentTool(deps: {
    * pre-output-styles behaviour.
    */
   outputStyle?: () => OutputStyle | null
+  /** Skill catalog available to sub-agents for agent.skills preloading. */
+  skills?: Skill[]
   /** Optional final provider/model capability filter before each sub-agent request. */
   resolveEffort?: (
     effort: Effort | undefined,
@@ -150,6 +153,7 @@ export function makeDispatchAgentTool(deps: {
         ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
         ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
         ...(activeStyle ? { outputStyle: activeStyle } : {}),
+        ...(deps.skills ? { skills: deps.skills } : {}),
         ...(deps.resolveEffort ? { resolveEffort: deps.resolveEffort } : {}),
       })
       return { output: result.output, isError: result.isError }

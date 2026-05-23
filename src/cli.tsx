@@ -1159,6 +1159,7 @@ async function runInteractive(): Promise<void> {
       // Output styles: same resolver the main loop uses, so a single
       // `NUKA_OUTPUT_STYLE` setting steers both contexts consistently.
       outputStyle: resolveActiveOutputStyleNow,
+      skills,
       resolveEffort: (effort, providerId, model) => {
         const providerConfig = providers.getProviderConfig(providerId)
         return resolveEffortForModel(effort, providerConfig, model)
@@ -1175,6 +1176,7 @@ async function runInteractive(): Promise<void> {
       hookRegistry,
       worktreeStore: getWorktreeStore(),
       outputStyle: resolveActiveOutputStyleNow,
+      skills,
       resolveEffort: (effort, providerId, model) => {
         const providerConfig = providers.getProviderConfig(providerId)
         return resolveEffortForModel(effort, providerConfig, model)

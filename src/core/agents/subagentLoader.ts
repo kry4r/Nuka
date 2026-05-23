@@ -66,6 +66,8 @@ export interface SubagentDefinition {
   initialPrompt?: string
   /** Optional reasoning effort hint for thinking-capable provider/model pairs. */
   effort?: Effort
+  /** Optional skill names to preload into the sub-agent session. */
+  skills?: string[]
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -106,6 +108,7 @@ const SubagentFileSchema = z
     permissionMode: z.enum(['plan']).optional(),
     initialPrompt: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
+    skills: z.array(z.string().min(1)).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -172,6 +175,7 @@ function assembleDefinition(
   if (parsed.permissionMode !== undefined) def.permissionMode = parsed.permissionMode
   if (parsed.initialPrompt !== undefined) def.initialPrompt = parsed.initialPrompt
   if (parsed.effort !== undefined) def.effort = parsed.effort
+  if (parsed.skills !== undefined) def.skills = parsed.skills
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -237,6 +241,7 @@ function parseMarkdownAgent(content: string): unknown {
     permissionMode: parsed.frontmatter['permissionMode'],
     initialPrompt: parsed.frontmatter['initialPrompt'],
     effort: parsed.frontmatter['effort'],
+    skills: normalizeStringList(parsed.frontmatter['skills']),
   }
 }
 
@@ -257,6 +262,7 @@ export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
     ...(sub.permissionMode !== undefined ? { permissionMode: sub.permissionMode } : {}),
     ...(sub.initialPrompt !== undefined ? { initialPrompt: sub.initialPrompt } : {}),
     ...(sub.effort !== undefined ? { effort: sub.effort } : {}),
+    ...(sub.skills !== undefined ? { skills: sub.skills } : {}),
     ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }
@@ -296,6 +302,21 @@ function normalizeToolList(value: unknown): string[] | undefined {
       if (trimmed.length === 0) continue
       if (trimmed === '*') return undefined
       out.push(trimmed)
+    }
+  }
+  return out
+}
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return []
+  const items = Array.isArray(value) ? value : [value]
+  const out: string[] = []
+  for (const item of items) {
+    if (typeof item !== 'string') continue
+    for (const part of item.split(',')) {
+      const trimmed = part.trim()
+      if (trimmed.length > 0) out.push(trimmed)
     }
   }
   return out

@@ -27,6 +27,7 @@ export const AgentDefSchema = z
     permissionMode: z.enum(['plan']).optional(),
     initialPrompt: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
+    skills: z.array(z.string().min(1)).optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),
