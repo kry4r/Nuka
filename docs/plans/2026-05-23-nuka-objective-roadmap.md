@@ -252,9 +252,10 @@ Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink l
 - [x] Make scroll state discoverable without instructional clutter.
   - Evidence test: `npm test -- test/tui/Messages.static.test.tsx test/tui/app.test.tsx test/ui-auto/humanTuiBaseline.test.ts`
   - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; long conversations now show a concise `history: 5 visible · 29 older` state summary with no PageUp/PgUp instructional text.
-- [ ] Simplify task/subagent panels so in-flight work is legible at a glance.
+- [x] Simplify task/subagent panels so in-flight work is legible at a glance.
   - Progress: narrow mode now uses a concise `Tasks: plan 1 · sub 1 · pipe 1 · bg 1 · msg 1 · focus sub 2/5` summary instead of the dense `[plan(1) sub(1) ...]` tab strip.
+  - Progress: wide mode now uses the same summary plus one digest row per active lane, replacing five simultaneous bordered columns.
   - Evidence test: `npm test -- test/tui/Tasks/TasksPanelNew.test.tsx test/integration/phase14b-monitor.test.tsx test/tui/App.panels.test.tsx test/ui-auto/humanTuiBaseline.test.ts`
-  - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; 70-column main screen/task panel keep the task summary to one readable line and preserve the focused subagent detail.
+  - Evidence captures: refreshed `iter-23-human-tui-baseline` at 120x30 and 70x24; 120-column main screen/task panel show a borderless task digest, while 70-column main screen/task panel keep the summary plus focused subagent detail.
 - [ ] Add harness tests for text overflow, border bleed, cursor placement, and statusline truncation.
 - [ ] Keep `stringWidth` / `truncateByWidth` in every width-sensitive path.

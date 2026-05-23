@@ -245,7 +245,7 @@ const fixture: FixtureDef = {
     },
     'task-panel-desktop': {
       render: () => <TaskBaseline />,
-      mustContain: ['Subagents', 'core:verifier'],
+      mustContain: ['Tasks:', 'sub 1', 'core:verifier'],
     },
     'task-panel-narrow': {
       render: () => <TaskBaseline />,

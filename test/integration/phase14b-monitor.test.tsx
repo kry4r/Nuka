@@ -6,7 +6,7 @@ import { TasksPanelNew } from '../../src/tui/Tasks/TasksPanelNew'
 import { columnReducer, initialColumns } from '../../src/tui/Tasks/columnReducer'
 
 describe('phase14b end-to-end', () => {
-  it('synthetic events → 5-column render', () => {
+  it('synthetic events -> task digest render', () => {
     let s = initialColumns()
     s = columnReducer(s, { topic: 'task', payload: { type: 'task.created', task: { id: 't1', kind: 'in_process_teammate', description: 'd', state: 'running', outputFile: '', spec: {} as never, agentName: 'alice', teamName: 'demo' } as never } })
     s = columnReducer(s, { topic: 'task', payload: { type: 'task.created', task: { id: 't2', kind: 'local_bash', description: 'echo', state: 'completed', outputFile: '', spec: {} as never } as never } })
