@@ -197,4 +197,53 @@ active: { providerId: p2 }
     expect(cfg.providers.map(p => p.name).sort()).toEqual(['Global', 'Project'])
   })
 
+  it('normalizes saved placeholder custom provider ids on load', async () => {
+    const home = tmp()
+    mkdirSync(join(home, '.nuka'))
+    writeFileSync(
+      join(home, '.nuka', 'config.yaml'),
+      `providers:
+  - id: custom-2
+    name: Xiaomi Mimo
+    format: openai
+    baseUrl: https://token-plan-cn.xiaomimimo.com/v1/completions
+    models: [mimo-v2-pro]
+    selectedModel: mimo-v2-pro
+active: { providerId: custom-2 }
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd: tmp() })
+
+    expect(cfg.providers[0]?.id).toBe('xiaomi-mimo')
+    expect(cfg.providers[0]?.name).toBe('Xiaomi Mimo')
+    expect(cfg.active.providerId).toBe('xiaomi-mimo')
+  })
+
+  it('keeps normalized custom provider ids unique when names collide', async () => {
+    const home = tmp()
+    mkdirSync(join(home, '.nuka'))
+    writeFileSync(
+      join(home, '.nuka', 'config.yaml'),
+      `providers:
+  - id: custom
+    name: Gateway
+    format: openai
+    baseUrl: https://gateway-one.example.test/v1
+    models: [m1]
+  - id: custom-2
+    name: Gateway
+    format: openai
+    baseUrl: https://gateway-two.example.test/v1
+    models: [m2]
+active: { providerId: custom-2 }
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd: tmp() })
+
+    expect(cfg.providers.map(p => p.id)).toEqual(['gateway', 'gateway-2'])
+    expect(cfg.active.providerId).toBe('gateway-2')
+  })
+
 })
