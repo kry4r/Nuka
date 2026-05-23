@@ -7,8 +7,11 @@ import type { ProviderResolver } from '../../../src/core/provider/resolver'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import { createSession } from '../../../src/core/session/session'
+import { createHookRegistry } from '../../../src/core/hooks/registry'
+import { createWorktreeStore } from '../../../src/core/worktree/store'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
 import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
+import type { ProviderEvent } from '../../../src/core/provider/types'
 
 function mkAgent(pluginName: string, name: string, description: string): ResolvedAgentDef {
   return {
@@ -27,6 +30,19 @@ function mkProvider(replyText: string): LLMProvider {
     async *stream() {
       yield { type: 'text_delta', text: replyText }
       yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+    },
+    async listRemoteModels() { return [] },
+  } as LLMProvider
+}
+
+function mkScriptProvider(scripts: ProviderEvent[][]): LLMProvider {
+  let i = 0
+  return {
+    id: 'p',
+    format: 'openai',
+    async *stream() {
+      const script = scripts[i++] ?? []
+      for (const ev of script) yield ev
     },
     async listRemoteModels() { return [] },
   } as LLMProvider
@@ -200,5 +216,72 @@ describe('makeSpawnAgentTool', () => {
     expect(result.isError).toBe(true)
     expect(result.output as string).toContain('Sub-agents cannot spawn further sub-agents')
     expect(tasks.specs).toHaveLength(0)
+  })
+
+  it('spawned runner inherits lifecycle hooks and active worktree cwd', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const cwdSeen: string[] = []
+    const registry = new ToolRegistry()
+    registry.register({
+      name: 'PeekCwd',
+      description: 'peek cwd',
+      parameters: { type: 'object', properties: {} },
+      source: 'builtin',
+      needsPermission: () => 'none',
+      run: async (_input, ctx) => {
+        cwdSeen.push(ctx.cwd)
+        return { output: 'cwd-ok', isError: false }
+      },
+    })
+    const provider = mkScriptProvider([
+      [
+        { type: 'tool_use_start', id: 'cwd-1', name: 'PeekCwd' },
+        { type: 'tool_use_stop', id: 'cwd-1', input: {} },
+        { type: 'message_stop', stopReason: 'tool_use', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+      [
+        { type: 'text_delta', text: 'done' },
+        { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } },
+      ],
+    ])
+    const hookRegistry = createHookRegistry()
+    const hookContexts: string[] = []
+    hookRegistry.register('sessionStart', (hookCtx) => {
+      const payload = hookCtx.payload as { context?: string; cwd?: string }
+      hookContexts.push(`${payload.context}:${payload.cwd}`)
+    })
+    const worktreeStore = createWorktreeStore()
+    const active = worktreeStore.add({
+      path: '/tmp/nuka-spawn-worktree',
+      originalCwd: process.cwd(),
+    })
+    worktreeStore.setActive(active.id)
+    const cache = new PermissionCache()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry,
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => cache, async () => ({ allowed: true })),
+      taskManager: tasks,
+      hookRegistry,
+      worktreeStore,
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      { agent: 'core:reviewer', task: 'check cwd' },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(false)
+    const chunks: string[] = []
+    for await (const chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {
+      chunks.push(chunk.text)
+    }
+    expect(chunks.join('')).toContain('done')
+    expect(hookContexts).toEqual(['subagent:/tmp/nuka-spawn-worktree'])
+    expect(cwdSeen).toEqual(['/tmp/nuka-spawn-worktree'])
   })
 })

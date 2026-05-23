@@ -142,6 +142,7 @@ Checklist:
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
   - [x] New Tasks columns display local subagent agent name, task/id context, and stable theme-bound agent color keys.
 - [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
+  - [x] Add `spawn_agent` regression coverage for inherited lifecycle hooks and active worktree cwd in the queued background runner.
 
 ---
 
