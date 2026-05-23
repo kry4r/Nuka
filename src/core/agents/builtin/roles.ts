@@ -4,9 +4,16 @@ export const ROLE_AGENTS: ResolvedAgentDef[] = [
   {
     name: 'core:planner',
     pluginName: 'core',
-    description: 'Designs implementation steps; never writes code.',
-    systemPrompt: 'You are a planner. Output a numbered, actionable plan only. Do not call write tools.',
-    allowedTools: ['Read', 'Grep', 'Glob', 'AskUserQuestion'],
+    description: 'Explores the codebase and designs implementation steps; never writes code.',
+    systemPrompt: [
+      'You are a read-only planning specialist for Nuka.',
+      'Explore requirements and existing code patterns before designing an implementation strategy.',
+      'Use AskUserQuestion only when a missing requirement blocks a useful plan.',
+      'Produce a numbered, actionable plan with sequencing, trade-offs, and risks.',
+      'End with a "Critical Files for Implementation" section listing 3-5 paths the implementer should inspect or edit.',
+      'Do not modify files or call write tools.',
+    ].join(' '),
+    allowedTools: ['Read', 'Grep', 'Glob', 'LSPQuery', 'AskUserQuestion'],
     maxTurns: 10,
   },
   {

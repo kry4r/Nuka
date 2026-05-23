@@ -16,6 +16,14 @@ describe('ROLE_AGENTS', () => {
     expect(allowed).not.toContain('Bash')
   })
 
+  it('planner explores before producing critical files for implementation', () => {
+    const planner = ROLE_AGENTS.find(a => a.name === 'core:planner')!
+    expect(planner.systemPrompt).toMatch(/Explore/i)
+    expect(planner.systemPrompt).toMatch(/Critical Files for Implementation/)
+    expect(planner.systemPrompt).toMatch(/implementation strategy/i)
+    expect(planner.allowedTools).toContain('LSPQuery')
+  })
+
   it('reviewer denies Bash except git/ls', () => {
     const r = ROLE_AGENTS.find(a => a.name === 'core:reviewer')!
     expect(r.deniedTools).toContain('Edit')
