@@ -140,6 +140,7 @@ Checklist:
   - [x] Upgrade `core:planner` toward Nuka-Code Plan behavior: explore first, produce an implementation strategy, and list critical files.
   - [x] Add Nuka-Code-style general-purpose agent as `core:general`.
 - [ ] Add agent display/color metadata to `src/tui/Tasks/*` without making the statusline noisy.
+  - [x] New Tasks columns display local subagent agent name, task/id context, and stable theme-bound agent color keys.
 - [ ] Add regression tests for recursive-dispatch prevention, lifecycle hooks, tool filtering, cwd/worktree inheritance, and cancellation.
 
 ---

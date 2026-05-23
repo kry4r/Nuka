@@ -8,6 +8,9 @@ export type Row = {
   primary: string
   secondary: string
   status: string
+  agentName?: string
+  agentId?: string
+  colorKey?: string
   tokens?: { in: number; out: number }
   startedAt?: number
 }
@@ -50,17 +53,48 @@ function removeRow(state: ColumnsState, col: ColumnKind, id: string): ColumnsSta
   return { ...state, [col]: next }
 }
 
+function rowFromTask(task: Task): Row {
+  if (task.kind === 'local_agent') {
+    const agentName = task.agentName ?? (task.spec.kind === 'local_agent' ? task.spec.agentName : undefined)
+    const agentId = task.agentId ?? (task.spec.kind === 'local_agent' ? task.spec.agentId : undefined)
+    const detail = [task.description, agentId].filter(Boolean).join(' · ')
+    return {
+      id: task.id,
+      primary: agentName ?? task.description,
+      secondary: detail || task.kind,
+      status: task.state,
+      ...(agentName ? { agentName } : {}),
+      ...(agentId ? { agentId } : {}),
+      ...(agentName ? { colorKey: agentColorKey(agentName) } : {}),
+      startedAt: task.startedAt,
+    }
+  }
+
+  return {
+    id: task.id,
+    primary: task.agentName ?? task.description,
+    secondary: task.teamName ?? task.agentId ?? task.kind,
+    status: task.state,
+    ...(task.agentName ? { agentName: task.agentName } : {}),
+    ...(task.agentId ? { agentId: task.agentId } : {}),
+    ...(task.agentName ? { colorKey: agentColorKey(task.agentName) } : {}),
+    startedAt: task.startedAt,
+  }
+}
+
+function agentColorKey(agentName: string): string {
+  let hash = 0
+  for (let i = 0; i < agentName.length; i++) {
+    hash = ((hash * 31) + agentName.charCodeAt(i)) >>> 0
+  }
+  return `agent-${hash % 6}`
+}
+
 export function columnReducer(state: ColumnsState, rec: { topic: string; payload: any }): ColumnsState {
   const p = rec.payload
   if (rec.topic === 'task' && p.type === 'task.created') {
     const col = classify(p.task.kind)
-    return addRow(state, col, {
-      id: p.task.id,
-      primary: p.task.agentName ?? p.task.description,
-      secondary: p.task.teamName ?? p.task.agentId ?? p.task.kind,
-      status: p.task.state,
-      startedAt: p.task.startedAt,
-    })
+    return addRow(state, col, rowFromTask(p.task))
   }
   if (rec.topic === 'task' && p.type === 'task.state') {
     for (const col of ['subagent', 'background', 'pipeline'] as ColumnKind[]) {

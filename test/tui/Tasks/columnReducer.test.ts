@@ -10,7 +10,7 @@ describe('columnReducer', () => {
     expect(s1.subagent.rows[0]!.id).toBe('t1')
   })
 
-  it('task.created adds local_agent rows to subagent column with agent id context', () => {
+  it('task.created adds local_agent rows to subagent column with agent display context', () => {
     const s0 = initialColumns()
     const s1 = columnReducer(s0, {
       topic: 'task',
@@ -23,14 +23,18 @@ describe('columnReducer', () => {
           state: 'running',
           outputFile: '',
           agentId: 'agent-1234abcd',
+          agentName: 'core:verifier',
           spec: {} as never,
         } as never,
       },
     })
     expect(s1.subagent.rows.length).toBe(1)
     expect(s1.background.rows.length).toBe(0)
-    expect(s1.subagent.rows[0]!.primary).toBe('review code')
-    expect(s1.subagent.rows[0]!.secondary).toBe('agent-1234abcd')
+    expect(s1.subagent.rows[0]!.primary).toBe('core:verifier')
+    expect(s1.subagent.rows[0]!.secondary).toBe('review code · agent-1234abcd')
+    expect(s1.subagent.rows[0]!.agentName).toBe('core:verifier')
+    expect(s1.subagent.rows[0]!.agentId).toBe('agent-1234abcd')
+    expect(s1.subagent.rows[0]!.colorKey).toMatch(/^agent-/)
   })
 
   it('task.state updates row status', () => {

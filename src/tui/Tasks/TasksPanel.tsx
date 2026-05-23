@@ -116,13 +116,14 @@ export function TasksPanel({
 }: TasksPanelProps): React.JSX.Element | null {
   const theme = useTheme()
   const { columns } = useTerminalSize()
+  const effectiveColumns = Math.min(columns, process.stdout.columns ?? columns)
   const planItems = todoStore.items
   const subagents = findInFlightSubagents(messages)
   const bgTasks = tasks
 
   // Outer box width: pin to terminal columns minus a small chrome budget
   // (border+padding+1-col safety) so flexShrink children have a bound.
-  const boxWidth = Math.max(20, columns - 4)
+  const boxWidth = Math.max(20, effectiveColumns - 4)
   // Inside the bordered Box: border (2) + paddingX (2) = 4 cols of chrome.
   // Each row also reserves an icon (1) + gap (1) before the text Box.
   // Per-row text width budget = boxWidth - 4 (chrome) - 2 (icon+gap).
