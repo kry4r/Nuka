@@ -154,7 +154,9 @@ Checklist:
 - [x] Keep legacy text-summary compact as a fallback for providers without native compact.
   - Primary file: `src/core/compact/compact.ts`
   - Acceptance: providers without `compact()` still stream the old `[[compact-summary]]` assistant summary and preserve the configured recent turns.
-- [ ] Compare Nuka-Code API-round grouping to Nuka's current pure `maybeAutoCompact` partitioning.
+- [x] Compare Nuka-Code API-round grouping to Nuka's current pure `maybeAutoCompact` partitioning.
+  - Primary files: `src/core/agent/autoCompact.ts`, `test/core/agent/autoCompact.test.ts`
+  - Finding: raw-message tail preservation can cut too aggressively inside a single user prompt with multiple assistant API responses; Nuka now supports opt-in `preserveRecentApiRounds` so recent assistant/tool-result rounds stay together while the existing default message-count behavior remains unchanged.
 - [ ] Decide whether Nuka should add microcompact as a separate pre-provider pass or fold it into the existing session-aware wrapper.
 - [ ] Add warning-state UX before context pressure becomes a hard failure.
 - [ ] Add post-compact cleanup so stale tool-result-heavy context does not leak back into prompts.

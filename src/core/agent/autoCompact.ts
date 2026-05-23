@@ -76,6 +76,11 @@ export interface AutoCompactConfig {
    */
   preserveRecent?: number
   /**
+   * Optional API-round based preservation window. When set, the tail is the
+   * last N assistant-response groups instead of the last N raw messages.
+   */
+  preserveRecentApiRounds?: number
+  /**
    * Pluggable summarizer for the dropped middle segment. Receives the
    * messages that are about to be folded and returns the text of a single
    * synthetic summary message inserted in their place. If omitted, a
@@ -203,7 +208,11 @@ export async function maybeAutoCompact(
 
   // Step 3 — partition into [system | middle | tail].
   const preserveRecent = Math.max(0, config.preserveRecent ?? DEFAULT_PRESERVE_RECENT)
-  const partition = partitionForCompaction(messages, preserveRecent)
+  const partition = partitionForCompaction(
+    messages,
+    preserveRecent,
+    config.preserveRecentApiRounds,
+  )
 
   // Step 4 — nothing to fold? Bail honestly.
   if (partition.middle.length === 0) {
@@ -279,6 +288,7 @@ export interface AutoCompactSessionAwareOpts {
   contextWindow: number
   targetTokens?: number
   preserveRecent?: number
+  preserveRecentApiRounds?: number
   summarize?: (messages: Message[]) => Promise<string>
 }
 
@@ -331,6 +341,9 @@ export async function compactSessionAware(
     sessionId: session.id,
   }
   if (opts.preserveRecent !== undefined) config.preserveRecent = opts.preserveRecent
+  if (opts.preserveRecentApiRounds !== undefined) {
+    config.preserveRecentApiRounds = opts.preserveRecentApiRounds
+  }
   if (opts.summarize) config.summarize = opts.summarize
 
   const result = await maybeAutoCompact(session.messages, config, deps)
@@ -377,6 +390,7 @@ type CompactionPartition = {
 function partitionForCompaction(
   messages: readonly Message[],
   preserveRecent: number,
+  preserveRecentApiRounds?: number,
 ): CompactionPartition {
   const systems: Message[] = []
   const nonSystem: Message[] = []
@@ -384,13 +398,58 @@ function partitionForCompaction(
     if (m.role === 'system') systems.push(m)
     else nonSystem.push(m)
   }
+  const initialCut =
+    preserveRecentApiRounds === undefined
+      ? Math.max(0, nonSystem.length - preserveRecent)
+      : cutForRecentApiRounds(nonSystem, preserveRecentApiRounds)
   const cut = adjustCutForToolPairs(
     nonSystem,
-    Math.max(0, nonSystem.length - preserveRecent),
+    initialCut,
   )
   const middle = nonSystem.slice(0, cut)
   const tail = nonSystem.slice(cut)
   return { systems, middle, tail }
+}
+
+export function groupMessagesByApiRound(messages: readonly Message[]): Message[][] {
+  const groups: Message[][] = []
+  let current: Message[] = []
+  let lastAssistantId: string | undefined
+
+  for (const message of messages) {
+    if (
+      message.role === 'assistant' &&
+      message.id !== lastAssistantId &&
+      current.length > 0
+    ) {
+      groups.push(current)
+      current = []
+    }
+
+    current.push(message)
+    if (message.role === 'assistant') {
+      lastAssistantId = message.id
+    }
+  }
+
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
+function cutForRecentApiRounds(
+  messages: readonly Message[],
+  preserveRecentApiRounds: number,
+): number {
+  const roundsToKeep = Math.max(0, preserveRecentApiRounds)
+  if (roundsToKeep === 0) return messages.length
+
+  const groups = groupMessagesByApiRound(messages)
+  const keepFromGroup = Math.max(0, groups.length - roundsToKeep)
+  let cut = 0
+  for (let i = 0; i < keepFromGroup; i++) {
+    cut += groups[i]?.length ?? 0
+  }
+  return cut
 }
 
 function adjustCutForToolPairs(messages: readonly Message[], initialCut: number): number {

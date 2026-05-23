@@ -222,6 +222,31 @@ describe('maybeAutoCompact — preserveRecent', () => {
     expect(result.compacted).toBe(false)
     expect(result.reason).toBe('nothing-to-compact')
   })
+
+  it('can preserve recent API rounds instead of only counting recent messages', async () => {
+    const messages: Message[] = [
+      user('old request-' + 'x'.repeat(400)),
+      assistant('old answer-' + 'y'.repeat(400)),
+      user('do multi-step work-' + 'z'.repeat(400)),
+      assistantToolUse('call_1'),
+      tool('first result-' + 'a'.repeat(400), 'call_1'),
+      assistant('intermediate answer-' + 'b'.repeat(400)),
+      assistantToolUse('call_2'),
+      tool('second result-' + 'c'.repeat(400), 'call_2'),
+      assistant('final answer'),
+    ]
+    const config = {
+      triggerTokens: 100,
+      targetTokens: 50_000,
+      preserveRecent: 1,
+      preserveRecentApiRounds: 2,
+    }
+
+    const result = await maybeAutoCompact(messages, config)
+
+    expect(result.compacted).toBe(true)
+    expect(result.messages.slice(-3)).toEqual(messages.slice(6))
+  })
 })
 
 describe('maybeAutoCompact — system messages', () => {
