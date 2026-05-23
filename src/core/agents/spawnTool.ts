@@ -20,6 +20,7 @@ import {
 } from '../worktree/git'
 import { normalizeWorktreeName } from '../worktree/tools'
 import type { OutputStyle } from '../outputStyles/types'
+import type { Effort } from '../provider/types'
 import type { Message } from '../message/types'
 import type { LocalAgentSpec, Task } from '../tasks/types'
 import type { AgentRegistry } from './registry'
@@ -50,6 +51,12 @@ export function makeSpawnAgentTool(deps: {
   worktreeStore?: WorktreeStore
   gitRunner?: GitRunner
   outputStyle?: () => OutputStyle | null
+  /** Optional final provider/model capability filter before each sub-agent request. */
+  resolveEffort?: (
+    effort: Effort | undefined,
+    providerId: string,
+    model: string,
+  ) => Effort | undefined
 }): Tool<SpawnAgentInput> {
   const listed = deps.agents.list()
   const summary = listed.length === 0
@@ -171,6 +178,7 @@ export function makeSpawnAgentTool(deps: {
             ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
             ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
             ...(activeStyle ? { outputStyle: activeStyle } : {}),
+            ...(deps.resolveEffort ? { resolveEffort: deps.resolveEffort } : {}),
           })
           yield { text: stringifyOutput(result.output) }
         },

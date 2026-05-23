@@ -270,6 +270,32 @@ describe('dispatchAgent', () => {
     )
   })
 
+  it('forwards agent effort to the provider request', async () => {
+    let seenEffort: unknown
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenEffort = req.effort
+        yield { type: 'text_delta', text: 'ok' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+
+    await dispatchAgent({
+      agent: makeAgent({ effort: 'high' }),
+      task: 'think hard',
+      registry: new ToolRegistry(),
+      providerResolver: makeResolver(provider),
+      permission,
+      signal: new AbortController().signal,
+      parentSession: { providerId: 'p', model: 'm' },
+    })
+
+    expect(seenEffort).toBe('high')
+  })
+
   it('appends agent memory prompt to provider system prompt when enabled', async () => {
     let seenSystem = ''
     const provider: LLMProvider = {

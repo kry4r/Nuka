@@ -234,6 +234,26 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.initialPrompt).toBe('Always inspect AGENTS.md before changing files.')
   })
 
+  it('loads Nuka-Code effort frontmatter', async () => {
+    const filePath = join(dir, 'thinker.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: thinker',
+        'description: reasons deeply when dispatched',
+        'effort: high',
+        '---',
+        '',
+        'You reason carefully.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.effort).toBe('high')
+  })
+
   it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
     const filePath = join(dir, 'foreground.md')
     await writeFile(
@@ -446,6 +466,16 @@ describe('loadSubagentFile — invalid shape', () => {
     await expect(loadSubagentFile(fp)).rejects.toThrow(/permissionMode/)
   })
 
+  it('throws when effort is invalid', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      effort: 'max',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/effort/)
+  })
+
   it('throws on unknown/extra field (strict schema)', async () => {
     const fp = await writeJson('bad.json', {
       name: 'x',
@@ -651,6 +681,7 @@ describe('subagentToAgentDef', () => {
       background: true,
       permissionMode: 'plan',
       initialPrompt: 'Read AGENTS.md first.',
+      effort: 'high',
       keywords: ['implement'],
       sourcePath: '/tmp/worker.md',
     })
@@ -670,6 +701,7 @@ describe('subagentToAgentDef', () => {
       background: true,
       permissionMode: 'plan',
       initialPrompt: 'Read AGENTS.md first.',
+      effort: 'high',
       keywords: ['implement'],
     })
   })

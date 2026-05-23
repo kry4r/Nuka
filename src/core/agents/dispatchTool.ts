@@ -6,6 +6,7 @@ import type { PermissionChecker } from '../permission/checker'
 import type { HookRegistry } from '../hooks/registry'
 import type { WorktreeStore } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
+import type { Effort } from '../provider/types'
 import type { AgentRegistry } from './registry'
 import { dispatchAgent } from './dispatch'
 import { defineTool } from '../tools/define'
@@ -56,6 +57,12 @@ export function makeDispatchAgentTool(deps: {
    * pre-output-styles behaviour.
    */
   outputStyle?: () => OutputStyle | null
+  /** Optional final provider/model capability filter before each sub-agent request. */
+  resolveEffort?: (
+    effort: Effort | undefined,
+    providerId: string,
+    model: string,
+  ) => Effort | undefined
 }): Tool<DispatchAgentInput> {
   const listed = deps.agents.list()
   const summary = listed.length === 0
@@ -143,6 +150,7 @@ export function makeDispatchAgentTool(deps: {
         ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
         ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
         ...(activeStyle ? { outputStyle: activeStyle } : {}),
+        ...(deps.resolveEffort ? { resolveEffort: deps.resolveEffort } : {}),
       })
       return { output: result.output, isError: result.isError }
     },

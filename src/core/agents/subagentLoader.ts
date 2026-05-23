@@ -24,6 +24,7 @@ import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { addAgentMemoryTools, type AgentMemoryScope } from './agentMemory'
 import type { AgentDef } from './types'
+import type { Effort } from '../provider/types'
 
 /**
  * Public subagent shape after parsing. Maps onto Nuka's internal
@@ -63,6 +64,8 @@ export interface SubagentDefinition {
   permissionMode?: 'plan'
   /** Optional prompt prepended to the first user turn, matching Nuka-Code agents. */
   initialPrompt?: string
+  /** Optional reasoning effort hint for thinking-capable provider/model pairs. */
+  effort?: Effort
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -102,6 +105,7 @@ const SubagentFileSchema = z
     background: z.boolean().optional(),
     permissionMode: z.enum(['plan']).optional(),
     initialPrompt: z.string().min(1).optional(),
+    effort: z.enum(['low', 'medium', 'high']).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -167,6 +171,7 @@ function assembleDefinition(
   if (parsed.background !== undefined) def.background = parsed.background
   if (parsed.permissionMode !== undefined) def.permissionMode = parsed.permissionMode
   if (parsed.initialPrompt !== undefined) def.initialPrompt = parsed.initialPrompt
+  if (parsed.effort !== undefined) def.effort = parsed.effort
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -231,6 +236,7 @@ function parseMarkdownAgent(content: string): unknown {
     background: normalizeFrontmatterBoolean(parsed.frontmatter['background']),
     permissionMode: parsed.frontmatter['permissionMode'],
     initialPrompt: parsed.frontmatter['initialPrompt'],
+    effort: parsed.frontmatter['effort'],
   }
 }
 
@@ -250,6 +256,7 @@ export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
     ...(sub.background !== undefined ? { background: sub.background } : {}),
     ...(sub.permissionMode !== undefined ? { permissionMode: sub.permissionMode } : {}),
     ...(sub.initialPrompt !== undefined ? { initialPrompt: sub.initialPrompt } : {}),
+    ...(sub.effort !== undefined ? { effort: sub.effort } : {}),
     ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }

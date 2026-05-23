@@ -32,6 +32,7 @@ import { resolveToolCwd } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import { applyOutputStyle } from '../outputStyles/resolve'
 import { loadAgentMemoryPrompt, type AgentMemoryDeps } from './agentMemory'
+import type { Effort } from '../provider/types'
 
 export type DispatchAgentOpts = {
   agent: ResolvedAgentDef
@@ -100,6 +101,12 @@ export type DispatchAgentOpts = {
    * loader from `agentMemory.ts`.
    */
   agentMemory?: AgentMemoryDeps
+  /** Optional final provider/model capability filter before each sub-agent request. */
+  resolveEffort?: (
+    effort: Effort | undefined,
+    providerId: string,
+    model: string,
+  ) => Effort | undefined
 }
 
 export type DispatchAgentResult = {
@@ -137,6 +144,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     cwd,
     outputStyle,
     agentMemory,
+    resolveEffort,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
   const cwdState = createDispatchCwdState(worktreeStore, cwd)
@@ -254,6 +262,9 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
         description: t.description,
         parameters: t.parameters,
       }))
+      const effort = resolveEffort
+        ? resolveEffort(agent.effort, providerId, resolvedModel)
+        : agent.effort
 
       const stream = provider.stream(
         {
@@ -263,6 +274,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
           tools: toolSpecs,
           ...(agent.maxTokens !== undefined ? { maxTokens: agent.maxTokens } : {}),
           ...(agent.temperature !== undefined ? { temperature: agent.temperature } : {}),
+          ...(effort !== undefined ? { effort } : {}),
         },
         signal,
       )

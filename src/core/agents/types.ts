@@ -1,5 +1,6 @@
 // src/core/agents/types.ts
 import { z } from 'zod'
+import type { Effort } from '../provider/types'
 
 /**
  * Manifest-declared agent definition.
@@ -25,6 +26,7 @@ export const AgentDefSchema = z
     background: z.boolean().optional(),
     permissionMode: z.enum(['plan']).optional(),
     initialPrompt: z.string().min(1).optional(),
+    effort: z.enum(['low', 'medium', 'high']).optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),
@@ -43,4 +45,5 @@ export type AgentDef = z.infer<typeof AgentDefSchema>
 export type ResolvedAgentDef = Omit<AgentDef, 'systemPromptPath'> & {
   systemPrompt: string
   pluginName: string
+  effort?: Effort
 }
