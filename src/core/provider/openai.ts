@@ -409,7 +409,10 @@ function normalizeFinish(r: string | null): StopReason {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, '')
+  return baseUrl
+    .replace(/\/+$/, '')
+    .replace(/\/(?:chat\/)?completions$/i, '')
+    .replace(/\/responses(?:\/compact)?$/i, '')
 }
 
 function responsesEndpoints(baseUrl: string): string[] {

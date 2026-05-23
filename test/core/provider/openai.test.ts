@@ -267,6 +267,37 @@ describe('OpenAIProvider.translate', () => {
     ])
   })
 
+  it('normalizes legacy completions baseUrls to the Responses endpoint', async () => {
+    const urls: string[] = []
+    const fetchFn: typeof fetch = async (url) => {
+      urls.push(String(url))
+      return new Response('data: [DONE]\n\n', { status: 200 })
+    }
+    const provider = new OpenAIProvider({
+      id: 'xiaomi-mimo',
+      apiKey: 'sk-test',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1/completions',
+      fetchFn,
+    })
+
+    const out: ProviderEvent[] = []
+    for await (const ev of provider.stream({
+      model: 'mimo-v2-pro',
+      system: '',
+      messages: [],
+      tools: [],
+    }, new AbortController().signal)) {
+      out.push(ev)
+    }
+
+    expect(urls).toEqual(['https://token-plan-cn.xiaomimimo.com/v1/responses'])
+    expect(out.at(-1)).toEqual({
+      type: 'message_stop',
+      stopReason: 'end_turn',
+      usage: { inputTokens: 0, outputTokens: 0 },
+    })
+  })
+
   it('posts custom OpenAI-compatible compaction to /responses/compact and returns raw output items', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = []
     const compactOutput = [
@@ -345,6 +376,32 @@ describe('OpenAIProvider.translate', () => {
       'https://ai.example.test/responses/compact',
       'https://ai.example.test/v1/responses/compact',
     ])
+    expect(result.output).toEqual([{ type: 'compaction', encrypted_content: 'encrypted' }])
+  })
+
+  it('normalizes legacy chat completions baseUrls to the Responses compact endpoint', async () => {
+    const urls: string[] = []
+    const fetchFn: typeof fetch = async (url) => {
+      urls.push(String(url))
+      return new Response(JSON.stringify({
+        output: [{ type: 'compaction', encrypted_content: 'encrypted' }],
+      }), { status: 200 })
+    }
+    const provider = new OpenAIProvider({
+      id: 'xiaomi-mimo',
+      apiKey: 'sk-test',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions',
+      fetchFn,
+    })
+
+    const result = await provider.compact({
+      model: 'mimo-v2-pro',
+      system: '',
+      messages: [],
+      tools: [],
+    }, new AbortController().signal)
+
+    expect(urls).toEqual(['https://token-plan-cn.xiaomimimo.com/v1/responses/compact'])
     expect(result.output).toEqual([{ type: 'compaction', encrypted_content: 'encrypted' }])
   })
 

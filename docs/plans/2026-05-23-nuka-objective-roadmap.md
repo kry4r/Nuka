@@ -21,6 +21,10 @@
   - Primary files: `src/core/provider/openai.ts`, `test/core/provider/openai.test.ts`
   - Acceptance: custom base ending in `/v1` posts to `/v1/responses`; custom base without `/v1` falls back from `/responses` to `/v1/responses` on 404; Responses text/tool-call streams translate into Nuka provider events.
 
+- [x] Normalize legacy OpenAI-compatible base URLs that already include completions paths.
+  - Primary files: `src/core/provider/openai.ts`, `test/core/provider/openai.test.ts`
+  - Acceptance: custom providers configured with `.../v1/completions` or `.../v1/chat/completions` still post stream requests to `.../v1/responses` and native compact requests to `.../v1/responses/compact`.
+
 - [x] Scrollback recognizes raw terminal PageUp/PageDown/Home/End escape sequences.
   - Primary files: `src/tui/App.tsx`, `src/tui/PromptInput/PromptInput.tsx`, `test/tui/app.test.tsx`
   - Acceptance: PageUp scrolls older messages and the raw `[5~` bytes are not inserted into the prompt.
