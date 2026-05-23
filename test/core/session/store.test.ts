@@ -41,6 +41,14 @@ describe('SessionStore', () => {
     const session = createSession({ providerId: 'prov1', model: 'gpt-4' })
     session.messages.push(makeMsg('hi'))
     session.totalUsage = { inputTokens: 10, outputTokens: 5 }
+    session.goal = {
+      objective: 'finish provider fixes',
+      status: 'active',
+      createdAt: 111,
+      updatedAt: 222,
+      tokenBudget: 5000,
+      tokenUsage: 1200,
+    }
 
     await store.writeMeta(session)
     const meta = await store.readMeta(session.id)
@@ -54,6 +62,7 @@ describe('SessionStore', () => {
     expect(meta!.mode).toBe('normal')
     expect(meta!.createdAt).toBe(session.createdAt)
     expect(meta!.updatedAt).toBe(session.updatedAt)
+    expect(meta!.goal).toEqual(session.goal)
   })
 
   it('readMeta returns null if file does not exist', async () => {

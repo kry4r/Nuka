@@ -8,6 +8,7 @@ export type {
   HistoryListEntry,
   HistoryRecord,
 } from './types'
+export type { SessionGoal, SessionGoalStatus } from '../types'
 export type {
   ThreadReadOptions,
   ThreadListOptions,

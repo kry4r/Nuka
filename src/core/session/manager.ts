@@ -1,10 +1,18 @@
 // src/core/session/manager.ts
-import type { Session } from './types'
+import type { Session, SessionGoal } from './types'
 import type { Message } from '../message/types'
 import { createSession, forkSession } from './session'
 import type { SessionStore, DebouncedMetaWriter, SessionMeta } from './store'
 import { PermissionCache } from '../permission/cache'
 import { MessageQueue } from './queue'
+
+export type SessionGoalInput = {
+  objective: string
+  status?: SessionGoal['status']
+  tokenBudget?: number
+  tokenUsage?: number
+  blockedReason?: string
+}
 
 export class SessionManager {
   private sessions: Session[] = []
@@ -60,6 +68,7 @@ export class SessionManager {
     forked.messages = JSON.parse(JSON.stringify(messages)) as Message[]
     forked.totalUsage = { ...meta.totalUsage }
     forked.mode = meta.mode
+    forked.goal = meta.goal ? { ...meta.goal } : undefined
     forked.updatedAt = Date.now()
     this.sessions.push(forked)
     this.activeId = forked.id
@@ -135,6 +144,7 @@ export class SessionManager {
       permissionCache: new PermissionCache(),
       queue: new MessageQueue(),
       mode: meta.mode,
+      goal: meta.goal ? { ...meta.goal } : undefined,
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
       unDeferredToolNames: new Set(),
@@ -147,6 +157,43 @@ export class SessionManager {
   async listPersisted(): Promise<SessionMeta[]> {
     if (!this.store) return []
     return this.store.list()
+  }
+
+  setGoal(sessionId: string, input: SessionGoalInput): SessionGoal {
+    const session = this.sessions.find(s => s.id === sessionId)
+    if (!session) throw new Error(`unknown session: ${sessionId}`)
+    const previous = session.goal
+    const now = Date.now()
+    const goal: SessionGoal = {
+      objective: input.objective,
+      status: input.status ?? previous?.status ?? 'active',
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      tokenBudget: input.tokenBudget ?? previous?.tokenBudget,
+      tokenUsage: input.tokenUsage ?? previous?.tokenUsage,
+      blockedReason: input.blockedReason ?? previous?.blockedReason,
+    }
+    session.goal = goal
+    session.updatedAt = now
+    this.metaWriter?.schedule(session)
+    return { ...goal }
+  }
+
+  getGoal(sessionId: string): SessionGoal | null {
+    const session = this.sessions.find(s => s.id === sessionId)
+    if (!session) throw new Error(`unknown session: ${sessionId}`)
+    return session.goal ? { ...session.goal } : null
+  }
+
+  clearGoal(sessionId: string): SessionGoal | null {
+    const session = this.sessions.find(s => s.id === sessionId)
+    if (!session) throw new Error(`unknown session: ${sessionId}`)
+    const goal = session.goal ? { ...session.goal } : null
+    if (!session.goal) return null
+    session.goal = undefined
+    session.updatedAt = Date.now()
+    this.metaWriter?.schedule(session)
+    return goal
   }
 
   async delete(id: string): Promise<void> {

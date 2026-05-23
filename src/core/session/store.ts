@@ -1,7 +1,7 @@
 // src/core/session/store.ts
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { Session } from './types'
+import type { Session, SessionGoal } from './types'
 import type { Message } from '../message/types'
 
 export type SessionMeta = {
@@ -12,6 +12,7 @@ export type SessionMeta = {
   messageCount: number
   totalUsage: { inputTokens: number; outputTokens: number }
   mode: Session['mode']
+  goal?: SessionGoal
   createdAt: number
   updatedAt: number
 }
@@ -72,6 +73,7 @@ export class SessionStore {
         outputTokens: session.totalUsage.outputTokens,
       },
       mode: session.mode,
+      goal: session.goal ? { ...session.goal } : undefined,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     }

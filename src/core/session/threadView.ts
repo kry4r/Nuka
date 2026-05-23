@@ -1,5 +1,5 @@
 import type { Message, TokenUsage } from '../message/types'
-import type { SessionMode } from './types'
+import type { SessionGoal, SessionMode } from './types'
 import type { SessionStore } from './store'
 
 export type ThreadStatus = 'notLoaded' | 'active'
@@ -21,6 +21,7 @@ export type ThreadView = {
   messageCount: number
   totalUsage: TokenUsage
   mode: SessionMode
+  goal?: SessionGoal
   status: ThreadStatus
   createdAt: number
   updatedAt: number
@@ -97,6 +98,7 @@ export class ThreadViewStore {
       messageCount: meta.messageCount,
       totalUsage: { ...meta.totalUsage },
       mode: meta.mode,
+      goal: meta.goal ? { ...meta.goal } : undefined,
       status: 'notLoaded',
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
@@ -120,6 +122,7 @@ export class ThreadViewStore {
         messageCount: meta.messageCount,
         totalUsage: { ...meta.totalUsage },
         mode: meta.mode,
+        goal: meta.goal ? { ...meta.goal } : undefined,
         status: 'notLoaded',
         createdAt: meta.createdAt,
         updatedAt: meta.updatedAt,

@@ -67,6 +67,26 @@ describe('ThreadViewStore.read', () => {
       user('u1', 'first prompt', 1),
       assistant('a1', 'first answer', 2),
     ])
+    const meta = await store.readMeta(id)
+    await store.writeMeta({
+      ...createSession({ providerId: meta!.providerId, model: meta!.model }),
+      id,
+      messages: [
+        user('u1', 'first prompt', 1),
+        assistant('a1', 'first answer', 2),
+      ],
+      totalUsage: meta!.totalUsage,
+      mode: meta!.mode,
+      createdAt: meta!.createdAt,
+      updatedAt: meta!.updatedAt,
+      unDeferredToolNames: new Set(),
+      goal: {
+        objective: 'keep goal visible',
+        status: 'active',
+        createdAt: 10,
+        updatedAt: 20,
+      },
+    })
 
     const thread = await threads.read(id)
 
@@ -77,6 +97,10 @@ describe('ThreadViewStore.read', () => {
       messageCount: 2,
       status: 'notLoaded',
       turns: [],
+    })
+    expect(thread?.goal).toMatchObject({
+      objective: 'keep goal visible',
+      status: 'active',
     })
   })
 

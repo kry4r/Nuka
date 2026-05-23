@@ -5,6 +5,24 @@ import type { MessageQueue } from './queue'
 
 export type SessionMode = 'normal' | 'plan' | 'bypass'
 
+export type SessionGoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'complete'
+
+export type SessionGoal = {
+  objective: string
+  status: SessionGoalStatus
+  createdAt: number
+  updatedAt: number
+  tokenBudget?: number
+  tokenUsage?: number
+  blockedReason?: string
+}
+
 export type Session = {
   id: string
   parentId?: string
@@ -17,6 +35,7 @@ export type Session = {
   mode: SessionMode
   createdAt: number
   updatedAt: number
+  goal?: SessionGoal
   /**
    * Tool names that have been un-deferred (via searchHint match or explicit
    * un-defer). Once in this set, the tool stays loaded for the session.

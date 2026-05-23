@@ -98,6 +98,11 @@ describe('SessionManager resume + listPersisted', () => {
     const meta1 = new DebouncedMetaWriter(store1, 0)
     const m1 = new SessionManager({ store: store1, metaWriter: meta1 })
     const s = m1.start({ providerId: 'p', model: 'gpt-x' })
+    const goal = m1.setGoal(s.id, {
+      objective: 'ship a goal store',
+      tokenBudget: 20000,
+      tokenUsage: 750,
+    })
     const msg: Message = { role: 'user', id: 'u1', ts: Date.now(), content: [{ type: 'text', text: 'hello' }] }
     m1.persist(s, msg)
     await meta1.flush()
@@ -109,6 +114,7 @@ describe('SessionManager resume + listPersisted', () => {
     const resumed = await m2.resume(s.id)
     expect(resumed.id).toBe(s.id)
     expect(resumed.model).toBe('gpt-x')
+    expect(resumed.goal).toEqual(goal)
     expect(resumed.messages).toHaveLength(1)
     expect((resumed.messages[0]!.content[0] as any).text).toBe('hello')
     expect(m2.active()).toBe(resumed)
@@ -156,6 +162,11 @@ describe('SessionManager resume + listPersisted', () => {
     const meta1 = new DebouncedMetaWriter(store1, 0)
     const m1 = new SessionManager({ store: store1, metaWriter: meta1 })
     const source = m1.start({ providerId: 'p', model: 'gpt-x' })
+    m1.setGoal(source.id, {
+      objective: 'preserve goal across fork',
+      status: 'blocked',
+      blockedReason: 'waiting on review',
+    })
     const msg: Message = {
       role: 'user',
       id: 'u1',
@@ -177,6 +188,11 @@ describe('SessionManager resume + listPersisted', () => {
     expect(forked.parentId).toBe(source.id)
     expect(forked.providerId).toBe('p')
     expect(forked.model).toBe('gpt-x')
+    expect(forked.goal).toMatchObject({
+      objective: 'preserve goal across fork',
+      status: 'blocked',
+      blockedReason: 'waiting on review',
+    })
     expect(forked.messages).toHaveLength(1)
     expect((forked.messages[0]!.content[0] as any).text).toBe('fork me')
     expect(m2.active()).toBe(forked)
@@ -187,10 +203,40 @@ describe('SessionManager resume + listPersisted', () => {
     const forkMeta = await store2.readMeta(forked.id)
     expect(forkMeta?.parentId).toBe(source.id)
     expect(forkMeta?.messageCount).toBe(1)
+    expect(forkMeta?.goal?.objective).toBe('preserve goal across fork')
   })
 
   it('forkPersisted throws without a store', async () => {
     const m = new SessionManager()
     await expect(m.forkPersisted('some-id')).rejects.toThrow('no store — session fork unavailable')
+  })
+
+  it('setGoal/getGoal/clearGoal update in-memory session state and persisted meta', async () => {
+    const dir = await tmpDir()
+    const store = new SessionStore({ dir })
+    const meta = new DebouncedMetaWriter(store, 0)
+    const m = new SessionManager({ store, metaWriter: meta })
+    const session = m.start({ providerId: 'p', model: 'm' })
+
+    const goal = m.setGoal(session.id, {
+      objective: 'finish current iteration',
+      tokenBudget: 10000,
+    })
+    await meta.flush()
+
+    expect(goal).toMatchObject({
+      objective: 'finish current iteration',
+      status: 'active',
+      tokenBudget: 10000,
+    })
+    expect(m.getGoal(session.id)).toEqual(goal)
+    expect((await store.readMeta(session.id))?.goal).toEqual(goal)
+
+    const cleared = m.clearGoal(session.id)
+    await meta.flush()
+
+    expect(cleared).toEqual(goal)
+    expect(m.getGoal(session.id)).toBeNull()
+    expect((await store.readMeta(session.id))?.goal).toBeUndefined()
   })
 })

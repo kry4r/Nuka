@@ -53,6 +53,7 @@ export function forkSession(parent: Session): Session {
   child.parentId = parent.id
   child.messages = JSON.parse(JSON.stringify(parent.messages))
   child.totalUsage = { ...parent.totalUsage }
+  child.goal = parent.goal ? { ...parent.goal } : undefined
   // deep-copy permission rules from parent into a fresh cache instance
   for (const rule of parent.permissionCache.list()) {
     child.permissionCache.add(rule)
