@@ -24,7 +24,7 @@ const baseProps = {
 } as const
 
 describe('StatusPanel', () => {
-  it('renders a claude-status style single-line summary', () => {
+  it('renders a claude-status style metrics line plus identity line', () => {
     const { lastFrame } = render(
       <StatusPanel {...baseProps} layout="dense" />,
     )
@@ -38,6 +38,11 @@ describe('StatusPanel', () => {
     expect(f).toContain('4 plugins')
     expect(f).not.toContain('│')
     expect(f).not.toContain('⬢ idle')
+    const lines = f.split('\n').filter(line => line.trim().length > 0)
+    expect(lines[0]).toContain('context:')
+    expect(lines[0]).toContain('$0.0400')
+    expect(lines[1]).toContain('/home/me/proj')
+    expect(lines[2]).toContain('Anthropic/opus-4.7')
   })
 
   it('uses the configured provider name instead of provider id', () => {
@@ -74,6 +79,41 @@ describe('StatusPanel', () => {
       expect(f).toContain('mimo-v2-pro')
       expect(f).not.toMatch(/∴context|context[█░]/)
       expect(f).not.toContain('custom-2')
+    } finally {
+      handle.unmount()
+    }
+  })
+
+  it('keeps narrow statusline context separate from provider identity', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        {...baseProps}
+        mode="running"
+        providerId="custom-2"
+        providerName="Xiaomi Mimo"
+        model="mimo-v2-pro"
+        cwd="/data/xtzhang/Nuka"
+        gitBranch={{ branch: 'main', dirty: true }}
+        cost={0}
+        pluginCount={0}
+        agentInFlight={1}
+        contextUsed={174_000}
+        contextMax={200_000}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 70, rows: 6 },
+    )
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const lines = (handle.lastFrame() ?? '').split('\n').filter(line => line.trim().length > 0)
+      expect(lines[0]).toContain('context:')
+      expect(lines[0]).toContain('87%')
+      expect(lines[0]).toContain('1 agents')
+      expect(lines[1]).toContain('/data/xtzhang/Nuka')
+      expect(lines[2]).toContain('Xiaomi Mimo/mimo-v2-pro')
+      expect(lines[2]).not.toContain('context:')
+      expect(lines[2]).not.toContain('custom-2')
     } finally {
       handle.unmount()
     }

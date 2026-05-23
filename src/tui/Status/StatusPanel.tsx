@@ -140,25 +140,32 @@ function statusLineWidth(parts: readonly StatusPart[]): number {
 
 function splitStatusLines(parts: readonly StatusPart[], columns: number): StatusPart[][] {
   if (parts.length === 0) return []
-  if (statusLineWidth(parts) <= columns) return [Array.from(parts)]
 
-  const headlineIds = new Set(['mode', 'plan', 'cwd', 'git'])
-  const contextIds = new Set(['context'])
-  const headline = parts.filter(part => headlineIds.has(part.id))
-  const context = parts.filter(part => contextIds.has(part.id))
-  const details = parts.filter(part => !headlineIds.has(part.id) && !contextIds.has(part.id))
-  const detailContext = [...details, ...context]
-  const lines: StatusPart[][] = []
+  const metricIds = new Set(['context', 'cost', 'counts'])
+  const locationIds = new Set(['mode', 'plan', 'cwd', 'git'])
+  const modelIds = new Set(['model'])
+  const metrics = parts.filter(part => metricIds.has(part.id))
+  const location = parts.filter(part => locationIds.has(part.id))
+  const model = parts.filter(part => modelIds.has(part.id))
+  const extras = parts.filter(part => !metricIds.has(part.id) && !locationIds.has(part.id) && !modelIds.has(part.id))
+  const lines = [fitStatusLine(metrics, columns), fitStatusLine(location, columns), fitStatusLine(model, columns), fitStatusLine(extras, columns)]
+    .filter(line => line.length > 0)
 
-  if (headline.length > 0) lines.push(headline)
-  if (detailContext.length > 0 && statusLineWidth(detailContext) <= columns) {
-    lines.push(detailContext)
-  } else {
-    if (details.length > 0) lines.push(details)
-    if (context.length > 0) lines.push(context)
+  if (lines.length > 0) return lines
+  return [fitStatusLine(Array.from(parts), columns)]
+}
+
+function fitStatusLine(parts: readonly StatusPart[], columns: number): StatusPart[] {
+  if (parts.length === 0) return []
+  if (statusLineWidth(parts) <= columns) return Array.from(parts)
+  const dropPriority = ['cost', 'counts', 'git', 'cwd', 'model']
+  let out = Array.from(parts)
+  for (const id of dropPriority) {
+    if (statusLineWidth(out) <= columns) break
+    const next = out.filter(part => part.id !== id)
+    if (next.length !== out.length) out = next
   }
-
-  return lines
+  return out
 }
 
 export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
