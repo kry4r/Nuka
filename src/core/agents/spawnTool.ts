@@ -140,7 +140,11 @@ export function makeSpawnAgentTool(deps: {
           : undefined,
         input.context,
       )
-      const cwdResolution = resolveSpawnCwd(input, ctx.cwd, deps)
+      const effectiveInput: SpawnAgentInput = {
+        ...input,
+        isolation: input.isolation ?? resolved.isolation,
+      }
+      const cwdResolution = resolveSpawnCwd(effectiveInput, ctx.cwd, deps)
       if (cwdResolution.isError) return cwdResolution.result
       const { cwd, worktreePath } = cwdResolution
 

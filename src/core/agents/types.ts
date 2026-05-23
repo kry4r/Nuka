@@ -21,6 +21,7 @@ export const AgentDefSchema = z
     maxTokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(1).optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
+    isolation: z.enum(['inherit', 'worktree']).optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),

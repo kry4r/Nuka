@@ -14,13 +14,19 @@ import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
 import type { ProviderEvent } from '../../../src/core/provider/types'
 import type { GitResult } from '../../../src/core/worktree/git'
 
-function mkAgent(pluginName: string, name: string, description: string): ResolvedAgentDef {
+function mkAgent(
+  pluginName: string,
+  name: string,
+  description: string,
+  overrides: Partial<ResolvedAgentDef> = {},
+): ResolvedAgentDef {
   return {
     name,
     description,
     systemPrompt: 'system',
     maxTurns: 20,
     pluginName,
+    ...overrides,
   }
 }
 
@@ -446,6 +452,81 @@ describe('makeSpawnAgentTool', () => {
       // drain
     }
     expect(cwdSeen).toEqual(['/repo/.nuka/worktrees/review-branch'])
+  })
+
+  it('inherits worktree isolation from the agent definition', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'worker', 'implements code', { isolation: 'worktree' }))
+    const gitCalls: string[][] = []
+    const worktreeStore = createWorktreeStore()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider('unused')),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore,
+      gitRunner: fakeGitRunner(gitCalls),
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:worker',
+        task: 'Implement isolated default',
+      },
+      { signal: new AbortController().signal, cwd: '/repo', session },
+    )
+
+    expect(result.isError).toBe(false)
+    expect(gitCalls).toContainEqual([
+      '/repo',
+      'worktree',
+      'add',
+      '-b',
+      'implement-isolated-default',
+      '/repo/.nuka/worktrees/implement-isolated-default',
+    ])
+    expect(tasks.specs[0]?.cwd).toBe('/repo/.nuka/worktrees/implement-isolated-default')
+    expect(result.output as string).toContain('worktree=/repo/.nuka/worktrees/implement-isolated-default')
+  })
+
+  it('lets spawn_agent override an agent definition worktree default with inherit', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'worker', 'implements code', { isolation: 'worktree' }))
+    const gitCalls: string[][] = []
+    const worktreeStore = createWorktreeStore()
+    const active = worktreeStore.add({
+      path: '/repo/.nuka/worktrees/current',
+      originalCwd: '/repo',
+    })
+    worktreeStore.setActive(active.id)
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider('unused')),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore,
+      gitRunner: fakeGitRunner(gitCalls),
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:worker',
+        task: 'Implement in current checkout',
+        isolation: 'inherit',
+      },
+      { signal: new AbortController().signal, cwd: '/repo', session },
+    )
+
+    expect(result.isError).toBe(false)
+    expect(gitCalls).toEqual([])
+    expect(tasks.specs[0]?.cwd).toBe('/repo/.nuka/worktrees/current')
+    expect(result.output as string).not.toContain('worktree=')
   })
 
   it('rejects worktree isolation without a worktree store', async () => {

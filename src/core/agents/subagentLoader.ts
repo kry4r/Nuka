@@ -54,6 +54,8 @@ export interface SubagentDefinition {
   temperature?: number
   /** Optional persistent agent memory scope, matching Nuka-Code frontmatter. */
   memory?: AgentMemoryScope
+  /** Optional cwd isolation default for background execution. */
+  isolation?: 'inherit' | 'worktree'
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -88,6 +90,7 @@ const SubagentFileSchema = z
     maxTokens: z.number().int().positive().optional(),
     temperature: z.number().min(0).max(1).optional(),
     memory: z.enum(['user', 'project', 'local']).optional(),
+    isolation: z.enum(['inherit', 'worktree']).optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -142,6 +145,7 @@ function assembleDefinition(
   if (parsed.maxTokens !== undefined) def.maxTokens = parsed.maxTokens
   if (parsed.temperature !== undefined) def.temperature = parsed.temperature
   if (parsed.memory !== undefined) def.memory = parsed.memory
+  if (parsed.isolation !== undefined) def.isolation = parsed.isolation
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -202,6 +206,7 @@ function parseMarkdownAgent(content: string): unknown {
     deniedTools: normalizeToolList(parsed.frontmatter['deniedTools']),
     disallowedTools: normalizeToolList(parsed.frontmatter['disallowedTools']),
     memory: parsed.frontmatter['memory'],
+    isolation: parsed.frontmatter['isolation'],
   }
 }
 

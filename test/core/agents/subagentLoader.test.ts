@@ -135,6 +135,26 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.memory).toBe('project')
   })
 
+  it('loads Nuka-Code isolation frontmatter', async () => {
+    const filePath = join(dir, 'worker.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: worker',
+        'description: implements in an isolated checkout',
+        'isolation: worktree',
+        '---',
+        '',
+        'You implement changes without touching the parent checkout.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.isolation).toBe('worktree')
+  })
+
   it('adds memory file tools when memory is enabled with an explicit allowlist', async () => {
     const filePath = join(dir, 'remembering-reviewer.md')
     await writeFile(
@@ -285,6 +305,16 @@ describe('loadSubagentFile — invalid shape', () => {
       memory: 'repo',
     })
     await expect(loadSubagentFile(fp)).rejects.toThrow(/memory/)
+  })
+
+  it('throws when isolation mode is invalid', async () => {
+    const fp = await writeJson('bad.json', {
+      name: 'x',
+      description: 'd',
+      systemPrompt: 'p',
+      isolation: 'container',
+    })
+    await expect(loadSubagentFile(fp)).rejects.toThrow(/isolation/)
   })
 
   it('throws on unknown/extra field (strict schema)', async () => {
