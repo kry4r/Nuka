@@ -18,6 +18,7 @@ export type TaskMeta = {
   resumed?: boolean
   providerId?: string
   model?: string
+  finalOutput?: string
   teamName?: string
   progress?: ProgressTrackerSnapshot
   lastEventSeq?: number
@@ -72,6 +73,9 @@ export function findLatestMetaByAgentId(
     .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))[0]
 }
 
+const FINAL_OUTPUT_MAX_CHARS = 16_000
+const TERMINAL_STATES = new Set(['completed', 'failed', 'killed'])
+
 export function fromTask(t: Task): TaskMeta {
   const localAgent = t.spec.kind === 'local_agent' ? t.spec : undefined
   return {
@@ -87,7 +91,22 @@ export function fromTask(t: Task): TaskMeta {
     resumed: localAgent?.resumed,
     providerId: localAgent?.providerId,
     model: localAgent?.model,
+    finalOutput: localAgent && TERMINAL_STATES.has(t.state)
+      ? readFinalOutput(t.outputFile)
+      : undefined,
     teamName: t.teamName,
     progress: t.progress,
+  }
+}
+
+function readFinalOutput(file: string): string | undefined {
+  try {
+    const text = fs.readFileSync(file, 'utf8').trim()
+    if (!text) return undefined
+    return text.length > FINAL_OUTPUT_MAX_CHARS
+      ? text.slice(text.length - FINAL_OUTPUT_MAX_CHARS)
+      : text
+  } catch {
+    return undefined
   }
 }

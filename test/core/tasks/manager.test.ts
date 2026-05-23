@@ -88,6 +88,31 @@ describe('TaskManager', () => {
     expect(meta?.startedAt).toBeTypeOf('number')
   })
 
+  it('persists final local_agent output in task metadata after completion', async () => {
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: summarize',
+      agentId: 'agent-final-output',
+      agentName: 'core:reviewer',
+      task: 'summarize result',
+      agentRunner: async function* () {
+        yield { text: 'first line' }
+        yield { text: 'final answer' }
+      },
+    })
+
+    await m.drain()
+    const meta = readMeta(home, t.id)
+
+    expect(meta).toMatchObject({
+      id: t.id,
+      state: 'completed',
+      agentId: 'agent-final-output',
+      finalOutput: ['first line', 'final answer'].join('\n'),
+    })
+  })
+
   it('list() returns enqueued tasks (newest first)', async () => {
     const m = new TaskManager({ home })
     const a = m.enqueue({

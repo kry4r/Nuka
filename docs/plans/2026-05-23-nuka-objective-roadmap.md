@@ -106,6 +106,9 @@ Checklist:
 - [x] Persist in-flight local-agent task metadata as soon as a background subagent starts.
   - Primary files: `src/core/tasks/manager.ts`, `test/core/tasks/manager.test.ts`
   - Acceptance: immediately after `TaskManager.enqueue(local_agent)`, `<task>.meta.json` exists with `state: "running"`, stable `agentId`, agent name, prompt, context, provider id, and model; later transitions continue refreshing the same sidecar.
+- [x] Persist local-agent final output into task sidecars after completion.
+  - Primary files: `src/core/tasks/meta.ts`, `test/core/tasks/manager.test.ts`
+  - Acceptance: terminal local-agent sidecars include a bounded `finalOutput` snapshot from the task log, giving later resume/listing work a direct final-result lookup without re-reading the output file first.
 - [ ] Decide the public API shape for `fork/send` before implementation.
 - [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.
