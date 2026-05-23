@@ -236,7 +236,10 @@ Checklist:
 
 Use `ink-ui-explorer` for capture/sweep/judge/repair after each meaningful Ink layout change.
 
-- [ ] Capture current main screen, long conversation, model picker, provider wizard, task panel, and statusline in desktop and narrow widths.
+- [x] Capture current main screen, long conversation, model picker, provider wizard, task panel, and statusline in desktop and narrow widths.
+  - Evidence fixture: `test/ui-auto/fixtures/iter-23-human-tui-baseline.fixtures.tsx`
+  - Evidence test: `npm test -- test/ui-auto/humanTuiBaseline.test.ts`
+  - Evidence captures: `ink-ui-explorer capture test/ui-auto/fixtures/iter-23-human-tui-baseline.fixtures.tsx --viewport=120x30` and `--viewport=70x24`; expected desktop/narrow capture JSON pairs have zero error-level L1 violations.
 - [ ] Redesign conversation spacing: less cramped than current output, but still terminal-dense enough for coding.
 - [ ] Redesign assistant message framing by studying Codex/Nuka-Code patterns; avoid nested cards and noisy borders.
 - [ ] Make provider/model identity visible in one place with the configured provider name.
