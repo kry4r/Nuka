@@ -103,6 +103,9 @@ Checklist:
 - [x] Let `resume_agent` recover the latest matching local-agent sidecar when the original task is not in memory.
   - Primary files: `src/core/agents/agentLifecycleTools.ts`, `src/core/tasks/meta.ts`, `src/cli.tsx`, `test/core/agents/agentLifecycleTools.test.ts`, `test/core/tasks/meta.test.ts`
   - Acceptance: `resume_agent` first checks the in-memory task table, then falls back to the newest `<task>.meta.json` with the requested `agent_id`, rebuilds a fresh runner from the current registered agent definition, preserves provider/model/context metadata, and reports the persisted source task id in `resumed_from`.
+- [x] Persist in-flight local-agent task metadata as soon as a background subagent starts.
+  - Primary files: `src/core/tasks/manager.ts`, `test/core/tasks/manager.test.ts`
+  - Acceptance: immediately after `TaskManager.enqueue(local_agent)`, `<task>.meta.json` exists with `state: "running"`, stable `agentId`, agent name, prompt, context, provider id, and model; later transitions continue refreshing the same sidecar.
 - [ ] Decide the public API shape for `fork/send` before implementation.
 - [ ] Add resumable subagent state, including final output lookup and in-flight task metadata.
 - [ ] Add forked-context support with explicit write-scope and parent-session inheritance rules.

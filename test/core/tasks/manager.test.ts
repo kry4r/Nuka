@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { TaskManager } from '../../../src/core/tasks/manager'
 import type { LocalAgentSpec } from '../../../src/core/tasks/types'
+import { readMeta } from '../../../src/core/tasks/meta'
 
 async function newHome(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), 'nuka-tasks-'))
@@ -52,6 +53,39 @@ describe('TaskManager', () => {
     })
     expect(t.agentId).toBe('agent-custom-1')
     expect(m.get(t.id)?.agentId).toBe('agent-custom-1')
+  })
+
+  it('persists running local_agent metadata immediately after enqueue', () => {
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: inspect',
+      agentId: 'agent-keepalive',
+      agentName: 'core:reviewer',
+      task: 'inspect state',
+      context: 'prior context',
+      providerId: 'custom-mimo',
+      model: 'mimo-v2-pro',
+      agentRunner: async function* () {
+        await new Promise(r => setTimeout(r, 20))
+        yield { text: 'done' }
+      },
+    })
+
+    const meta = readMeta(home, t.id)
+
+    expect(meta).toMatchObject({
+      id: t.id,
+      kind: 'local_agent',
+      state: 'running',
+      agentId: 'agent-keepalive',
+      agentName: 'core:reviewer',
+      agentTask: 'inspect state',
+      agentContext: 'prior context',
+      providerId: 'custom-mimo',
+      model: 'mimo-v2-pro',
+    })
+    expect(meta?.startedAt).toBeTypeOf('number')
   })
 
   it('list() returns enqueued tasks (newest first)', async () => {

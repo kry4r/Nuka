@@ -105,9 +105,7 @@ export class TaskManager {
     const abort = new AbortController()
     const done = this.startRunner(task, abort.signal).catch((err) => {
       this.fail(task, (err as Error)?.message ?? 'unknown error')
-    }).finally(() => {
-      try { writeMeta(this.home, fromTask(task)) } catch { /* non-fatal */ }
-    })
+    }).finally(() => { this.persistMeta(task) })
     this.running.set(id, { task, abort, done })
 
     return { ...task }
@@ -304,5 +302,10 @@ export class TaskManager {
     for (const cb of this.listeners) {
       try { cb({ ...task }) } catch { /* listener errors are best-effort */ }
     }
+    this.persistMeta(task)
+  }
+
+  private persistMeta(task: Task): void {
+    try { writeMeta(this.home, fromTask(task)) } catch { /* non-fatal */ }
   }
 }
