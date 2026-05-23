@@ -78,7 +78,7 @@ export function makeSpawnAgentTool(deps: {
         fork_context: {
           type: 'boolean',
           description:
-            'Reserved for true forked-context subagents. Currently returns a clear unsupported error when true.',
+            'Inject a summarized parent session context into the background subagent. This is a lightweight context fork, not a full transcript/worktree clone.',
         },
       },
       additionalProperties: false,

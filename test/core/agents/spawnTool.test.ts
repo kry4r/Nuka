@@ -98,6 +98,8 @@ describe('makeSpawnAgentTool', () => {
     expect(tool.tags).toContain('tasks')
     expect(tool.annotations?.readOnly).toBe(false)
     expect(tool.needsPermission({ agent: 'core:reviewer', task: 'review' })).toBe('none')
+    expect(JSON.stringify(tool.parameters)).toContain('Inject a summarized parent session context')
+    expect(JSON.stringify(tool.parameters)).not.toContain('Currently returns a clear unsupported error')
   })
 
   it('enqueues a local_agent task and returns stable lookup ids', async () => {

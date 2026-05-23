@@ -124,9 +124,12 @@ Checklist:
 - [x] Add `send_agent` follow-up alias over the local-agent task runtime.
   - Primary files: `src/core/agents/agentLifecycleTools.ts`, `src/cli.tsx`, `test/core/agents/agentLifecycleTools.test.ts`
   - Acceptance: `send_agent` accepts `{ agent_id, message, context?, description? }`, preserves the stable `agent_id`, merges prior and new context, enqueues a resumed `local_agent` execution, reports `status=sent` and `sent_to=<source task>`, and is registered by the CLI.
-- [x] Add explicit `fork_context` input guard to `spawn_agent`.
+- [x] Add `send_input` compatibility alias over the local-agent task runtime.
+  - Primary files: `src/core/agents/agentLifecycleTools.ts`, `src/cli.tsx`, `test/core/agents/agentLifecycleTools.test.ts`
+  - Acceptance: `send_input` accepts `{ agent_id, input, context?, description? }`, preserves the stable `agent_id`, enqueues the same follow-up path as `send_agent`, reports `status=sent` and `sent_to=<source task>`, and is registered by the CLI.
+- [x] Add explicit `fork_context` input to `spawn_agent`.
   - Primary files: `src/core/agents/spawnTool.ts`, `test/core/agents/spawnTool.test.ts`
-  - Acceptance: `spawn_agent` schema accepts `fork_context`, but `fork_context: true` returns a clear unsupported error and does not enqueue work until true parent-transcript fork support lands.
+  - Acceptance: `spawn_agent(..., fork_context: true)` injects a summarized parent-session context into the child task context and preserves explicit caller context; schema text describes the lightweight fork accurately.
 - [x] Add resumable subagent state, including final output lookup and in-flight task metadata.
   - Primary files: `src/core/tasks/meta.ts`, `src/core/tasks/manager.ts`, `test/core/tasks/meta.test.ts`, `test/core/tasks/manager.test.ts`
   - Acceptance: local-agent task sidecars persist in-flight metadata, terminal `finalOutput`, and a `<task>.transcript.json` baseline containing the user task/context and assistant final output for future true resume/fork reconstruction.

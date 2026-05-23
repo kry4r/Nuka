@@ -46,6 +46,13 @@ export type SendAgentInput = {
   description?: string
 }
 
+export type SendInputInput = {
+  agent_id: string
+  input: string
+  context?: string
+  description?: string
+}
+
 export type ResumeAgentTaskManagerLike = TaskLookupManagerLike & {
   enqueue(spec: LocalAgentSpec): Task
 }
@@ -248,6 +255,57 @@ export function makeSendAgentTool(
         context: input.context,
         description: input.description,
         emptyPromptMessage: 'message is required.',
+        status: 'sent',
+        sourceLabel: 'sent_to',
+      })
+    },
+  })
+}
+
+export function makeSendInputTool(
+  deps: ResumeAgentDeps,
+): Tool<SendInputInput> {
+  return defineTool<SendInputInput>({
+    name: 'send_input',
+    description:
+      'Compatibility alias for send_agent. Send a follow-up input to an existing background subagent and start a new background execution under the same stable agent_id.',
+    parameters: {
+      type: 'object',
+      required: ['agent_id', 'input'],
+      properties: {
+        agent_id: {
+          type: 'string',
+          description: 'Stable subagent ID returned by spawn_agent.',
+          minLength: 1,
+        },
+        input: {
+          type: 'string',
+          description: 'Follow-up instruction/input to send to the subagent.',
+          minLength: 1,
+        },
+        context: {
+          type: 'string',
+          description: 'Optional additional context to append after prior context.',
+        },
+        description: {
+          type: 'string',
+          description: 'Short label for the follow-up background task.',
+        },
+      },
+      additionalProperties: false,
+    },
+    source: 'builtin',
+    tags: ['core', 'agent', 'tasks'],
+    needsPermission: () => 'none',
+    annotations: { readOnly: false, destructive: false, openWorld: true },
+    searchHint: ['agent', 'send', 'input', 'message', 'background', 'task'],
+    async run(input): Promise<ToolResult> {
+      return enqueueAgentFollowup(deps, {
+        agentIdRaw: input.agent_id,
+        promptRaw: input.input,
+        context: input.context,
+        description: input.description,
+        emptyPromptMessage: 'input is required.',
         status: 'sent',
         sourceLabel: 'sent_to',
       })
