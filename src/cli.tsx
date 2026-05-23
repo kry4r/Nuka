@@ -1466,6 +1466,7 @@ async function runInteractive(): Promise<void> {
           provider,
           model,
           keepTurns: config.compact?.keepTurns ?? 3,
+          retainedMessageBudget: config.compact?.retainedMessageBudget,
           postCompactMicroCompact: microCompactOptionsFromConfig(config),
         })
       }}

@@ -137,7 +137,10 @@ function summaryFor(category: SettingsCategory, config: Config): string | undefi
     case 'Compact': {
       const c = config.compact
       if (!c) return 'default'
-      return `keep ${c.keepTurns ?? 3}`
+      const retained = c.retainedMessageBudget
+      return retained === undefined
+        ? `keep ${c.keepTurns ?? 3}`
+        : `keep ${c.keepTurns ?? 3} · tail ${retained}`
     }
   }
 }

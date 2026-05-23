@@ -43,6 +43,7 @@ export const ThemeSchema = z
 export const CompactSchema = z
   .object({
     keepTurns: z.number().int().positive().default(3),
+    retainedMessageBudget: z.number().int().nonnegative().optional(),
     model: z.string().optional(),
     autoThreshold: z.number().min(0).max(1).default(0.8),
     contextWindow: z.number().int().positive().default(200_000),

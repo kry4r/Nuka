@@ -52,6 +52,136 @@ describe('compactSession', () => {
     expect(s.messages.length).toBe(before)
   })
 
+  it('honors retainedMessageBudget even when keepTurns would keep the transcript', async () => {
+    const streamRequests: LLMRequest[] = []
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req): AsyncIterable<ProviderEvent> {
+        streamRequests.push(req)
+        yield { type: 'text_delta', text: 'BUDGET SUMMARY' }
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const s = createSession({ providerId: 'p', model: 'm' })
+    for (let i = 0; i < 6; i++) {
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+    }
+    const older = s.messages.slice(0, 8)
+    const kept = s.messages.slice(-4)
+
+    await compactSession(s, {
+      provider,
+      model: 'm',
+      keepTurns: 10,
+      retainedMessageBudget: 4,
+    })
+
+    expect(streamRequests).toHaveLength(1)
+    expect(streamRequests[0]!.messages).toEqual(older)
+    expect(s.messages).toHaveLength(5)
+    expect(s.messages.slice(1)).toEqual(kept)
+    expect(s.messages[0]).toMatchObject({ role: 'assistant' })
+    if (s.messages[0]?.role === 'assistant') {
+      expect(s.messages[0].content[0]).toMatchObject({
+        type: 'text',
+        text: expect.stringContaining('BUDGET SUMMARY'),
+      })
+    }
+  })
+
+  it('treats retainedMessageBudget as an estimated token budget for the retained tail', async () => {
+    const streamRequests: LLMRequest[] = []
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req): AsyncIterable<ProviderEvent> {
+        streamRequests.push(req)
+        yield { type: 'text_delta', text: 'TOKEN SUMMARY' }
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const s = createSession({ providerId: 'p', model: 'm' })
+    for (let i = 0; i < 4; i++) {
+      const assistantText = i === 2 ? 'x'.repeat(80) : `a${i}`
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: assistantText }] })
+    }
+    const older = s.messages.slice(0, 6)
+    const kept = s.messages.slice(-2)
+
+    await compactSession(s, {
+      provider,
+      model: 'm',
+      keepTurns: 10,
+      retainedMessageBudget: 4,
+    })
+
+    expect(streamRequests[0]!.messages).toEqual(older)
+    expect(s.messages.slice(1)).toEqual(kept)
+  })
+
+  it('does not orphan retained tool results when a retained budget cut lands inside a tool pair', async () => {
+    const streamRequests: LLMRequest[] = []
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req): AsyncIterable<ProviderEvent> {
+        streamRequests.push(req)
+        yield { type: 'text_delta', text: 'TOOLPAIR SUMMARY' }
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const s = createSession({ providerId: 'p', model: 'm' })
+    s.messages.push({ role: 'user', id: 'u0', ts: 1, content: [{ type: 'text', text: 'older' }] })
+    s.messages.push({ role: 'assistant', id: 'a0', ts: 2, content: [{ type: 'text', text: 'older answer' }] })
+    s.messages.push({ role: 'user', id: 'u1', ts: 3, content: [{ type: 'text', text: 'read file' }] })
+    s.messages.push({
+      role: 'assistant',
+      id: 'a1',
+      ts: 4,
+      content: [{ type: 'tool_use', id: 'call_1', name: 'Read', input: { path: 'a.ts' } }],
+    })
+    s.messages.push({
+      role: 'tool',
+      id: 't1',
+      ts: 5,
+      toolUseId: 'call_1',
+      content: 'ok',
+      isError: false,
+    })
+    const older = s.messages.slice(0, 3)
+    const kept = s.messages.slice(3)
+
+    await compactSession(s, {
+      provider,
+      model: 'm',
+      keepTurns: 10,
+      retainedMessageBudget: 1,
+    })
+
+    expect(streamRequests[0]!.messages).toEqual(older)
+    expect(s.messages.slice(1)).toEqual(kept)
+    expect(s.messages[1]?.role).toBe('assistant')
+    expect(s.messages[2]?.role).toBe('tool')
+  })
+
   it('uses native provider compaction when available and keeps returned Responses items model-visible', async () => {
     const calls: Array<{ kind: 'compact'; req: LLMRequest } | { kind: 'stream' }> = []
     const provider: LLMProvider = {

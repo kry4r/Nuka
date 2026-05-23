@@ -22,7 +22,7 @@ it touches Ink.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | P0 | Codex app-server | `thread/fork`, `thread/resume`, `thread/read`, paged `thread/turns/list` | Users can branch, inspect, and recover work without losing state | `resume_agent` and task sidecars now cover agent metadata/output only | No full transcript persistence/fork semantics for Nuka sessions or subagents | Incorrect fork could mix tool results, cwd, or permissions | Session store tests; provider-visible transcript tests; agent lifecycle tests |
 | P0 | Nuka-Code / Claude Code | First-class subagent fork/send lifecycle | Parallel work becomes addressable, resumable, and steerable | `spawn_agent`, `wait_agent`, `close_agent`, `resume_agent`, `send_agent`, `send_input`, and lightweight `fork_context` exist | Missing true transcript/worktree reconstruction and cache-identical fork prefix semantics | Recursive delegation and write-scope collisions | Agent lifecycle tool tests; task sidecar tests; worktree inheritance tests |
-| P0 | Codex compact | Remote Responses compact plus retained-message budget and compaction-item passthrough | Long sessions survive without bloating context | Native `/responses/compact` and opaque item passthrough are implemented | Missing retained-message budget parity, retry/shrink on context-window errors | Over-pruning can drop needed tool context | `autoCompact` boundary tests; provider OpenAI tests; simulated context-window error tests |
+| P0 | Codex compact | Remote Responses compact plus retained-message budget and compaction-item passthrough | Long sessions survive without bloating context | Native `/responses/compact`, opaque item passthrough, retry/shrink, and `compact.retainedMessageBudget` are implemented | Missing compact progress UX and deeper provider context-management controls | Over-pruning can drop needed tool context | `autoCompact` boundary tests; provider OpenAI tests; simulated context-window error tests |
 | P0 | Codex app-server | `thread/compact/start` with streamed progress notifications | Manual compact feels visible and non-blocking | `/compact` exists, but compact progress UX is minimal | No progress event/state for compaction | UI can become misleading if compact runs as hidden turn | Compact command tests; TUI status/task frame tests |
 | P1 | Claude Code | Agent view and agent teams | Users can see parallel work and coordinate specialists | TUI task panels classify subagents | No agent-focused view, colors, summaries, or team grouping | Adding another noisy panel can worsen current UX | Ink harness captures; `Tasks/columnReducer` tests |
 | P1 | Claude Code / Codex | Worktree-isolated sessions and forks | Safer concurrent edits, less accidental overwrite | `EnterWorktree` exists and dispatch inherits active worktree | `spawn_agent` cannot create/own isolated worktrees | Cleanup and dirty-worktree policy errors can lose work | Worktree store tests; spawn-agent isolation tests |
@@ -46,9 +46,8 @@ it touches Ink.
    - agent display/color metadata and task summaries
 2. Finish compact efficiency:
    - compare Nuka-Code API-round grouping
-   - add retained-message budget parity
-   - add context-window retry/shrink behavior
    - expose compact progress in the UI
+   - investigate provider context-management controls once request schemas can model them cleanly
 3. Improve provider/model ergonomics:
    - per-model thinking/effort capability map
    - cached transport investigation for OpenAI-compatible providers

@@ -220,6 +220,9 @@ Checklist:
 - [x] Add Codex-style retry/shrink-on-context-window-exceeded behavior for local summary compact and native compact.
   - Primary files: `src/core/compact/compact.ts`, `src/core/agent/autoCompact.ts`, `src/core/compact/contextWindowError.ts`, `test/core/compact/compact.test.ts`, `test/core/agent/autoCompact.test.ts`
   - Acceptance: native Responses compact, manual text-summary compact, and pure autoCompact custom summarizers retry with a smaller older/middle slice on context-window errors while preserving ordinary error propagation.
+- [x] Add Codex-style retained-message budget support for manual compact.
+  - Primary files: `src/core/compact/compact.ts`, `src/core/config/schema.ts`, `src/cli.tsx`, `src/tui/Submenu/settings/CompactForm.tsx`, `test/core/compact/compact.test.ts`, `test/core/config/load.test.ts`, `test/tui/Submenu/settings/CompactForm.test.tsx`
+  - Acceptance: manual compact can retain only the newest messages that fit within `compact.retainedMessageBudget` estimated tokens even when `keepTurns` would otherwise no-op; budget cuts do not orphan retained tool results; Settings exposes the field as `tailBudget` and can save or clear it.
 
 ---
 

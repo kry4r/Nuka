@@ -77,6 +77,7 @@ recap:
       join(cwd, '.nuka', 'config.yaml'),
       `compact:
   keepTurns: 4
+  retainedMessageBudget: 8
   microCompact:
     enabled: true
     keepRecent: 2
@@ -87,6 +88,7 @@ recap:
 
     expect(cfg.compact?.microCompact?.enabled).toBe(true)
     expect(cfg.compact?.microCompact?.keepRecent).toBe(2)
+    expect(cfg.compact?.retainedMessageBudget).toBe(8)
   })
 
   it('every ConfigSchema top-level key is reachable through loadConfig', async () => {
