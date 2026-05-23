@@ -230,6 +230,7 @@ function parseMarkdownAgent(content: string): unknown {
   }
   return {
     ...parsed.frontmatter,
+    description: normalizeMarkdownDescription(parsed.frontmatter['description']),
     systemPrompt: parsed.body.trim(),
     tools: normalizeToolList(parsed.frontmatter['tools']),
     allowedTools: normalizeToolList(parsed.frontmatter['allowedTools']),
@@ -243,6 +244,10 @@ function parseMarkdownAgent(content: string): unknown {
     effort: parsed.frontmatter['effort'],
     skills: normalizeStringList(parsed.frontmatter['skills']),
   }
+}
+
+function normalizeMarkdownDescription(value: unknown): unknown {
+  return typeof value === 'string' ? value.replace(/\\n/g, '\n') : value
 }
 
 export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {

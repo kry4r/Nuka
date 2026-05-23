@@ -274,6 +274,25 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.skills).toEqual(['test-first', 'review'])
   })
 
+  it('unescapes Nuka-Code markdown description newlines', async () => {
+    const filePath = join(dir, 'multiline-description.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: multiline-description',
+        'description: review code\\nwhen tests fail',
+        '---',
+        '',
+        'You review failures.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.description).toBe('review code\nwhen tests fail')
+  })
+
   it('accepts quoted Nuka-Code background frontmatter booleans', async () => {
     const filePath = join(dir, 'foreground.md')
     await writeFile(
