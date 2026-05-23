@@ -259,6 +259,9 @@ Checklist:
 
 - [x] Locate or clone the current upstream repositories/docs for Claude Code, Codex, and Pi.
   - Evidence: Codex local checkout `/tmp/openai-codex`; Claude Code official docs fetched from `code.claude.com`; Pi official release notes fetched from `pi.dev/news/releases`.
+- [x] Refresh upstream intake against the latest available public changelogs.
+  - Evidence: `docs/plans/2026-05-23-upstream-feature-intake.md` refreshed on 2026-05-24.
+  - Observed latest public sources: Claude Code `2.1.150` / `2.1.149`, Codex app `26.519` and CLI `0.133.0`, Pi `0.75.4`.
 - [x] Record source, date, commit, and license constraints for every inspected feature.
   - Evidence: `docs/plans/2026-05-23-upstream-feature-intake.md`.
 - [x] Create a feature checklist with columns: source, feature, user value, Nuka equivalent, gap, risk, priority, test surface.
@@ -267,6 +270,24 @@ Checklist:
   - Evidence: accepted iteration order in `docs/plans/2026-05-23-upstream-feature-intake.md`.
 - [x] Reject features that are mostly decorative unless they directly improve TUI comprehension.
   - Evidence: rejected/deferred section in `docs/plans/2026-05-23-upstream-feature-intake.md`.
+- [ ] Add Nuka-native goal mode with pause/resume/edit/clear plus compact-aware status.
+  - Source: Claude Code goal mode and Codex persistent goal object.
+  - Acceptance: a goal survives session reload, statusline shows only the concise active state, and compact/resume keep the goal context without duplicating it into every row.
+- [ ] Attribute context/cost usage by skills, subagents, plugins, and MCP servers.
+  - Source: Claude Code `/usage` breakdown.
+  - Acceptance: usage totals can be grouped by feature source without widening the default statusline.
+- [ ] Add scrollable diff/detail view and GFM task checkbox rendering.
+  - Source: Claude Code scrollable diff details and task-list rendering.
+  - Acceptance: long diffs can be inspected without stealing prompt focus, and markdown task lists render as quiet progress rows.
+- [ ] Add permission profile catalog with inheritance and managed-policy refresh.
+  - Source: Codex CLI permission-profile and managed-policy updates.
+  - Acceptance: profiles are named, auditable, and validated by the same PermissionChecker before runtime use.
+- [ ] Add provider idle-timeout/retry controls and retry lifecycle events.
+  - Source: Pi provider retry/idle-timeout release work and Nuka's compact retry/shrink behavior.
+  - Acceptance: long streams can tune provider retry behavior and surface retry status without producing noisy transcript rows.
+- [ ] Add subagent lifecycle events and failed-subtask summaries.
+  - Source: Codex/Claude/Pi parallel-agent observability.
+  - Acceptance: hooks/extensions can observe subagent start/stop/failure, and failed parallel work appears as a compact digest in the task panel.
 
 ### Accepted Feature Implementation Log
 
