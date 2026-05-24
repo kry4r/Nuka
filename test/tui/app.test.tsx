@@ -79,6 +79,47 @@ describe('App', () => {
     expect(f).not.toContain('[5~')
   })
 
+  it('scrolls older messages with modified PageUp escape sequences', async () => {
+    const sessions = new SessionManager()
+    const session = sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    for (let i = 1; i <= 24; i++) {
+      appendMessage(session, {
+        role: 'user',
+        id: `u${i}`,
+        ts: i,
+        content: [{ type: 'text', text: `modified-page-message-${String(i).padStart(2, '0')}` }],
+      })
+    }
+    const slash = new SlashRegistry()
+    const { stdin, lastFrame } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    expect(lastFrame() ?? '').toContain('modified-page-message-24')
+    stdin.write('\u001B[5;2~')
+    await new Promise(r => setImmediate(r))
+
+    const f = lastFrame() ?? ''
+    expect(f).toContain('older')
+    expect(f).toContain('newer')
+    expect(f).toContain('modified-page-message-15')
+    expect(f).not.toContain('modified-page-message-24')
+    expect(f).not.toContain('[5;2~')
+  })
+
   it('scrolls older messages while an agent turn is running', async () => {
     const sessions = new SessionManager()
     const session = sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })

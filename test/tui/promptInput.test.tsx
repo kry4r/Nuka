@@ -2,7 +2,7 @@
 import React, { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render } from 'ink-testing-library'
-import { PromptInput } from '../../src/tui/PromptInput/PromptInput'
+import { PromptInput, promptNavigationAction } from '../../src/tui/PromptInput/PromptInput'
 import { mountApp } from '../../src/tui/testing/harness'
 import { SlashRegistry } from '../../src/slash/registry'
 import { HelpCommand } from '../../src/slash/help'
@@ -11,6 +11,16 @@ const flush = () => new Promise(r => setImmediate(r))
 const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
 describe('PromptInput', () => {
+  it('recognizes modified terminal scroll escape sequences', () => {
+    expect(promptNavigationAction('\u001B[5;2~', {})).toBe('page-up')
+    expect(promptNavigationAction('[5;2~', {})).toBe('page-up')
+    expect(promptNavigationAction('\u001B[6;2~', {})).toBe('page-down')
+    expect(promptNavigationAction('\u001B[1;2A', {})).toBe('page-up')
+    expect(promptNavigationAction('\u001B[1;2B', {})).toBe('page-down')
+    expect(promptNavigationAction('', { shift: true, upArrow: true })).toBe('page-up')
+    expect(promptNavigationAction('', { shift: true, downArrow: true })).toBe('page-down')
+  })
+
   it('renders the prompt marker and initial value', () => {
     const { lastFrame } = render(
       <PromptInput value="hello" onChange={() => {}} onSubmit={() => {}} disabled={false} />,

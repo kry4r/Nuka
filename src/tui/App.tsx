@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { Welcome } from './Welcome/Welcome'
 import { Messages } from './Messages/Messages'
-import { PromptInput, type PromptNavigationAction } from './PromptInput/PromptInput'
+import { PromptInput, promptNavigationAction, type PromptNavigationAction } from './PromptInput/PromptInput'
 import { useIdlePoke } from './hooks/useIdlePoke'
 import { useAwayRecap } from './hooks/useAwayRecap'
 import { AwaySummaryCard } from './Recap/AwaySummaryCard'
@@ -701,10 +701,11 @@ export function App(props: AppProps): React.JSX.Element {
 
   useInput((inputKey, key) => {
     if (uiState.kind === 'normal' && !promptFocused) {
-      if (key.pageUp) { scrollConversation('page-up'); return }
-      if (key.pageDown) { scrollConversation('page-down'); return }
-      if (key.home) { scrollConversation('home'); return }
-      if (key.end) { scrollConversation('end'); return }
+      const navigationAction = promptNavigationAction(inputKey, key)
+      if (navigationAction !== null) {
+        scrollConversation(navigationAction)
+        return
+      }
     }
     if (key.escape) {
       // Esc always returns to normal from any non-normal UIState. Inline

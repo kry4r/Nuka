@@ -66,10 +66,21 @@ export function promptNavigationAction(
   input: string,
   key: Record<string, unknown>,
 ): PromptNavigationAction | null {
-  if (key.pageUp === true || input === '\u001B[5~' || input === '[5~') return 'page-up'
-  if (key.pageDown === true || input === '\u001B[6~' || input === '[6~') return 'page-down'
-  if (key.home === true || input === '\u001B[H' || input === '\u001B[1~' || input === '[H' || input === '[1~') return 'home'
-  if (key.end === true || input === '\u001B[F' || input === '\u001B[4~' || input === '[F' || input === '[4~') return 'end'
+  const csi = input.startsWith('\u001B') ? input.slice(1) : input
+  if (
+    key.pageUp === true
+    || /^\[5(?:;\d+)?~$/.test(csi)
+    || key.shift === true && key.upArrow === true
+    || /^\[1;\d+A$/.test(csi)
+  ) return 'page-up'
+  if (
+    key.pageDown === true
+    || /^\[6(?:;\d+)?~$/.test(csi)
+    || key.shift === true && key.downArrow === true
+    || /^\[1;\d+B$/.test(csi)
+  ) return 'page-down'
+  if (key.home === true || csi === '[H' || csi === '[1~') return 'home'
+  if (key.end === true || csi === '[F' || csi === '[4~') return 'end'
   return null
 }
 
