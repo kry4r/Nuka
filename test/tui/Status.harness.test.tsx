@@ -24,25 +24,27 @@ const baseProps = {
 } as const
 
 describe('StatusPanel', () => {
-  it('renders a claude-status style metrics line plus identity line', () => {
-    const { lastFrame } = render(
+  it('renders a single claude-status style row by default', async () => {
+    const handle = renderWithViewport(
       <StatusPanel {...baseProps} layout="dense" />,
+      { cols: 120, rows: 4 },
     )
-    const f = lastFrame() ?? ''
-    expect(f).toContain('/home/me/proj')
-    expect(f).toContain('main')
-    expect(f).toContain('Anthropic/opus-4.7')
-    expect(f).toContain('∴ context:')
-    expect(f).toContain('12k/200k')
-    expect(f).toContain('$0.0400')
-    expect(f).toContain('4 plugins')
-    expect(f).not.toContain('│')
-    expect(f).not.toContain('⬢ idle')
-    const lines = f.split('\n').filter(line => line.trim().length > 0)
-    expect(lines[0]).toContain('context:')
-    expect(lines[0]).toContain('$0.0400')
-    expect(lines[1]).toContain('/home/me/proj')
-    expect(lines[2]).toContain('Anthropic/opus-4.7')
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('/home/me/proj')
+      expect(f).toContain('main')
+      expect(f).toContain('Anthropic/opus-4.7')
+      expect(f).toContain('∴ context:')
+      expect(f).toContain('$0.0400')
+      expect(f).toContain('4 plugins')
+      expect(f).not.toContain('│')
+      expect(f).not.toContain('⬢ idle')
+      const lines = f.split('\n').filter(line => line.trim().length > 0)
+      expect(lines).toHaveLength(1)
+    } finally {
+      handle.unmount()
+    }
   })
 
   it('uses the configured provider name instead of provider id', () => {
@@ -127,7 +129,7 @@ describe('StatusPanel', () => {
     }
   })
 
-  it('keeps narrow statusline context separate from provider identity', async () => {
+  it('keeps narrow statusline as one compact row without losing provider name', async () => {
     const handle = renderWithViewport(
       <StatusPanel
         {...baseProps}
@@ -150,13 +152,11 @@ describe('StatusPanel', () => {
     try {
       await new Promise<void>(resolve => setImmediate(resolve))
       const lines = (handle.lastFrame() ?? '').split('\n').filter(line => line.trim().length > 0)
-      expect(lines[0]).toContain('context:')
+      expect(lines).toHaveLength(1)
       expect(lines[0]).toContain('87%')
-      expect(lines[0]).toContain('1 agents')
-      expect(lines[1]).toContain('/data/xtzhang/Nuka')
-      expect(lines[2]).toContain('Xiaomi Mimo/mimo-v2-pro')
-      expect(lines[2]).not.toContain('context:')
-      expect(lines[2]).not.toContain('custom-2')
+      expect(lines[0]).toContain('Xiaomi Mimo')
+      expect(lines[0]).toContain('mimo-v2-pro')
+      expect(lines[0]).not.toContain('custom-2')
     } finally {
       handle.unmount()
     }

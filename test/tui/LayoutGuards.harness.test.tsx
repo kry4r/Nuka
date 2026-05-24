@@ -61,7 +61,8 @@ describe('TUI layout guards', () => {
       await expectNoL1Errors(handle, { cols: 50, rows: 8 })
 
       const grid = handle.grid()
-      expect(grid.asciiView).toContain('VeryLongCustom')
+      expect(grid.asciiView).toContain('VeryLong')
+      expect(grid.asciiView).toContain('mimo-v2')
       expect(grid.asciiView).toContain('context:')
     } finally {
       handle.unmount()
@@ -95,7 +96,7 @@ describe('TUI layout guards', () => {
       await expectNoL1Errors(handle, { cols: 50, rows: 8 })
 
       const view = handle.grid().asciiView
-      expect(view).toContain('Nuka')
+      expect(view).toContain('Xiaomi')
       expect(view).toContain('context:')
     } finally {
       handle.unmount()
