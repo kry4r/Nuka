@@ -4,8 +4,8 @@
 // the read-only ProviderForm from Phase 12. Layout:
 //
 //   Top: providers list, one row per provider:
-//        ▸ <id> · <baseUrl>      <- highlighted row (cursor)
-//          <id> · <baseUrl>
+//        ▸ <name> · <id> · <baseUrl>      <- highlighted row (cursor)
+//          <name> · <id> · <baseUrl>
 //
 //   Footer keys (when in list mode):
 //        a 添加 · e 编辑 · d 删除 · ⏎ 设为 active · Esc 关闭
@@ -61,6 +61,12 @@ function applyDraft(target: any, d: DraftProvider): void {
   if (d.apiKey) target.apiKey = d.apiKey
   if (d.selectedModel) target.selectedModel = d.selectedModel
   if (!Array.isArray(target.models)) target.models = []
+}
+
+function providerTitle(p: ProviderConfig | undefined): string {
+  if (!p) return ''
+  const name = p.name?.trim() || p.id
+  return name === p.id ? p.id : `${name} · ${p.id}`
 }
 
 export function ProvidersForm(props: FormCommonProps): React.JSX.Element {
@@ -253,7 +259,7 @@ export function ProvidersForm(props: FormCommonProps): React.JSX.Element {
     let i = 0
     return (
       <Box flexDirection="column" marginTop={1}>
-        <Text color={colors.primary}>{isNew ? '+ Add provider' : `· Edit ${draft.id}`}</Text>
+        <Text color={colors.primary}>{isNew ? '+ Add provider' : `· Edit ${providerTitle(providers[mode.index])}`}</Text>
         {isNew ? (
           <Field
             label="id"
@@ -334,7 +340,7 @@ export function ProvidersForm(props: FormCommonProps): React.JSX.Element {
               color={selected ? colors.fg : colors.fg}
               bold={isActive}
             >
-              {sigil} {p.id} · {p.baseUrl}{tag}
+              {sigil} {providerTitle(p)} · {p.baseUrl}{tag}
             </Text>
           </Box>
         )
@@ -342,7 +348,7 @@ export function ProvidersForm(props: FormCommonProps): React.JSX.Element {
       {inConfirm && (
         <Box marginTop={1}>
           <Text color={colors.warn}>
-            Delete provider `{providers[mode.index]?.id}`? (y/n)
+            Delete provider `{providerTitle(providers[mode.index])}`? (y/n)
           </Text>
         </Box>
       )}

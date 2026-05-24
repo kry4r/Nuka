@@ -20,8 +20,8 @@ const wait = (ms = 30) => new Promise(r => setTimeout(r, ms))
 
 const cfg = (): Config => ({
   providers: [
-    { id: 'openai', name: 'openai', format: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-x', models: ['gpt-4'], selectedModel: 'gpt-4' } as any,
-    { id: 'anthro', name: 'anthro', format: 'anthropic', baseUrl: 'https://api.anthropic.com', apiKey: 'sk-y', models: ['claude'], selectedModel: 'claude' } as any,
+    { id: 'openai', name: 'OpenAI', format: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-x', models: ['gpt-4'], selectedModel: 'gpt-4' } as any,
+    { id: 'xiaomi-mimo', name: 'Xiaomi Mimo', format: 'openai', baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1', apiKey: 'sk-y', models: ['mimo-v2-pro'], selectedModel: 'mimo-v2-pro' } as any,
   ],
   active: { providerId: 'openai' },
 } as any)
@@ -29,7 +29,7 @@ const cfg = (): Config => ({
 const noOp = () => {}
 
 describe('ProvidersForm', () => {
-  it('renders providers list with id and baseUrl', () => {
+  it('renders providers list with configured name, id, and baseUrl', () => {
     installRawShim()
     const { lastFrame, unmount } = render(
       <ProvidersForm
@@ -45,10 +45,12 @@ describe('ProvidersForm', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).toContain('Providers')
+    expect(f).toContain('OpenAI')
     expect(f).toContain('openai')
     expect(f).toContain('https://api.openai.com/v1')
-    expect(f).toContain('anthro')
-    expect(f).toContain('https://api.anthropic.com')
+    expect(f).toContain('Xiaomi Mimo')
+    expect(f).toContain('xiaomi-mimo')
+    expect(f).toContain('https://token-plan-cn.xiaomimimo.com/v1')
     expect(f).toContain('a 添加')
     expect(f).toContain('设为 active')
     unmount()
@@ -73,7 +75,8 @@ describe('ProvidersForm', () => {
       inst.stdin.write('e')
       await wait()
       const f = inst.lastFrame() ?? ''
-      expect(f).toContain('Edit openai')
+      expect(f).toContain('Edit OpenAI')
+      expect(f).toContain('openai')
       expect(f).toContain('baseUrl')
       expect(f).toContain('apiKey')
       expect(f).toContain('format')
@@ -107,7 +110,7 @@ describe('ProvidersForm', () => {
     await registered!()
     expect(seen.providers).toHaveLength(2)
     expect(seen.providers[0].id).toBe('openai')
-    expect(seen.providers[1].id).toBe('anthro')
+    expect(seen.providers[1].id).toBe('xiaomi-mimo')
     expect(seen.active.providerId).toBe('openai')
   })
 
@@ -144,9 +147,9 @@ describe('ProvidersForm', () => {
       await wait()
       expect(saved).not.toBeNull()
       expect(saved.providers).toHaveLength(1)
-      expect(saved.providers[0].id).toBe('anthro')
+      expect(saved.providers[0].id).toBe('xiaomi-mimo')
       // active rolls over to the surviving provider.
-      expect(saved.active.providerId).toBe('anthro')
+      expect(saved.active.providerId).toBe('xiaomi-mimo')
     } finally {
       inst.unmount()
     }
@@ -180,7 +183,7 @@ describe('ProvidersForm', () => {
       inst.stdin.write('\r')
       await wait()
       expect(saved).not.toBeNull()
-      expect(saved.active.providerId).toBe('anthro')
+      expect(saved.active.providerId).toBe('xiaomi-mimo')
       expect(saved.providers).toHaveLength(2)
     } finally {
       inst.unmount()
