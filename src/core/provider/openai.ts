@@ -15,6 +15,12 @@ import type {
   ToolContentBlock,
 } from '../message/types'
 import { fetchRemoteModels } from './remoteModels'
+import {
+  normalizeOpenAIBaseUrl,
+  openAIResponsesCompactEndpoints,
+  openAIResponsesEndpoints,
+  shouldTryNextOpenAIEndpoint,
+} from './openaiEndpoints'
 
 type OpenAIOpts = {
   id: string
@@ -89,7 +95,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private shouldUseResponsesEndpoint(): boolean {
-    const base = normalizeBaseUrl(this.baseUrl)
+    const base = normalizeOpenAIBaseUrl(this.baseUrl)
     return this.id.startsWith('custom') || base !== 'https://api.openai.com/v1'
   }
 
@@ -100,7 +106,8 @@ export class OpenAIProvider implements LLMProvider {
     const payload = toOpenAIResponsesPayload(req)
     let lastError: Error | null = null
 
-    for (const endpoint of responsesEndpoints(this.baseUrl)) {
+    const endpoints = openAIResponsesEndpoints(this.baseUrl)
+    for (const [index, endpoint] of endpoints.entries()) {
       const res = await this.fetchFn(endpoint, {
         method: 'POST',
         signal,
@@ -119,7 +126,7 @@ export class OpenAIProvider implements LLMProvider {
         `OpenAI Responses request failed (${res.status} ${res.statusText}) at ${endpoint}: ${detail}`,
       )
       lastError = err
-      if (res.status === 404) continue
+      if (shouldTryNextOpenAIEndpoint(res.status, index, endpoints)) continue
       throw err
     }
 
@@ -133,7 +140,8 @@ export class OpenAIProvider implements LLMProvider {
     const payload = toOpenAIResponsesCompactPayload(req)
     let lastError: Error | null = null
 
-    for (const endpoint of responsesCompactEndpoints(this.baseUrl)) {
+    const endpoints = openAIResponsesCompactEndpoints(this.baseUrl)
+    for (const [index, endpoint] of endpoints.entries()) {
       const res = await this.fetchFn(endpoint, {
         method: 'POST',
         signal,
@@ -161,7 +169,7 @@ export class OpenAIProvider implements LLMProvider {
         `OpenAI Responses compact request failed (${res.status} ${res.statusText}) at ${endpoint}: ${detail}`,
       )
       lastError = err
-      if (res.status === 404) continue
+      if (shouldTryNextOpenAIEndpoint(res.status, index, endpoints)) continue
       throw err
     }
 
@@ -406,24 +414,6 @@ function normalizeFinish(r: string | null): StopReason {
     case 'stop': return 'end_turn'
     default: return 'end_turn'
   }
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl
-    .replace(/\/+$/, '')
-    .replace(/\/(?:chat\/)?completions$/i, '')
-    .replace(/\/responses(?:\/compact)?$/i, '')
-}
-
-function responsesEndpoints(baseUrl: string): string[] {
-  const base = normalizeBaseUrl(baseUrl)
-  return base.endsWith('/v1')
-    ? [`${base}/responses`]
-    : [`${base}/responses`, `${base}/v1/responses`]
-}
-
-function responsesCompactEndpoints(baseUrl: string): string[] {
-  return responsesEndpoints(baseUrl).map(endpoint => `${endpoint}/compact`)
 }
 
 async function safeResponseText(res: Response): Promise<string> {

@@ -3,7 +3,6 @@ import { parse as parseYaml } from 'yaml'
 import path from 'node:path'
 import type { Config, ProviderConfig } from './schema'
 import { ConfigSchema } from './schema'
-import { normalizeConfigProviderIdentities } from './providerIdentity'
 import type { ConfigScope } from './scopeMerge'
 import { SCOPE_ORDER, deepMergeWithLock, extractLocked } from './scopeMerge'
 import { discoverScopes, readScopeConfig, scopePathMap } from './scope'
@@ -187,7 +186,6 @@ export async function loadScopedConfig(opts?: {
 
   // Phase 12 §5.1 — migrate legacy statusBar.hidden segment ids on read.
   applyStatusBarMigration(effective)
-  normalizeConfigProviderIdentities(effective)
 
   return { effective, perScope, locked, sources }
 }
@@ -241,7 +239,6 @@ export async function loadConfig(opts: {
 
   // Phase 12 §5.1 — migrate legacy statusBar.hidden segment ids on read.
   applyStatusBarMigration(merged)
-  normalizeConfigProviderIdentities(merged)
 
   return merged
 }

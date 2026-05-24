@@ -47,7 +47,7 @@ describe('config save', () => {
     expect(txt).toContain('id: p1')
   })
 
-  it('addProvider derives stale custom ids from the configured provider name', async () => {
+  it('addProvider preserves explicit custom ids and configured provider names', async () => {
     const h = home()
     await addProvider(h, {
       id: 'custom',
@@ -59,12 +59,12 @@ describe('config save', () => {
     })
 
     const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
-    expect(txt).toContain('id: xiaomi-mimo')
+    expect(txt).toContain('id: custom')
     expect(txt).toContain('name: Xiaomi Mimo')
-    expect(txt).not.toContain('id: custom')
+    expect(txt).not.toContain('id: xiaomi-mimo')
   })
 
-  it('addProvider updates active selection when normalizing the first custom provider id', async () => {
+  it('addProvider updates active selection with the saved custom id', async () => {
     const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-empty-'))
     mkdirSync(join(h, '.nuka'))
     writeFileSync(join(h, '.nuka', 'config.yaml'), 'providers: []\n')
@@ -78,8 +78,8 @@ describe('config save', () => {
     })
 
     const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
-    expect(txt).toContain('id: deepseek-gateway')
-    expect(txt).toContain('providerId: deepseek-gateway')
-    expect(txt).not.toContain('custom-2')
+    expect(txt).toContain('id: custom-2')
+    expect(txt).toContain('name: DeepSeek Gateway')
+    expect(txt).toContain('providerId: custom-2')
   })
 })

@@ -88,15 +88,6 @@ export function initialState(): WizardState {
   return { kind: 'welcome' }
 }
 
-function providerIdFromName(name: string): string {
-  const id = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return id || 'custom'
-}
-
 export function reducer(state: WizardState, ev: WizardEvent): WizardState {
   // cancel always wins
   if (ev.type === 'cancel') return { kind: 'cancelled' }
@@ -129,7 +120,7 @@ export function reducer(state: WizardState, ev: WizardEvent): WizardState {
         const name = ev.details.name || state.provider.name
         const provider: ProviderTemplate = {
           ...state.provider,
-          id: providerIdFromName(name),
+          id: state.provider.id,
           name,
           type: ev.details.format,
           baseUrl: ev.details.baseUrl,

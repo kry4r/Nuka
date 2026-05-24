@@ -197,7 +197,7 @@ active: { providerId: p2 }
     expect(cfg.providers.map(p => p.name).sort()).toEqual(['Global', 'Project'])
   })
 
-  it('normalizes saved placeholder custom provider ids on load', async () => {
+  it('preserves saved placeholder custom provider ids on load', async () => {
     const home = tmp()
     mkdirSync(join(home, '.nuka'))
     writeFileSync(
@@ -215,12 +215,12 @@ active: { providerId: custom-2 }
 
     const cfg = await loadConfig({ home, cwd: tmp() })
 
-    expect(cfg.providers[0]?.id).toBe('xiaomi-mimo')
+    expect(cfg.providers[0]?.id).toBe('custom-2')
     expect(cfg.providers[0]?.name).toBe('Xiaomi Mimo')
-    expect(cfg.active.providerId).toBe('xiaomi-mimo')
+    expect(cfg.active.providerId).toBe('custom-2')
   })
 
-  it('keeps normalized custom provider ids unique when names collide', async () => {
+  it('preserves multiple saved custom provider ids when names collide', async () => {
     const home = tmp()
     mkdirSync(join(home, '.nuka'))
     writeFileSync(
@@ -242,8 +242,8 @@ active: { providerId: custom-2 }
 
     const cfg = await loadConfig({ home, cwd: tmp() })
 
-    expect(cfg.providers.map(p => p.id)).toEqual(['gateway', 'gateway-2'])
-    expect(cfg.active.providerId).toBe('gateway-2')
+    expect(cfg.providers.map(p => p.id)).toEqual(['custom', 'custom-2'])
+    expect(cfg.active.providerId).toBe('custom-2')
   })
 
 })

@@ -19,6 +19,12 @@ const server = setupServer(
       data: [{ id: 'claude-sonnet-4-6' }, { id: 'claude-opus-4-7' }],
     })
   }),
+  http.get('https://api.openai.example/v1/completions/models', () => {
+    return new HttpResponse('blocked legacy path', { status: 403 })
+  }),
+  http.get('https://api.openai.example/v1/completions/v1/models', () => {
+    return new HttpResponse('wrong legacy fallback', { status: 404 })
+  }),
 )
 
 beforeAll(() => server.listen())
@@ -29,6 +35,15 @@ describe('fetchRemoteModels', () => {
     const models = await fetchRemoteModels({
       format: 'openai',
       baseUrl: 'https://api.openai.example/v1',
+      apiKey: 'sk-x',
+    })
+    expect(models).toEqual(['gpt-5', 'gpt-4o'])
+  })
+
+  it('normalizes legacy OpenAI completions baseUrls before listing models', async () => {
+    const models = await fetchRemoteModels({
+      format: 'openai',
+      baseUrl: 'https://api.openai.example/v1/completions',
       apiKey: 'sk-x',
     })
     expect(models).toEqual(['gpt-5', 'gpt-4o'])

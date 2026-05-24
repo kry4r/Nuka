@@ -3,7 +3,6 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import path from 'node:path'
 import type { ProviderConfig } from './schema'
 import { ConfigSchema } from './schema'
-import { normalizeProviderIdentity } from './providerIdentity'
 
 function globalConfigFile(home: string): string {
   return path.join(home, '.nuka', 'config.yaml')
@@ -95,12 +94,11 @@ export async function saveConfigPatch(
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
-  const normalized = normalizeProviderIdentity(provider)
-  if (list.some(p => p.id === normalized.id)) {
-    throw new Error(`provider id already exists: ${normalized.id}`)
+  if (list.some(p => p.id === provider.id)) {
+    throw new Error(`provider id already exists: ${provider.id}`)
   }
-  list.push(normalized)
+  list.push(provider)
   obj.providers = list
-  if (!obj.active) obj.active = { providerId: normalized.id }
+  if (!obj.active) obj.active = { providerId: provider.id }
   await writeConfig(home, obj)
 }

@@ -1,4 +1,6 @@
 // src/core/provider/remoteModels.ts
+import { openAIModelsEndpoints } from './openaiEndpoints'
+
 const ANTHROPIC_VERSION = '2023-06-01'
 
 export type FetchRemoteModelsOpts = {
@@ -19,7 +21,7 @@ export async function fetchRemoteModels(
   const endpoints =
     opts.format === 'anthropic'
       ? [`${base}/v1/models`, `${base}/models`]
-      : [`${base}/models`, base.endsWith('/v1') ? '' : `${base}/v1/models`].filter(Boolean)
+      : openAIModelsEndpoints(opts.baseUrl)
 
   const headers: Record<string, string> = {
     Accept: 'application/json',

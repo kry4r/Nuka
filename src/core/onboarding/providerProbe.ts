@@ -7,6 +7,10 @@
 // Tests inject `fetchFn` so we never hit the real network.
 
 import type { ProviderTemplate } from './templates'
+import {
+  openAIModelsEndpoints,
+  shouldTryNextOpenAIEndpoint,
+} from '../provider/openaiEndpoints'
 
 export type ProbeOk = { ok: true; models?: string[] }
 export type ProbeErr = { ok: false; reason: string }
@@ -42,25 +46,32 @@ export async function probeProvider(
   const fetch = fetchFn ?? defaultFetch()
   try {
     if (t.type === 'openai') {
-      const res = await fetch(`${t.baseUrl.replace(/\/$/, '')}/models`, {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${key}` },
-      })
-      if (!res.ok) {
-        return { ok: false, reason: `${res.status} ${res.statusText ?? ''}`.trim() }
+      const endpoints = openAIModelsEndpoints(t.baseUrl)
+      let lastReason = ''
+      for (const [index, endpoint] of endpoints.entries()) {
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${key}` },
+        })
+        if (!res.ok) {
+          lastReason = `${res.status} ${res.statusText ?? ''}`.trim()
+          if (shouldTryNextOpenAIEndpoint(res.status, index, endpoints)) continue
+          return { ok: false, reason: lastReason }
+        }
+        let body: any
+        try {
+          body = await res.json()
+        } catch {
+          return { ok: true }
+        }
+        const ids: string[] = Array.isArray(body?.data)
+          ? body.data
+              .map((m: any) => (typeof m?.id === 'string' ? m.id : null))
+              .filter((s: string | null): s is string => s !== null)
+          : []
+        return ids.length > 0 ? { ok: true, models: ids } : { ok: true }
       }
-      let body: any
-      try {
-        body = await res.json()
-      } catch {
-        return { ok: true }
-      }
-      const ids: string[] = Array.isArray(body?.data)
-        ? body.data
-            .map((m: any) => (typeof m?.id === 'string' ? m.id : null))
-            .filter((s: string | null): s is string => s !== null)
-        : []
-      return ids.length > 0 ? { ok: true, models: ids } : { ok: true }
+      return { ok: false, reason: lastReason || 'no OpenAI model endpoints tried' }
     }
 
     if (t.type === 'anthropic') {

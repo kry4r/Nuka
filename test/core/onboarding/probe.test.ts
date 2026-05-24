@@ -48,6 +48,32 @@ describe('PROVIDER_TEMPLATES', () => {
 })
 
 describe('probeProvider — openai', () => {
+  it('normalizes legacy completions baseUrls before probing models', async () => {
+    const urls: string[] = []
+    const fetchFn: FetchLike = async (input) => {
+      urls.push(input)
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ data: [{ id: 'mimo-v2-pro' }] }),
+        text: async () => '',
+      }
+    }
+
+    const r = await probeProvider({
+      ...OPENAI,
+      id: 'custom',
+      name: 'Xiaomi Mimo',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1/completions',
+      defaultModel: 'mimo-v2-pro',
+      defaultModels: ['mimo-v2-pro'],
+    }, 'sk-custom', fetchFn)
+
+    expect(urls).toEqual(['https://token-plan-cn.xiaomimimo.com/v1/models'])
+    expect(r).toEqual({ ok: true, models: ['mimo-v2-pro'] })
+  })
+
   it('401 → ok:false', async () => {
     const r = await probeProvider(OPENAI, 'sk-bad', mockFetch({ ok: false, status: 401, statusText: 'Unauthorized' }))
     expect(r.ok).toBe(false)

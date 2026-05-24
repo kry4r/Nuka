@@ -267,6 +267,43 @@ describe('OpenAIProvider.translate', () => {
     ])
   })
 
+  it('falls back to /v1/responses when a bare custom endpoint blocks /responses', async () => {
+    const urls: string[] = []
+    const fetchFn: typeof fetch = async (url) => {
+      urls.push(String(url))
+      if (urls.length === 1) {
+        return new Response('blocked', { status: 403, statusText: 'Forbidden' })
+      }
+      return new Response('data: [DONE]\n\n', { status: 200 })
+    }
+    const provider = new OpenAIProvider({
+      id: 'custom',
+      apiKey: 'sk-test',
+      baseUrl: 'https://ai.example.test',
+      fetchFn,
+    })
+
+    const out: ProviderEvent[] = []
+    for await (const ev of provider.stream({
+      model: 'mimo-v2-pro',
+      system: '',
+      messages: [],
+      tools: [],
+    }, new AbortController().signal)) {
+      out.push(ev)
+    }
+
+    expect(urls).toEqual([
+      'https://ai.example.test/responses',
+      'https://ai.example.test/v1/responses',
+    ])
+    expect(out.at(-1)).toEqual({
+      type: 'message_stop',
+      stopReason: 'end_turn',
+      usage: { inputTokens: 0, outputTokens: 0 },
+    })
+  })
+
   it('normalizes legacy completions baseUrls to the Responses endpoint', async () => {
     const urls: string[] = []
     const fetchFn: typeof fetch = async (url) => {
@@ -367,6 +404,38 @@ describe('OpenAIProvider.translate', () => {
 
     const result = await provider.compact({
       model: 'gpt-5.5',
+      system: '',
+      messages: [],
+      tools: [],
+    }, new AbortController().signal)
+
+    expect(urls).toEqual([
+      'https://ai.example.test/responses/compact',
+      'https://ai.example.test/v1/responses/compact',
+    ])
+    expect(result.output).toEqual([{ type: 'compaction', encrypted_content: 'encrypted' }])
+  })
+
+  it('falls back to /v1/responses/compact when a bare custom endpoint blocks /responses/compact', async () => {
+    const urls: string[] = []
+    const fetchFn: typeof fetch = async (url) => {
+      urls.push(String(url))
+      if (urls.length === 1) {
+        return new Response('blocked', { status: 403, statusText: 'Forbidden' })
+      }
+      return new Response(JSON.stringify({
+        output: [{ type: 'compaction', encrypted_content: 'encrypted' }],
+      }), { status: 200 })
+    }
+    const provider = new OpenAIProvider({
+      id: 'custom',
+      apiKey: 'sk-test',
+      baseUrl: 'https://ai.example.test',
+      fetchFn,
+    })
+
+    const result = await provider.compact({
+      model: 'mimo-v2-pro',
       system: '',
       messages: [],
       tools: [],
