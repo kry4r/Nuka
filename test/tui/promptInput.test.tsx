@@ -21,6 +21,12 @@ describe('PromptInput', () => {
     expect(promptNavigationAction('', { shift: true, downArrow: true })).toBe('page-down')
   })
 
+  it('recognizes SGR mouse wheel scroll escape sequences', () => {
+    expect(promptNavigationAction('\u001B[<64;10;12M', {})).toBe('page-up')
+    expect(promptNavigationAction('[<64;10;12M', {})).toBe('page-up')
+    expect(promptNavigationAction('\u001B[<65;10;12M', {})).toBe('page-down')
+  })
+
   it('renders the prompt marker and initial value', () => {
     const { lastFrame } = render(
       <PromptInput value="hello" onChange={() => {}} onSubmit={() => {}} disabled={false} />,

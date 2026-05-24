@@ -67,6 +67,17 @@ export function promptNavigationAction(
   key: Record<string, unknown>,
 ): PromptNavigationAction | null {
   const csi = input.startsWith('\u001B') ? input.slice(1) : input
+  const sgrMouse = /^\[<(\d+);\d+;\d+M$/.exec(csi)
+  if (sgrMouse) {
+    const button = Number(sgrMouse[1])
+    // SGR mouse wheel events use bit 64, with the low two bits carrying
+    // direction. Modifier bits may be mixed into the button code.
+    if ((button & 64) !== 0) {
+      const direction = button & 3
+      if (direction === 0) return 'page-up'
+      if (direction === 1) return 'page-down'
+    }
+  }
   if (
     key.pageUp === true
     || /^\[5(?:;\d+)?~$/.test(csi)
