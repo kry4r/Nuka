@@ -48,7 +48,7 @@ describe('config save', () => {
     expect(txt).toContain('id: p1')
   })
 
-  it('addProvider preserves explicit custom ids and configured provider names', async () => {
+  it('addProvider normalizes placeholder custom ids to the configured provider name', async () => {
     const h = home()
     await addProvider(h, {
       id: 'custom',
@@ -60,9 +60,9 @@ describe('config save', () => {
     })
 
     const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
-    expect(txt).toContain('id: custom')
+    expect(txt).toContain('id: xiaomi-mimo')
     expect(txt).toContain('name: Xiaomi Mimo')
-    expect(txt).not.toContain('id: xiaomi-mimo')
+    expect(txt).not.toContain('id: custom')
   })
 
   it('saveWizardPatch persists custom providers with name-derived ids', async () => {
@@ -88,7 +88,7 @@ describe('config save', () => {
     expect(txt).not.toContain('id: custom-2')
   })
 
-  it('addProvider updates active selection with the saved custom id', async () => {
+  it('addProvider updates active selection with the normalized custom id', async () => {
     const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-empty-'))
     mkdirSync(join(h, '.nuka'))
     writeFileSync(join(h, '.nuka', 'config.yaml'), 'providers: []\n')
@@ -102,8 +102,27 @@ describe('config save', () => {
     })
 
     const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
-    expect(txt).toContain('id: custom-2')
+    expect(txt).toContain('id: deepseek-gateway')
     expect(txt).toContain('name: DeepSeek Gateway')
-    expect(txt).toContain('providerId: custom-2')
+    expect(txt).toContain('providerId: deepseek-gateway')
+  })
+
+  it('addProvider rejects placeholder custom ids when their normalized name collides', async () => {
+    const h = home()
+    await addProvider(h, {
+      id: 'xiaomi-mimo',
+      name: 'Xiaomi Mimo',
+      format: 'openai',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      models: ['mimo-v2-pro'],
+    })
+
+    await expect(addProvider(h, {
+      id: 'custom-2',
+      name: 'Xiaomi Mimo',
+      format: 'openai',
+      baseUrl: 'https://other.example.test/v1',
+      models: ['mimo-v2-pro'],
+    })).rejects.toThrow('provider id already exists: xiaomi-mimo')
   })
 })

@@ -3,6 +3,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import path from 'node:path'
 import type { ProviderConfig } from './schema'
 import { ConfigSchema } from './schema'
+import { slugify } from '../slug'
 
 function globalConfigFile(home: string): string {
   return path.join(home, '.nuka', 'config.yaml')
@@ -22,6 +23,21 @@ async function writeConfig(home: string, obj: unknown): Promise<void> {
   await mkdir(path.join(home, '.nuka'), { recursive: true })
   ConfigSchema.parse(obj) // validate before writing
   await writeFile(globalConfigFile(home), stringifyYaml(obj), { encoding: 'utf8', mode: 0o600 })
+}
+
+function isPlaceholderCustomProviderId(id: string): boolean {
+  return /^custom(?:-\d+)?$/.test(id)
+}
+
+function providerIdFromName(name: string): string {
+  return slugify(name, { maxLength: 64 }) || 'custom'
+}
+
+function normalizeProviderIdOnSave(provider: ProviderConfig): ProviderConfig {
+  if (!isPlaceholderCustomProviderId(provider.id)) return provider
+  const normalized = providerIdFromName(provider.name)
+  if (normalized === provider.id) return provider
+  return { ...provider, id: normalized }
 }
 
 export async function saveActiveSelection(home: string, providerId: string): Promise<void> {
@@ -94,11 +110,12 @@ export async function saveConfigPatch(
 export async function addProvider(home: string, provider: ProviderConfig): Promise<void> {
   const obj = await readConfig(home)
   const list: any[] = Array.isArray(obj.providers) ? obj.providers : []
-  if (list.some(p => p.id === provider.id)) {
-    throw new Error(`provider id already exists: ${provider.id}`)
+  const savedProvider = normalizeProviderIdOnSave(provider)
+  if (list.some(p => p.id === savedProvider.id)) {
+    throw new Error(`provider id already exists: ${savedProvider.id}`)
   }
-  list.push(provider)
+  list.push(savedProvider)
   obj.providers = list
-  if (!obj.active) obj.active = { providerId: provider.id }
+  if (!obj.active) obj.active = { providerId: savedProvider.id }
   await writeConfig(home, obj)
 }
