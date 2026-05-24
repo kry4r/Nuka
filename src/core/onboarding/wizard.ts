@@ -13,6 +13,7 @@
 
 import type { ProviderTemplate } from './templates'
 import { PROVIDER_TEMPLATES } from './templates'
+import { slugify } from '../slug'
 
 export type ConfigPatch = {
   providerId: string
@@ -41,6 +42,10 @@ export type CustomDetails = {
   format: 'anthropic' | 'openai'
   baseUrl: string
   model: string
+}
+
+function providerIdFromCustomName(name: string): string {
+  return slugify(name, { maxLength: 64 }) || 'custom'
 }
 
 export type WizardState =
@@ -120,7 +125,7 @@ export function reducer(state: WizardState, ev: WizardEvent): WizardState {
         const name = ev.details.name || state.provider.name
         const provider: ProviderTemplate = {
           ...state.provider,
-          id: state.provider.id,
+          id: providerIdFromCustomName(name),
           name,
           type: ev.details.format,
           baseUrl: ev.details.baseUrl,

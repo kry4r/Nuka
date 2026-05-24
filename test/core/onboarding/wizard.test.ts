@@ -65,7 +65,7 @@ describe('onboarding wizard reducer', () => {
     }
   })
 
-  it('custom provider preserves the custom provider id and stores display name separately', () => {
+  it('custom provider derives a readable provider id from the configured name', () => {
     const picked = reducer(
       { kind: 'pickProvider', choices: [] },
       { type: 'pickedProvider', template: CUSTOM },
@@ -92,7 +92,7 @@ describe('onboarding wizard reducer', () => {
     const done = reducer(verifying, { type: 'probeOk' })
     expect(done.kind).toBe('done')
     if (done.kind === 'done') {
-      expect(done.config.providerId).toBe('custom')
+      expect(done.config.providerId).toBe('xiaomi-mimo')
       expect(done.config.name).toBe('Xiaomi Mimo')
     }
   })

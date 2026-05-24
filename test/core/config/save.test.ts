@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
 import { saveActiveSelection, saveProviderSelectedModel, addProvider } from '../../../src/core/config/save'
+import { saveWizardPatch } from '../../../src/core/onboarding/save'
 
 function home(): string {
   const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-'))
@@ -62,6 +63,29 @@ describe('config save', () => {
     expect(txt).toContain('id: custom')
     expect(txt).toContain('name: Xiaomi Mimo')
     expect(txt).not.toContain('id: xiaomi-mimo')
+  })
+
+  it('saveWizardPatch persists custom providers with name-derived ids', async () => {
+    const h = mkdtempSync(join(os.tmpdir(), 'nuka-save-empty-'))
+    mkdirSync(join(h, '.nuka'))
+    writeFileSync(join(h, '.nuka', 'config.yaml'), 'providers: []\n')
+
+    await saveWizardPatch(h, {
+      providerId: 'xiaomi-mimo',
+      name: 'Xiaomi Mimo',
+      format: 'openai',
+      baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+      apiKey: 'sk-custom',
+      models: ['mimo-v2-pro'],
+      selectedModel: 'mimo-v2-pro',
+    })
+
+    const txt = readFileSync(join(h, '.nuka', 'config.yaml'), 'utf8')
+    expect(txt).toContain('id: xiaomi-mimo')
+    expect(txt).toContain('name: Xiaomi Mimo')
+    expect(txt).toContain('providerId: xiaomi-mimo')
+    expect(txt).not.toContain('id: custom')
+    expect(txt).not.toContain('id: custom-2')
   })
 
   it('addProvider updates active selection with the saved custom id', async () => {
