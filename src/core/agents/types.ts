@@ -2,6 +2,25 @@
 import { z } from 'zod'
 import type { Effort } from '../provider/types'
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue }
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number().finite(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+)
+
 /**
  * Manifest-declared agent definition.
  * Exactly one of `systemPrompt` or `systemPromptPath` must be supplied.
@@ -28,6 +47,9 @@ export const AgentDefSchema = z
     initialPrompt: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
     skills: z.array(z.string().min(1)).optional(),
+    requiredMcpServers: z.array(z.string().min(1)).optional(),
+    mcpServers: z.array(JsonValueSchema).optional(),
+    hooks: JsonValueSchema.optional(),
   })
   .refine(
     d => (d.systemPrompt !== undefined) !== (d.systemPromptPath !== undefined),

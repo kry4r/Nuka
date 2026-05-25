@@ -68,6 +68,39 @@ describe('makeDispatchAgentTool', () => {
     expect(tool.description).toContain('runs tests')
   })
 
+  it('description hides agents whose required MCP servers are unavailable', () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'plain', 'available without MCP'))
+    agents.register(mkAgent('core', 'github-reviewer', 'reviews GitHub issues', {
+      requiredMcpServers: ['github'],
+    }))
+    agents.register(mkAgent('core', 'linear-reviewer', 'reviews Linear issues', {
+      requiredMcpServers: ['linear'],
+    }))
+    const tool = makeDispatchAgentTool({
+      ...makeDeps(agents),
+      availableMcpServers: () => ['project-github'],
+    })
+
+    expect(tool.description).toContain('core:plain')
+    expect(tool.description).toContain('core:github-reviewer')
+    expect(tool.description).not.toContain('core:linear-reviewer')
+  })
+
+  it('keeps required-MCP agents visible when no availability callback is supplied', () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'github-reviewer', 'reviews GitHub issues', {
+      requiredMcpServers: ['github'],
+    }))
+    agents.register(mkAgent('core', 'linear-reviewer', 'reviews Linear issues', {
+      requiredMcpServers: ['linear'],
+    }))
+    const tool = makeDispatchAgentTool(makeDeps(agents))
+
+    expect(tool.description).toContain('core:github-reviewer')
+    expect(tool.description).toContain('core:linear-reviewer')
+  })
+
   it('description handles the empty-registry case gracefully', () => {
     const tool = makeDispatchAgentTool(makeDeps(new AgentRegistry()))
     expect(tool.description).toMatch(/No specialist agents/)
@@ -116,6 +149,27 @@ describe('makeDispatchAgentTool', () => {
     expect(result.isError).toBe(true)
     expect(result.output as string).toMatch(/Unknown agent/)
     expect(result.output as string).toMatch(/core:reviewer/)
+  })
+
+  it('rejects an agent hidden by required MCP server filtering', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'linear-reviewer', 'reviews Linear issues', {
+      requiredMcpServers: ['linear'],
+    }))
+    const tool = makeDispatchAgentTool({
+      ...makeDeps(agents),
+      availableMcpServers: () => ['github'],
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      { agent: 'core:linear-reviewer', task: 'review issue' },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain("Unavailable agent 'core:linear-reviewer'")
+    expect(result.output as string).toContain('requires MCP servers: linear')
   })
 
   it('recursion guard: refuses when ctx.session.allowedAgentDispatch === false', async () => {

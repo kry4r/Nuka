@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { AgentRegistry } from '../../../src/core/agents/registry'
+import {
+  AgentRegistry,
+  inferAvailableMcpServersFromToolNames,
+} from '../../../src/core/agents/registry'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
 
 function make(pluginName: string, name: string, extra: Partial<ResolvedAgentDef> = {}): ResolvedAgentDef {
@@ -54,5 +57,33 @@ describe('AgentRegistry', () => {
     expect(reg.list()).toHaveLength(2)
     expect(reg.find('core:reviewer')).toBeDefined()
     expect(reg.find('extra:reviewer')).toBeDefined()
+  })
+
+  it('filters agents by required MCP server availability', () => {
+    const reg = new AgentRegistry()
+    reg.register(make('core', 'plain'))
+    reg.register(make('core', 'github-reviewer', {
+      requiredMcpServers: ['github'],
+    }))
+    reg.register(make('core', 'linear-reviewer', {
+      requiredMcpServers: ['linear'],
+    }))
+
+    expect(reg.listAvailable(['project-github-server']).map(a => a.name).sort()).toEqual([
+      'core:github-reviewer',
+      'core:plain',
+    ])
+    expect(reg.findAvailable('core:github-reviewer', ['GitHub'])).toBeDefined()
+    expect(reg.findAvailable('core:linear-reviewer', ['github'])).toBeUndefined()
+  })
+
+  it('infers MCP server names from mcp__server__tool names', () => {
+    expect(inferAvailableMcpServersFromToolNames([
+      'Read',
+      'mcp__github__search_issues',
+      'mcp__claude_in_chrome__tabs_context_mcp',
+      'mcp__github__create_issue',
+      'mcp__broken',
+    ])).toEqual(['github', 'claude_in_chrome'])
   })
 })

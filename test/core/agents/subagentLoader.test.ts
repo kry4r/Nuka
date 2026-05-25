@@ -274,6 +274,49 @@ describe('loadSubagentFile — happy path', () => {
     expect(def.skills).toEqual(['test-first', 'review'])
   })
 
+  it('loads Nuka-Code MCP and hooks runtime frontmatter metadata', async () => {
+    const filePath = join(dir, 'mcp-aware.md')
+    await writeFile(
+      filePath,
+      [
+        '---',
+        'name: mcp-aware',
+        'description: uses repo MCP tools when available',
+        'requiredMcpServers: github, filesystem',
+        'mcpServers:',
+        '  - github',
+        '  - localfs:',
+        '      command: nuka-mcp-filesystem',
+        '      args:',
+        '        - .',
+        'hooks:',
+        '  SubagentStart:',
+        '    - command: echo starting',
+        '---',
+        '',
+        'You use MCP context when available.',
+      ].join('\n'),
+      'utf8',
+    )
+
+    const def = await loadSubagentFile(filePath)
+    expect(def.requiredMcpServers).toEqual(['github', 'filesystem'])
+    expect(def.mcpServers).toEqual([
+      'github',
+      {
+        localfs: {
+          command: 'nuka-mcp-filesystem',
+          args: ['.'],
+        },
+      },
+    ])
+    expect(def.hooks).toEqual({
+      SubagentStart: [
+        { command: 'echo starting' },
+      ],
+    })
+  })
+
   it('unescapes Nuka-Code markdown description newlines', async () => {
     const filePath = join(dir, 'multiline-description.md')
     await writeFile(
@@ -722,6 +765,9 @@ describe('subagentToAgentDef', () => {
       initialPrompt: 'Read AGENTS.md first.',
       effort: 'high',
       skills: ['test-first'],
+      requiredMcpServers: ['github'],
+      mcpServers: ['github'],
+      hooks: { SubagentStart: [{ command: 'echo start' }] },
       keywords: ['implement'],
       sourcePath: '/tmp/worker.md',
     })
@@ -743,6 +789,9 @@ describe('subagentToAgentDef', () => {
       initialPrompt: 'Read AGENTS.md first.',
       effort: 'high',
       skills: ['test-first'],
+      requiredMcpServers: ['github'],
+      mcpServers: ['github'],
+      hooks: { SubagentStart: [{ command: 'echo start' }] },
       keywords: ['implement'],
     })
   })

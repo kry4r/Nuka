@@ -23,7 +23,7 @@ import { extname, join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { addAgentMemoryTools, type AgentMemoryScope } from './agentMemory'
-import type { AgentDef } from './types'
+import { JsonValueSchema, type AgentDef, type JsonValue } from './types'
 import type { Effort } from '../provider/types'
 
 /**
@@ -68,6 +68,12 @@ export interface SubagentDefinition {
   effort?: Effort
   /** Optional skill names to preload into the sub-agent session. */
   skills?: string[]
+  /** Required MCP server name patterns for this agent to be available. */
+  requiredMcpServers?: string[]
+  /** Declarative MCP server metadata preserved for future runtime support. */
+  mcpServers?: JsonValue[]
+  /** Declarative hook metadata preserved for future runtime support. */
+  hooks?: JsonValue
   /** Keywords surfaced in palette / dispatch hints. */
   keywords?: string[]
   /** Absolute path to the source file (for error messages / debugging). */
@@ -109,6 +115,9 @@ const SubagentFileSchema = z
     initialPrompt: z.string().min(1).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
     skills: z.array(z.string().min(1)).optional(),
+    requiredMcpServers: z.array(z.string().min(1)).optional(),
+    mcpServers: z.array(JsonValueSchema).optional(),
+    hooks: JsonValueSchema.optional(),
     keywords: z.array(z.string()).optional(),
   })
   .strict()
@@ -176,6 +185,9 @@ function assembleDefinition(
   if (parsed.initialPrompt !== undefined) def.initialPrompt = parsed.initialPrompt
   if (parsed.effort !== undefined) def.effort = parsed.effort
   if (parsed.skills !== undefined) def.skills = parsed.skills
+  if (parsed.requiredMcpServers !== undefined) def.requiredMcpServers = parsed.requiredMcpServers
+  if (parsed.mcpServers !== undefined) def.mcpServers = parsed.mcpServers
+  if (parsed.hooks !== undefined) def.hooks = parsed.hooks
   if (parsed.keywords !== undefined) def.keywords = parsed.keywords
   return def
 }
@@ -243,6 +255,9 @@ function parseMarkdownAgent(content: string): unknown {
     initialPrompt: parsed.frontmatter['initialPrompt'],
     effort: parsed.frontmatter['effort'],
     skills: normalizeStringList(parsed.frontmatter['skills']),
+    requiredMcpServers: normalizeStringList(parsed.frontmatter['requiredMcpServers']),
+    mcpServers: normalizeUnknownList(parsed.frontmatter['mcpServers']),
+    hooks: parsed.frontmatter['hooks'],
   }
 }
 
@@ -268,6 +283,9 @@ export function subagentToAgentDef(sub: SubagentDefinition): AgentDef {
     ...(sub.initialPrompt !== undefined ? { initialPrompt: sub.initialPrompt } : {}),
     ...(sub.effort !== undefined ? { effort: sub.effort } : {}),
     ...(sub.skills !== undefined ? { skills: sub.skills } : {}),
+    ...(sub.requiredMcpServers !== undefined ? { requiredMcpServers: sub.requiredMcpServers } : {}),
+    ...(sub.mcpServers !== undefined ? { mcpServers: sub.mcpServers } : {}),
+    ...(sub.hooks !== undefined ? { hooks: sub.hooks } : {}),
     ...(sub.keywords !== undefined ? { keywords: sub.keywords } : {}),
   }
 }
@@ -325,6 +343,12 @@ function normalizeStringList(value: unknown): string[] | undefined {
     }
   }
   return out
+}
+
+function normalizeUnknownList(value: unknown): unknown[] | undefined {
+  if (value === undefined) return undefined
+  if (value === null || value === '') return []
+  return Array.isArray(value) ? value : [value]
 }
 
 function normalizeFrontmatterBoolean(value: unknown): unknown {

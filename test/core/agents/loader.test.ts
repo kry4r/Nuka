@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { resolveAgentDef } from '../../../src/core/agents/loader'
+import { AgentDefSchema } from '../../../src/core/agents/types'
 
 function mkPlugin(): string {
   const dir = mkdtempSync(join(tmpdir(), 'nuka-agent-loader-'))
@@ -62,6 +63,46 @@ describe('resolveAgentDef', () => {
     )
 
     expect(resolved.allowedTools).toEqual(['Grep', 'Read', 'Write', 'Edit'])
+  })
+
+  it('preserves plugin agent MCP and hook runtime metadata', async () => {
+    const dir = mkPlugin()
+    const resolved = await resolveAgentDef(
+      {
+        name: 'mcp-reviewer',
+        description: 'reviews with MCP context',
+        systemPrompt: 'Review with context.',
+        maxTurns: 20,
+        requiredMcpServers: ['github'],
+        mcpServers: ['github', { localfs: { command: 'nuka-mcp-filesystem' } }],
+        hooks: { SubagentStart: [{ command: 'echo start' }] },
+      },
+      dir,
+      'demo',
+    )
+
+    expect(resolved.requiredMcpServers).toEqual(['github'])
+    expect(resolved.mcpServers).toEqual(['github', { localfs: { command: 'nuka-mcp-filesystem' } }])
+    expect(resolved.hooks).toEqual({ SubagentStart: [{ command: 'echo start' }] })
+  })
+
+  it('rejects plugin agent MCP and hook metadata that is not JSON-serializable', () => {
+    expect(() => AgentDefSchema.parse({
+      name: 'bad-hook-agent',
+      description: 'declares non-serializable hook metadata',
+      systemPrompt: 'Review with context.',
+      maxTurns: 20,
+      requiredMcpServers: ['github'],
+      mcpServers: [{ local: { command: undefined } }],
+    })).toThrow(/mcpServers/)
+
+    expect(() => AgentDefSchema.parse({
+      name: 'bad-hook-agent',
+      description: 'declares non-serializable hook metadata',
+      systemPrompt: 'Review with context.',
+      maxTurns: 20,
+      hooks: { SubagentStart: [() => undefined] },
+    })).toThrow(/hooks/)
   })
 
   it('throws a descriptive error when systemPromptPath is missing', async () => {

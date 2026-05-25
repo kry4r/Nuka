@@ -62,8 +62,13 @@ export function makeSpawnAgentTool(deps: {
     providerId: string,
     model: string,
   ) => Effort | undefined
+  /** Available MCP server names used to hide agents with unmet requirements. */
+  availableMcpServers?: () => readonly string[]
 }): Tool<SpawnAgentInput> {
-  const listed = deps.agents.list()
+  const visibleMcpServers = deps.availableMcpServers?.()
+  const listed = visibleMcpServers
+    ? deps.agents.listAvailable(visibleMcpServers)
+    : deps.agents.list()
   const summary = listed.length === 0
     ? 'No specialist agents are currently registered.'
     : listed.map(a => `${a.name} — ${a.description}`).join('; ')
@@ -144,9 +149,24 @@ export function makeSpawnAgentTool(deps: {
         }
       }
 
-      const resolved = deps.agents.find(input.agent)
+      const availableMcpServers = deps.availableMcpServers?.()
+      const resolved = availableMcpServers
+        ? deps.agents.findAvailable(input.agent, availableMcpServers)
+        : deps.agents.find(input.agent)
       if (!resolved) {
-        const available = deps.agents.list().map(a => a.name).join(', ') || '(none)'
+        const unavailable = deps.agents.find(input.agent)
+        if (availableMcpServers && unavailable && unavailable.requiredMcpServers?.length) {
+          return {
+            output:
+              `Unavailable agent '${input.agent}' requires MCP servers: ` +
+              unavailable.requiredMcpServers.join(', '),
+            isError: true,
+          }
+        }
+        const availableList = availableMcpServers
+          ? deps.agents.listAvailable(availableMcpServers).map(a => a.name)
+          : deps.agents.list().map(a => a.name)
+        const available = availableList.join(', ') || '(none)'
         return {
           output: `Unknown agent '${input.agent}'. Available: ${available}`,
           isError: true,

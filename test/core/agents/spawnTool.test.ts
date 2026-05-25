@@ -144,6 +144,41 @@ describe('makeSpawnAgentTool', () => {
     expect(JSON.stringify(tool.parameters)).not.toContain('Currently returns a clear unsupported error')
   })
 
+  it('description hides agents whose required MCP servers are unavailable', () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'plain', 'available without MCP'))
+    agents.register(mkAgent('core', 'github-worker', 'works with GitHub context', {
+      requiredMcpServers: ['github'],
+    }))
+    agents.register(mkAgent('core', 'linear-worker', 'works with Linear context', {
+      requiredMcpServers: ['linear'],
+    }))
+    const { deps } = makeDeps(agents)
+    const tool = makeSpawnAgentTool({
+      ...deps,
+      availableMcpServers: () => ['project-github'],
+    })
+
+    expect(tool.description).toContain('core:plain')
+    expect(tool.description).toContain('core:github-worker')
+    expect(tool.description).not.toContain('core:linear-worker')
+  })
+
+  it('keeps required-MCP agents visible when no availability callback is supplied', () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'github-worker', 'works with GitHub context', {
+      requiredMcpServers: ['github'],
+    }))
+    agents.register(mkAgent('core', 'linear-worker', 'works with Linear context', {
+      requiredMcpServers: ['linear'],
+    }))
+    const { deps } = makeDeps(agents)
+    const tool = makeSpawnAgentTool(deps)
+
+    expect(tool.description).toContain('core:github-worker')
+    expect(tool.description).toContain('core:linear-worker')
+  })
+
   it('enqueues a local_agent task and returns stable lookup ids', async () => {
     const agents = new AgentRegistry()
     agents.register(mkAgent('core', 'reviewer', 'reviews code'))
@@ -209,6 +244,29 @@ describe('makeSpawnAgentTool', () => {
 
     expect(result.isError).toBe(true)
     expect(result.output as string).toContain("Unknown agent 'missing:one'")
+    expect(tasks.specs).toHaveLength(0)
+  })
+
+  it('rejects an agent hidden by required MCP server filtering without enqueueing', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'linear-worker', 'works with Linear context', {
+      requiredMcpServers: ['linear'],
+    }))
+    const { deps, tasks } = makeDeps(agents)
+    const tool = makeSpawnAgentTool({
+      ...deps,
+      availableMcpServers: () => ['github'],
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      { agent: 'core:linear-worker', task: 'review issue' },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain("Unavailable agent 'core:linear-worker'")
+    expect(result.output as string).toContain('requires MCP servers: linear')
     expect(tasks.specs).toHaveLength(0)
   })
 

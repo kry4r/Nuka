@@ -117,7 +117,7 @@ import { loadPlugins } from './core/plugin/loader'
 import { wirePlugin } from './core/plugin/wire'
 import { readManifestFrom, installPluginFromPath } from './core/plugin/install'
 import { readUserConfig, writeUserConfig } from './core/plugin/userConfig'
-import { AgentRegistry } from './core/agents/registry'
+import { AgentRegistry, inferAvailableMcpServersFromToolNames } from './core/agents/registry'
 import { makeDispatchAgentTool } from './core/agents/dispatchTool'
 import { makeSpawnAgentTool } from './core/agents/spawnTool'
 import { makeCloseAgentTool, makeResumeAgentTool, makeSendAgentTool, makeSendInputTool, makeWaitAgentTool } from './core/agents/agentLifecycleTools'
@@ -1142,6 +1142,9 @@ async function runInteractive(): Promise<void> {
     }
   }
 
+  const availableMcpServers = () =>
+    inferAvailableMcpServersFromToolNames(tools.list().map(tool => tool.name))
+
   // Register the dispatch_agent tool after all plugins have wired their agents
   // (so the tool's description enumerates every <plugin>:<agent> pair).
   // Iter RRR: thread the hookRegistry through so sub-agents fire their own
@@ -1161,6 +1164,7 @@ async function runInteractive(): Promise<void> {
       // `NUKA_OUTPUT_STYLE` setting steers both contexts consistently.
       outputStyle: resolveActiveOutputStyleNow,
       skills,
+      availableMcpServers,
       resolveEffort: (effort, providerId, model) => {
         const providerConfig = providers.getProviderConfig(providerId)
         return resolveEffortForModel(effort, providerConfig, model)
@@ -1178,6 +1182,7 @@ async function runInteractive(): Promise<void> {
       worktreeStore: getWorktreeStore(),
       outputStyle: resolveActiveOutputStyleNow,
       skills,
+      availableMcpServers,
       resolveEffort: (effort, providerId, model) => {
         const providerConfig = providers.getProviderConfig(providerId)
         return resolveEffortForModel(effort, providerConfig, model)
