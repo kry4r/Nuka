@@ -124,6 +124,19 @@ function progressBar(used: number, max: number): string {
   return '█'.repeat(filled) + '░'.repeat(10 - filled)
 }
 
+function formatProviderModel(provider: string, model: string, maxColumns: number, effort?: string): string {
+  const suffix = effort ? ` ${effort}` : ''
+  const separator = ' · '
+  const suffixWidth = stringWidth(separator) + stringWidth(suffix)
+  const contentBudget = Math.max(12, maxColumns - suffixWidth)
+  const modelBudget = Math.min(
+    Math.max(10, Math.floor(contentBudget * 0.48)),
+    Math.max(10, contentBudget - 8),
+  )
+  const providerBudget = Math.max(8, contentBudget - modelBudget)
+  return `${truncateByWidth(provider, providerBudget)}${separator}${truncateByWidth(model, modelBudget)}${suffix}`
+}
+
 function backgroundCount(tm?: TaskManager): number {
   if (!tm) return 0
   return tm.list().filter(t => t.state === 'running' || t.state === 'pending').length
@@ -279,22 +292,6 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     : null
   const cwdBudget = contentColumns < 60 ? Math.max(16, Math.floor(contentColumns * 0.42)) : 42
   const providerLabel = (props.providerName?.trim() || props.providerId || '—').trim()
-  const modelLabel = truncateByWidth(props.model, Math.max(12, Math.floor(contentColumns * 0.22)))
-  const providerBudget = Math.max(16, Math.floor(contentColumns * 0.28))
-  const compactProviderBudget = Math.max(12, Math.floor(contentColumns * 0.22))
-  const providerModelBudget = Math.max(providerBudget + stringWidth(modelLabel) + 1, Math.floor(contentColumns * 0.48))
-  const providerModelFull = truncateByWidth(
-    `${truncateByWidth(providerLabel, providerBudget)}/${modelLabel}`,
-    providerModelBudget,
-  )
-  const providerModelCompact = truncateByWidth(
-    `${truncateByWidth(providerLabel, compactProviderBudget)}/${truncateByWidth(props.model, Math.max(10, Math.floor(contentColumns * 0.18)))}`,
-    Math.max(18, Math.floor(contentColumns * 0.42)),
-  )
-  const providerModelMinimal = truncateByWidth(
-    `${truncateByWidth(providerLabel, Math.max(10, Math.floor(contentColumns * 0.18)))}/${truncateByWidth(props.model, Math.max(12, Math.floor(contentColumns * 0.18)))}`,
-    Math.max(18, Math.floor(contentColumns * 0.4)),
-  )
 
   // Also accept 'cost-time' in hidden set for backward compat (maps to 'cost').
   const effectiveHidden = new Set<string>()
@@ -353,19 +350,18 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     `∴ context: ${Math.floor(ctxPct * 100)}%`,
     contextPressure,
   ].filter((x): x is string => x !== null).join(' ')
-  const parts: StatusPart[] = []
+  const envParts: StatusPart[] = []
+  const detailParts: StatusPart[] = []
 
   const modeText = modeBadge(props.mode, iconMode)
-  if (has('mode') && props.mode !== 'idle') parts.push({ id: 'mode', text: modeText, compactText: modeText, minimalText: modeText, color: accent })
-  if (has('plan') && props.planMode) parts.push({ id: 'plan', text: '[PLAN MODE]', compactText: '[PLAN MODE]', minimalText: '[PLAN MODE]', color: warn, bold: true })
+  if (has('mode') && props.mode !== 'idle') detailParts.push({ id: 'mode', text: modeText, compactText: modeText, minimalText: modeText, color: accent })
+  if (has('plan') && props.planMode) detailParts.push({ id: 'plan', text: '[PLAN MODE]', compactText: '[PLAN MODE]', minimalText: '[PLAN MODE]', color: warn, bold: true })
   if (has('model')) {
-    const full = `${providerModelFull}${props.effort ? ` ${props.effort}` : ''}`
-    const compact = `${providerModelCompact}${props.effort ? ` ${props.effort}` : ''}`
-    parts.push({
+    detailParts.push({
       id: 'model',
-      text: full,
-      compactText: compact,
-      minimalText: providerModelMinimal,
+      text: formatProviderModel(providerLabel, props.model, Math.max(22, Math.floor(contentColumns * 0.58)), props.effort),
+      compactText: formatProviderModel(providerLabel, props.model, Math.max(20, Math.floor(contentColumns * 0.5)), props.effort),
+      minimalText: formatProviderModel(providerLabel, props.model, Math.max(18, Math.floor(contentColumns * 0.44)), props.effort),
       color: muted,
     })
   }
@@ -374,20 +370,20 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     const text = truncateByWidth(goalLabel(props.goal), goalBudget)
     const compactText = truncateByWidth(goalLabel(props.goal), Math.max(28, Math.floor(contentColumns * 0.36)))
     const color = props.goal.status === 'blocked' ? warn : muted
-    parts.push({ id: 'goal', text, compactText, minimalText: compactText, color })
+    detailParts.push({ id: 'goal', text, compactText, minimalText: compactText, color })
   }
   if (has('cwd')) {
     const cwdText = shortenCwd(props.cwd, cwdBudget)
-    parts.push({ id: 'cwd', text: cwdText, compactText: shortenCwd(props.cwd, Math.max(12, Math.floor(contentColumns * 0.22))), minimalText: shortenCwd(props.cwd, 14), color: accent })
+    envParts.push({ id: 'cwd', text: cwdText, compactText: shortenCwd(props.cwd, Math.max(12, Math.floor(contentColumns * 0.38))), minimalText: shortenCwd(props.cwd, Math.max(12, Math.floor(contentColumns * 0.28))), color: accent })
   }
-  if (has('cwd') && branchText) parts.push({ id: 'git', text: branchText, compactText: branchText, minimalText: branchText, color: props.gitBranch?.dirty ? warn : muted })
+  if (has('cwd') && branchText) envParts.push({ id: 'git', text: branchText, compactText: branchText, minimalText: branchText, color: props.gitBranch?.dirty ? warn : muted })
   if (has('cost') && props.cost > 0) {
     const text = `$${props.cost.toFixed(4)}`
-    parts.push({ id: 'cost', text, compactText: text, minimalText: text, color: muted })
+    detailParts.push({ id: 'cost', text, compactText: text, minimalText: text, color: muted })
   }
-  if (has('counts') && hasCounts) parts.push({ id: 'counts', text: countText, compactText: countText, minimalText: countText, color: muted })
+  if (has('counts') && hasCounts) detailParts.push({ id: 'counts', text: countText, compactText: countText, minimalText: countText, color: muted })
   if (has('context')) {
-    parts.push({
+    envParts.push({
       id: 'context',
       text: contextText,
       compactText: contextCompactText,
@@ -396,19 +392,27 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     })
   }
 
-  if (parts.length === 0 && !showStatusLineRow) return null
+  if (envParts.length === 0 && detailParts.length === 0 && !showStatusLineRow) return null
 
-  const line = fitStatusLine(parts, contentColumns)
+  const envLine = fitStatusLine(envParts, contentColumns)
+  const detailLine = fitStatusLine(detailParts, contentColumns)
 
   return (
     <Box flexDirection="column" paddingX={1} flexShrink={0}>
-      <Box height={1} overflow="hidden">
-        {line.map((s, i) => (
+      {envLine.length > 0 && <Box height={1} overflow="hidden">
+        {envLine.map((s, i) => (
           <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={0}>
             {s.node}
           </Box>
         ))}
-      </Box>
+      </Box>}
+      {detailLine.length > 0 && <Box height={1} overflow="hidden">
+        {detailLine.map((s, i) => (
+          <Box key={s.id} marginLeft={i > 0 ? 1 : 0} flexShrink={0}>
+            {s.node}
+          </Box>
+        ))}
+      </Box>}
       {showStatusLineRow && <Box height={1} overflow="hidden">{renderStatusLineRow()}</Box>}
     </Box>
   )

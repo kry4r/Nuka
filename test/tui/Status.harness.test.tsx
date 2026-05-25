@@ -24,7 +24,7 @@ const baseProps = {
 } as const
 
 describe('StatusPanel', () => {
-  it('renders a single claude-status style row by default', async () => {
+  it('renders claude-status style environment row plus a quiet provider detail row', async () => {
     const handle = renderWithViewport(
       <StatusPanel {...baseProps} layout="dense" />,
       { cols: 120, rows: 4 },
@@ -32,16 +32,17 @@ describe('StatusPanel', () => {
     try {
       await new Promise<void>(resolve => setImmediate(resolve))
       const f = handle.lastFrame() ?? ''
-      expect(f).toContain('/home/me/proj')
-      expect(f).toContain('main')
-      expect(f).toContain('Anthropic/opus-4.7')
-      expect(f).toContain('∴ context:')
-      expect(f).toContain('$0.0400')
-      expect(f).toContain('4 plugins')
+      const lines = f.split('\n').filter(line => line.trim().length > 0)
+      expect(lines).toHaveLength(2)
+      expect(lines[0]).toContain('/home/me/proj')
+      expect(lines[0]).toContain('main')
+      expect(lines[0]).toContain('∴ context:')
+      expect(lines[0]).not.toContain('Anthropic')
+      expect(lines[1]).toContain('Anthropic · opus-4.7')
+      expect(lines[1]).toContain('$0.0400')
+      expect(lines[1]).toContain('4 plugins')
       expect(f).not.toContain('│')
       expect(f).not.toContain('⬢ idle')
-      const lines = f.split('\n').filter(line => line.trim().length > 0)
-      expect(lines).toHaveLength(1)
     } finally {
       handle.unmount()
     }
@@ -52,8 +53,8 @@ describe('StatusPanel', () => {
       <StatusPanel {...baseProps} providerId="custom-2" providerName="Nuka" layout="dense" />,
     )
     const f = lastFrame() ?? ''
-    expect(f).toContain('Nuka/opus-4.7')
-    expect(f).not.toContain('custom-2/opus-4.7')
+    expect(f).toContain('Nuka · opus-4.7')
+    expect(f).not.toContain('custom-2')
   })
 
   it('shows the active goal in the location row', () => {
@@ -122,6 +123,7 @@ describe('StatusPanel', () => {
       const f = handle.lastFrame() ?? ''
       expect(f).toContain('Xiaomi Mimo')
       expect(f).toContain('mimo-v2-pro')
+      expect(f).toContain('∴ context:')
       expect(f).not.toMatch(/∴context|context[█░]/)
       expect(f).not.toContain('custom-2')
     } finally {
@@ -129,7 +131,7 @@ describe('StatusPanel', () => {
     }
   })
 
-  it('keeps narrow statusline as one compact row without losing provider name', async () => {
+  it('uses two readable narrow rows instead of crowding provider, cwd, and context together', async () => {
     const handle = renderWithViewport(
       <StatusPanel
         {...baseProps}
@@ -152,11 +154,15 @@ describe('StatusPanel', () => {
     try {
       await new Promise<void>(resolve => setImmediate(resolve))
       const lines = (handle.lastFrame() ?? '').split('\n').filter(line => line.trim().length > 0)
-      expect(lines).toHaveLength(1)
+      expect(lines).toHaveLength(2)
       expect(lines[0]).toContain('87%')
-      expect(lines[0]).toContain('Xiaomi Mimo')
-      expect(lines[0]).toContain('mimo-v2-pro')
-      expect(lines[0]).not.toContain('custom-2')
+      expect(lines[0]).toContain('/data/xtzhang/Nuka')
+      expect(lines[0]).toContain('main●')
+      expect(lines[0]).not.toContain('Xiaomi Mimo')
+      expect(lines[1]).toContain('[running]')
+      expect(lines[1]).toContain('Xiaomi Mimo · mimo-v2-pro')
+      expect(lines[1]).toContain('1 agent')
+      expect(lines[1]).not.toContain('custom-2')
     } finally {
       handle.unmount()
     }
@@ -185,7 +191,7 @@ describe('StatusPanel', () => {
     try {
       await new Promise<void>(resolve => setImmediate(resolve))
       const f = handle.lastFrame() ?? ''
-      expect(f).toContain('Xiaomi Mimo/mimo-v2-pro')
+      expect(f).toContain('Xiaomi Mimo · mimo-v2-pro')
       expect(f).not.toContain('Xiaomi Mimo/  1 agents')
     } finally {
       handle.unmount()
@@ -215,7 +221,7 @@ describe('StatusPanel', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).not.toMatch(/\$0\.04/)
-    expect(f).toContain('Anthropic/opus-4.7')
+    expect(f).toContain('Anthropic · opus-4.7')
     expect(f).toContain('plugins')
   })
 
@@ -225,7 +231,7 @@ describe('StatusPanel', () => {
     )
     const f = lastFrame() ?? ''
     expect(f).not.toMatch(/\$0\.04/)
-    expect(f).toContain('Anthropic/opus-4.7')
+    expect(f).toContain('Anthropic · opus-4.7')
   })
 
   it('returns null when every segment is hidden and no statusLine row', () => {
