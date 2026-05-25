@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Agent definition schemas and runtime metadata contracts must remain typed and validated."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Subagent runtime metadata crosses loader, registry, task, and dispatch boundaries."}
+{"file": ".trellis/tasks/05-26-subagent-frontmatter-runtime-parity/research/nukacode-frontmatter-runtime.md", "reason": "Local Nuka-Code comparison and scoped parity recommendation."}
