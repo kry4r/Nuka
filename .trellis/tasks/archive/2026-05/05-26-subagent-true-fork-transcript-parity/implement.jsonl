@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Subagent fork/resume state belongs in core task/session sidecars, not UI-only state."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "New fork metadata and task sidecar contracts must be explicit, serializable TypeScript types."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Maintain bundle and verification discipline while touching core/TUI-facing contracts."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Fork context crosses session messages, task specs, persistence sidecars, provider requests, and tests."}
