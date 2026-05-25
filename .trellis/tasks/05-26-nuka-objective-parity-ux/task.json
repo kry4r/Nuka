@@ -1,0 +1,30 @@
+{
+  "id": "nuka-objective-parity-ux",
+  "name": "nuka-objective-parity-ux",
+  "title": "Complete Nuka objective parity and UX roadmap",
+  "description": "",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "xtzhang",
+  "assignee": "xtzhang",
+  "createdAt": "2026-05-26",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "05-26-subagent-resume-fork-scope",
+    "05-26-subagent-true-fork-transcript-parity",
+    "05-26-subagent-frontmatter-runtime-parity"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

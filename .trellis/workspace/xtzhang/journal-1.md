@@ -42,3 +42,37 @@ Completed the local subagent resume/fork scope child task: persisted write-scope
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Subagent runtime frontmatter parity
+
+**Date**: 2026-05-26
+**Task**: Subagent runtime frontmatter parity
+**Branch**: `main`
+
+### Summary
+
+Implemented Nuka-Code-style subagent runtime frontmatter metadata preservation and required-MCP availability filtering for dispatch/spawn, documented the contract, and verified focused agent tests plus typecheck/lint/diff checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2c2b4c` | (see git log) |
+| `6ca50c5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
