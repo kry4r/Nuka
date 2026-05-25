@@ -11,6 +11,7 @@ import { createHookRegistry } from '../../../src/core/hooks/registry'
 import { createWorktreeStore } from '../../../src/core/worktree/store'
 import type { ResolvedAgentDef } from '../../../src/core/agents/types'
 import type { LocalAgentSpec, Task } from '../../../src/core/tasks/types'
+import type { Message } from '../../../src/core/message/types'
 import type { ProviderEvent } from '../../../src/core/provider/types'
 import type { GitResult } from '../../../src/core/worktree/git'
 
@@ -35,6 +36,19 @@ function mkProvider(replyText: string): LLMProvider {
     id: 'p',
     format: 'openai',
     async *stream() {
+      yield { type: 'text_delta', text: replyText }
+      yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+    },
+    async listRemoteModels() { return [] },
+  } as LLMProvider
+}
+
+function mkRecordingProvider(requests: Message[][], replyText: string): LLMProvider {
+  return {
+    id: 'p',
+    format: 'openai',
+    async *stream(req) {
+      requests.push(req.messages)
       yield { type: 'text_delta', text: replyText }
       yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
     },
@@ -125,8 +139,8 @@ describe('makeSpawnAgentTool', () => {
     expect(tool.tags).toContain('tasks')
     expect(tool.annotations?.readOnly).toBe(false)
     expect(tool.needsPermission({ agent: 'core:reviewer', task: 'review' })).toBe('none')
-    expect(JSON.stringify(tool.parameters)).toContain('summarized transcript fork')
-    expect(JSON.stringify(tool.parameters)).toContain('not a byte-identical tool-result placeholder fork')
+    expect(JSON.stringify(tool.parameters)).toContain('Fork')
+    expect(JSON.stringify(tool.parameters)).not.toContain('summary-only')
     expect(JSON.stringify(tool.parameters)).not.toContain('Currently returns a clear unsupported error')
   })
 
@@ -198,7 +212,7 @@ describe('makeSpawnAgentTool', () => {
     expect(tasks.specs).toHaveLength(0)
   })
 
-  it('injects parent session context when fork_context is true', async () => {
+  it('queues structured parent session fork messages when fork_context is true', async () => {
     const agents = new AgentRegistry()
     agents.register(mkAgent('core', 'reviewer', 'reviews code'))
     const { deps, tasks } = makeDeps(agents)
@@ -224,12 +238,141 @@ describe('makeSpawnAgentTool', () => {
 
     expect(result.isError).toBe(false)
     expect(tasks.specs).toHaveLength(1)
-    expect(tasks.specs[0]?.context).toContain('Forked parent context:')
-    expect(tasks.specs[0]?.context).toContain('user: parent request')
-    expect(tasks.specs[0]?.context).toContain('assistant: parent answer')
-    expect(tasks.specs[0]?.context).toContain('extra context')
-    expect(result.output as string).toContain('fork_context=summarized_transcript')
-    expect(result.output as string).toContain('fork_context_note=summary-only; not a byte-identical tool-result placeholder fork')
+    expect(tasks.specs[0]?.forkContext).toEqual({ mode: 'structured' })
+    expect(tasks.specs[0]?.forkMessages?.slice(0, 2)).toMatchObject([
+      { role: 'user', content: [{ type: 'text', text: 'parent request' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'parent answer' }] },
+    ])
+    expect(tasks.specs[0]?.context).toBeUndefined()
+    const directive = tasks.specs[0]?.forkMessages?.at(-1)
+    const directiveText = directive?.role === 'user' && directive.content[0]?.type === 'text'
+      ? directive.content[0].text
+      : ''
+    expect(directiveText).not.toContain('Forked parent context:')
+    expect(directiveText).toContain('extra context')
+    expect(result.output as string).toContain('fork=structured')
+    expect(result.output as string).not.toContain('summary-only')
+  })
+
+  it('forked runner sends parent messages and stable placeholder tool results before the directive', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const requests: Message[][] = []
+    const provider = mkRecordingProvider(requests, 'forked-response')
+    const cache = new PermissionCache()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => cache, async () => ({ allowed: true })),
+      taskManager: tasks,
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+    session.messages.push({
+      role: 'user',
+      id: 'u1',
+      ts: 1,
+      content: [{ type: 'text', text: 'parent request' }],
+    })
+    session.messages.push({
+      role: 'assistant',
+      id: 'a1',
+      ts: 2,
+      content: [
+        { type: 'text', text: 'I will fork two checks.' },
+        { type: 'tool_use', id: 'call-1', name: 'spawn_agent', input: { agent: 'core:reviewer', task: 'check A', fork_context: true } },
+        { type: 'tool_use', id: 'call-2', name: 'spawn_agent', input: { agent: 'core:reviewer', task: 'check B', fork_context: true } },
+      ],
+    })
+
+    const result = await tool.run(
+      { agent: 'core:reviewer', task: 'review only auth files', context: 'extra facts', fork_context: true },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(false)
+    for await (const _chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+    expect(requests).toHaveLength(1)
+    const messages = requests[0]!
+    expect(messages.map(m => m.role)).toEqual(['user', 'assistant', 'tool', 'tool', 'user'])
+    expect(messages[0]).toMatchObject({ role: 'user', content: [{ type: 'text', text: 'parent request' }] })
+    expect(messages[1]).toMatchObject({ role: 'assistant' })
+    expect(messages[2]).toMatchObject({
+      role: 'tool',
+      toolUseId: 'call-1',
+      content: 'F',
+      isError: false,
+    })
+    expect(messages[3]).toMatchObject({
+      role: 'tool',
+      toolUseId: 'call-2',
+      content: 'F',
+      isError: false,
+    })
+    const directive = messages[4]
+    expect(directive).toMatchObject({ role: 'user' })
+    expect(directive.role === 'user' ? directive.content[0]?.type : undefined).toBe('text')
+    const text = directive.role === 'user' && directive.content[0]?.type === 'text'
+      ? directive.content[0].text
+      : ''
+    expect(text).toContain('Fork')
+    expect(text).toContain('review only auth files')
+    expect(text).toContain('extra facts')
+  })
+
+  it('does not add placeholder tool results for already-resolved earlier assistant calls', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const requests: Message[][] = []
+    const provider = mkRecordingProvider(requests, 'forked-response')
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+    session.messages.push({
+      role: 'assistant',
+      id: 'a1',
+      ts: 1,
+      content: [
+        { type: 'tool_use', id: 'old-call', name: 'Read', input: { path: 'src/a.ts' } },
+      ],
+    })
+    session.messages.push({
+      role: 'tool',
+      id: 't1',
+      ts: 2,
+      toolUseId: 'old-call',
+      content: 'old result',
+      isError: false,
+    })
+    session.messages.push({
+      role: 'user',
+      id: 'u1',
+      ts: 3,
+      content: [{ type: 'text', text: 'parent follow-up after tool result' }],
+    })
+
+    await tool.run(
+      { agent: 'core:reviewer', task: 'review latest state', fork_context: true },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    for await (const _chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+
+    expect(requests[0]!.map(m => m.role)).toEqual(['assistant', 'tool', 'user', 'user'])
+    expect(requests[0]!.filter(m =>
+      m.role === 'tool' && m.content === 'F',
+    )).toHaveLength(0)
   })
 
   it('accepts write_scope and includes it in the queued local_agent context', async () => {
@@ -517,6 +660,53 @@ describe('makeSpawnAgentTool', () => {
       // drain
     }
     expect(cwdSeen).toEqual(['/repo/.nuka/worktrees/review-branch'])
+  })
+
+  it('adds a path-translation notice to structured forks created in isolated worktrees', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const gitCalls: string[][] = []
+    const worktreeStore = createWorktreeStore()
+    const tasks = new FakeTaskManager()
+    const tool = makeSpawnAgentTool({
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(mkProvider('unused')),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      taskManager: tasks,
+      worktreeStore,
+      gitRunner: fakeGitRunner(gitCalls),
+    })
+    const session = createSession({ providerId: 'p', model: 'm' })
+    session.messages.push({
+      role: 'user',
+      id: 'u1',
+      ts: 1,
+      content: [{ type: 'text', text: 'parent saw src/app.ts in /repo' }],
+    })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'review the parent path references',
+        fork_context: true,
+        isolation: 'worktree',
+        worktree_name: 'review branch',
+      },
+      { signal: new AbortController().signal, cwd: '/repo', session },
+    )
+
+    expect(result.isError).toBe(false)
+    const directive = tasks.specs[0]?.forkMessages?.at(-1)
+    const directiveText = directive?.role === 'user' && directive.content[0]?.type === 'text'
+      ? directive.content[0].text
+      : ''
+    expect(directiveText).toContain('review the parent path references')
+    expect(directiveText).toContain('parent=/repo')
+    expect(directiveText).toContain('cwd=/repo/.nuka/worktrees/review-branch')
+    expect(directiveText).toContain('Translate paths')
+    expect(directiveText).toContain('re-read')
+    expect(directiveText).toContain('isolate edits')
   })
 
   it('inherits worktree isolation from the agent definition', async () => {

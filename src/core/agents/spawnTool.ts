@@ -22,12 +22,12 @@ import { normalizeWorktreeName } from '../worktree/tools'
 import type { OutputStyle } from '../outputStyles/types'
 import type { Effort } from '../provider/types'
 import type { Skill } from '../skill/types'
-import type { Message } from '../message/types'
 import type { LocalAgentSpec, LocalAgentWorktreeSpec, Task } from '../tasks/types'
 import type { AgentRegistry } from './registry'
 import { defineTool } from '../tools/define'
 import { dispatchAgent } from './dispatch'
 import { formatWriteScopeContext, normalizeWriteScope, type WriteScopeInput } from './writeScope'
+import { buildForkContext } from './forkContext'
 
 export type SpawnAgentTaskManagerLike = {
   enqueue(spec: LocalAgentSpec): Task
@@ -77,54 +77,53 @@ export function makeSpawnAgentTool(deps: {
       properties: {
         agent: {
           type: 'string',
-          description: 'Qualified agent name.',
+          description: 'Agent.',
           minLength: 1,
         },
         task: {
           type: 'string',
-          description: 'Instruction.',
+          description: 'Task.',
           minLength: 1,
         },
         context: {
           type: 'string',
-          description: 'Context.',
+          description: 'Ctx.',
         },
         description: {
           type: 'string',
-          description: 'Task label.',
+          description: 'Label.',
         },
         fork_context: {
           type: 'boolean',
-          description:
-            'Inject a summarized transcript fork from the parent session; not a byte-identical tool-result placeholder fork.',
+          description: 'Fork',
         },
         isolation: {
           type: 'string',
           enum: ['inherit', 'worktree'],
-          description: 'Cwd isolation.',
+          description: 'Isolation.',
         },
         worktree_name: {
           type: 'string',
-          description: 'Worktree name.',
+          description: 'Worktree.',
           minLength: 1,
         },
         write_scope: {
           type: 'object',
-          description: 'Descriptive write ownership boundary.',
+          description: 'Write scope.',
           properties: {
             allow: {
               type: 'array',
               items: { type: 'string', minLength: 1 },
-              description: 'Paths this agent may edit.',
+              description: 'Edit paths.',
             },
             deny: {
               type: 'array',
               items: { type: 'string', minLength: 1 },
-              description: 'Paths this agent should avoid.',
+              description: 'Avoid paths.',
             },
             note: {
               type: 'string',
-              description: 'Scope note.',
+              description: 'Note.',
             },
           },
           additionalProperties: false,
@@ -164,10 +163,7 @@ export function makeSpawnAgentTool(deps: {
       if (!writeScope.ok) {
         return { isError: true, output: writeScope.error }
       }
-      const context = mergeContext(
-        input.fork_context === true
-          ? formatForkContext(ctx.session?.messages ?? [])
-          : undefined,
+      const nonForkContext = mergeContext(
         formatWriteScopeContext(writeScope.value),
         input.context,
       )
@@ -178,6 +174,19 @@ export function makeSpawnAgentTool(deps: {
       const cwdResolution = resolveSpawnCwd(effectiveInput, ctx.cwd, deps)
       if (cwdResolution.isError) return cwdResolution.result
       const { cwd, worktreePath, worktree } = cwdResolution
+      const structuredFork = input.fork_context === true
+        ? buildForkContext({
+            parentMessages: ctx.session?.messages ?? [],
+            directive: input.task,
+            context: mergeContext(
+              nonForkContext,
+              worktreePath
+                ? `WT parent=${ctx.cwd}; cwd=${worktreePath}. Translate paths; re-read; isolate edits.`
+                : undefined,
+            ),
+          })
+        : undefined
+      const context = structuredFork ? undefined : nonForkContext
 
       const task = deps.taskManager.enqueue({
         kind: 'local_agent',
@@ -186,6 +195,12 @@ export function makeSpawnAgentTool(deps: {
         task: input.task,
         ...(context !== undefined ? { context } : {}),
         ...(writeScope.value !== undefined ? { writeScope: writeScope.value } : {}),
+        ...(structuredFork
+          ? {
+              forkContext: structuredFork.forkContext,
+              forkMessages: structuredFork.forkMessages,
+            }
+          : {}),
         providerId: parentSession?.providerId,
         model: resolved.model ?? parentSession?.model,
         cwd,
@@ -200,6 +215,7 @@ export function makeSpawnAgentTool(deps: {
             permission: deps.permission,
             signal,
             cwd,
+            ...(structuredFork ? { forkMessages: structuredFork.forkMessages } : {}),
             ...(parentSession ? { parentSession } : {}),
             ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
             ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
@@ -222,12 +238,11 @@ export function makeSpawnAgentTool(deps: {
           ...(worktreePath ? [`worktree=${worktreePath}`] : []),
           ...(input.fork_context === true
             ? [
-                'fork_context=summarized_transcript',
-                'fork_context_note=summary-only; not a byte-identical tool-result placeholder fork',
+                'fork=structured',
               ]
             : []),
           `output_file=${task.outputFile}`,
-          'Use TaskOutput with agent_id to read output; use TaskStop with agent_id to stop it.',
+          'Use TaskOutput with agent_id to read output; TaskStop to stop it.',
         ].join('\n'),
       }
     },
@@ -297,38 +312,6 @@ function mergeContext(...values: Array<string | undefined>): string | undefined 
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value))
   return parts.length > 0 ? parts.join('\n\n') : undefined
-}
-
-function formatForkContext(messages: readonly Message[]): string | undefined {
-  const lines = messages
-    .flatMap(messageToContextLines)
-    .filter(line => line.trim().length > 0)
-  return lines.length > 0
-    ? ['Forked parent context:', ...lines].join('\n')
-    : undefined
-}
-
-function messageToContextLines(message: Message): string[] {
-  if (message.role === 'system') return [`system: ${message.content}`]
-  if (message.role === 'tool') {
-    const content = typeof message.content === 'string'
-      ? message.content
-      : message.content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n')
-    return [`tool(${message.toolUseId}): ${content}`]
-  }
-  if (message.role === 'responses_compaction') {
-    return [`context_compaction: ${JSON.stringify(message.output)}`]
-  }
-  const text = message.content
-    .map(block => {
-      if (block.type === 'text') return block.text
-      if (block.type === 'tool_use') return `tool_use ${block.name}(${block.id}) ${JSON.stringify(block.input)}`
-      if (block.type === 'image') return '[image]'
-      return ''
-    })
-    .filter(Boolean)
-    .join('\n')
-  return text ? [`${message.role}: ${text}`] : []
 }
 
 function stringifyOutput(output: ToolResult['output']): string {

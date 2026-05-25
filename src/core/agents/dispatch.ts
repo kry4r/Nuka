@@ -4,7 +4,7 @@ import type { ToolRegistry } from '../tools/registry'
 import type { ProviderResolver } from '../provider/resolver'
 import type { PermissionChecker } from '../permission/checker'
 import type { Tool, ToolResult } from '../tools/types'
-import type { AssistantMessage, TokenUsage } from '../message/types'
+import type { AssistantMessage, Message, TokenUsage } from '../message/types'
 import type { ContentBlock as ToolContentBlock } from '../tools/content'
 import { ToolRegistry as ToolRegistryClass } from '../tools/registry'
 import { filterTools } from './toolFilter'
@@ -105,6 +105,8 @@ export type DispatchAgentOpts = {
   agentMemory?: AgentMemoryDeps
   /** Skill catalog available to sub-agents for agent.skills preloading. */
   skills?: Skill[]
+  /** Structured parent transcript prefix for forked background subagents. */
+  forkMessages?: Message[]
   /** Optional final provider/model capability filter before each sub-agent request. */
   resolveEffort?: (
     effort: Effort | undefined,
@@ -150,6 +152,7 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
     agentMemory,
     skills,
     resolveEffort,
+    forkMessages,
   } = opts
   const maxTurns = opts.maxTurns ?? agent.maxTurns ?? 20
   const cwdState = createDispatchCwdState(worktreeStore, cwd)
@@ -235,7 +238,13 @@ export async function dispatchAgent(opts: DispatchAgentOpts): Promise<DispatchAg
       { signal },
     )
   }
-  appendMessage(session, makeUserMessage({ text: firstText }))
+  if (forkMessages && forkMessages.length > 0) {
+    for (const message of forkMessages) {
+      appendMessage(session, message)
+    }
+  } else {
+    appendMessage(session, makeUserMessage({ text: firstText }))
+  }
 
   let totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 }
   let turns = 0

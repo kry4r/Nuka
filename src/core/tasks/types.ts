@@ -19,6 +19,7 @@ import type { ResolvedAgentDef } from '../agents/types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
 import type { HookRegistry } from '../hooks/registry'
 import type { GitRunner } from '../worktree/git'
+import type { Message } from '../message/types'
 
 export type { ProgressTrackerSnapshot } from './progressTracker'
 
@@ -71,6 +72,10 @@ export type LocalAgentWriteScope = {
   note?: string
 }
 
+export type LocalAgentForkContext = {
+  mode: 'structured'
+}
+
 export type LocalAgentSpec = {
   kind: 'local_agent'
   description: string
@@ -116,6 +121,10 @@ export type LocalAgentSpec = {
   cwd?: string
   /** Descriptive write ownership metadata for forked/background subagents. */
   writeScope?: LocalAgentWriteScope
+  /** Structured fork marker persisted for local subagent executions. */
+  forkContext?: LocalAgentForkContext
+  /** Provider-visible inherited fork messages for this execution. */
+  forkMessages?: Message[]
   /** Worktree lifecycle tuple: [path, repoRoot]. Clean trees are removed; dirty trees are kept. */
   worktree?: LocalAgentWorktreeSpec
   /** Optional mockable git runner for worktree cleanup. */

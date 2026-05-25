@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { tasksDir } from '../paths'
-import type { LocalAgentWriteScope, Task, TaskKind, TaskState } from './types'
+import type { LocalAgentForkContext, LocalAgentWriteScope, Task, TaskKind, TaskState } from './types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
 
 export type TaskMeta = {
@@ -20,6 +20,7 @@ export type TaskMeta = {
   model?: string
   cwd?: string
   writeScope?: LocalAgentWriteScope
+  forkContext?: LocalAgentForkContext
   finalOutput?: string
   teamName?: string
   progress?: ProgressTrackerSnapshot
@@ -38,6 +39,7 @@ export type TaskTranscript = {
   model?: string
   cwd?: string
   writeScope?: LocalAgentWriteScope
+  forkContext?: LocalAgentForkContext
   messages: TaskTranscriptMessage[]
 }
 
@@ -132,6 +134,7 @@ export function fromTask(t: Task): TaskMeta {
     model: localAgent?.model,
     cwd: localAgent?.cwd,
     writeScope: localAgent?.writeScope,
+    forkContext: localAgent?.forkContext,
     finalOutput: localAgent && TERMINAL_STATES.has(t.state)
       ? readFinalOutput(t.outputFile)
       : undefined,
@@ -174,6 +177,7 @@ export function transcriptFromMeta(meta: TaskMeta): TaskTranscript | undefined {
     model: meta.model,
     cwd: meta.cwd,
     writeScope: meta.writeScope,
+    forkContext: meta.forkContext,
     messages,
   }
 }

@@ -164,6 +164,26 @@ describe('TaskManager', () => {
     })
   })
 
+  it('persists local_agent structured fork metadata in task sidecars', async () => {
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: fork',
+      agentId: 'agent-fork',
+      agentName: 'core:reviewer',
+      task: 'inspect forked context',
+      forkContext: { mode: 'structured' },
+      agentRunner: async function* () {
+        yield { text: 'fork result' }
+      },
+    })
+
+    await m.drain()
+
+    expect(readMeta(home, t.id)?.forkContext).toEqual({ mode: 'structured' })
+    expect(readTranscript(home, t.id)?.forkContext).toEqual({ mode: 'structured' })
+  })
+
   it('removes clean local_agent worktree isolation after completion', async () => {
     const gitCalls: string[][] = []
     const gitRunner = (args: string[], opts: { cwd: string }): GitResult => {
