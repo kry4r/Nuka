@@ -49,10 +49,24 @@ function buildToolResultsById(items: Message[]): Map<string, { output: string; i
   return out
 }
 
+function buildToolCallsById(items: Message[]): Map<string, { name: string; input: unknown }> {
+  const out = new Map<string, { name: string; input: unknown }>()
+  for (const m of items) {
+    if (m.role !== 'assistant') continue
+    for (const b of m.content) {
+      if (b.type === 'tool_use') {
+        out.set(b.id, { name: b.name, input: b.input })
+      }
+    }
+  }
+  return out
+}
+
 export function Messages(props: {
   items: Message[]
   streaming: Message | null
   scrollOffset?: number
+  expandedReadResultIds?: Set<string>
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
@@ -68,6 +82,7 @@ export function Messages(props: {
   availableRows?: number
 }): React.JSX.Element {
   const toolResultsById = buildToolResultsById(props.items)
+  const toolCallsById = buildToolCallsById(props.items)
   const total = props.items.length
   const showPrologue = total === 0 && props.streaming === null && props.prologue !== undefined
 
@@ -110,6 +125,8 @@ export function Messages(props: {
             <MessageRow
               m={m}
               toolResultsById={toolResultsById}
+              toolCallsById={toolCallsById}
+              expandedReadResultIds={props.expandedReadResultIds}
               expandedAgentCallIds={props.expandedAgentCallIds}
               resolveToolSource={props.resolveToolSource}
               resolveToolAnnotations={props.resolveToolAnnotations}
@@ -120,6 +137,8 @@ export function Messages(props: {
           <MessageRow
             m={props.streaming}
             toolResultsById={toolResultsById}
+            toolCallsById={toolCallsById}
+            expandedReadResultIds={props.expandedReadResultIds}
             expandedAgentCallIds={props.expandedAgentCallIds}
             resolveToolSource={props.resolveToolSource}
             resolveToolAnnotations={props.resolveToolAnnotations}

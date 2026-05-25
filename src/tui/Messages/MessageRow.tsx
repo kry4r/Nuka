@@ -7,6 +7,7 @@ import { Markdown } from './Markdown'
 import { ToolCall } from './ToolCall'
 import { AgentCall } from './AgentCall'
 import { DISPATCH_AGENT_TOOL_NAME } from '../../core/agents/dispatchTool'
+import { buildToolCallRow } from '../../core/toolSummary/summary'
 import { matchStyle, getRegistry } from '../../core/plugin/outputStyles'
 import type { OutputStyleProps } from '../../core/plugin/outputStyles'
 
@@ -100,6 +101,10 @@ export function MessageRow(props: {
   m: Message
   /** Pre-resolved tool_result output keyed by tool_use id, for dispatch_agent rendering. */
   toolResultsById?: Map<string, { output: string; isError: boolean }>
+  /** Tool-use metadata keyed by tool_use id, used to summarize standalone tool results. */
+  toolCallsById?: Map<string, { name: string; input: unknown }>
+  /** Ids of read-like tool_result blocks that should render expanded. */
+  expandedReadResultIds?: Set<string>
   /** Ids of dispatch_agent tool_use blocks that should render expanded. */
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
@@ -131,6 +136,25 @@ export function MessageRow(props: {
       typeof m.content === 'string'
         ? m.content
         : m.content.map(b => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n')
+    const toolUse = props.toolCallsById?.get(m.toolUseId)
+    if (toolUse && !m.isError && !props.expandedReadResultIds?.has(m.toolUseId)) {
+      const input = toolUse.input && typeof toolUse.input === 'object' && !Array.isArray(toolUse.input)
+        ? toolUse.input as Readonly<Record<string, unknown>>
+        : undefined
+      const row = buildToolCallRow(toolUse.name, input)
+      if (row.isRead) {
+        const lineCount = toolContent.length === 0 ? 0 : toolContent.split('\n').length
+        const label = row.summary ?? toolUse.name
+        return (
+          <Box flexDirection="row">
+            <Text color={barColor} bold>▎ </Text>
+            <Box flexGrow={1}>
+              <Text dimColor>{toolUse.name} result: {label} · {lineCount} line{lineCount === 1 ? '' : 's'} collapsed</Text>
+            </Box>
+          </Box>
+        )
+      }
+    }
     return (
       <Box flexDirection="row">
         <Text color={barColor} bold>▎ </Text>

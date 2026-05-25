@@ -21,12 +21,12 @@ function assistantMsg(id: string, text: string): Message {
   return { role: 'assistant', id, ts: 2, content: [{ type: 'text', text }] }
 }
 
-function assistantToolUse(id: string, toolUseId: string, toolName: string): Message {
+function assistantToolUse(id: string, toolUseId: string, toolName: string, input: unknown = {}): Message {
   return {
     role: 'assistant',
     id,
     ts: 3,
-    content: [{ type: 'tool_use', id: toolUseId, name: toolName, input: {} }],
+    content: [{ type: 'tool_use', id: toolUseId, name: toolName, input }],
   }
 }
 
@@ -211,6 +211,48 @@ describe('Messages — live transcript', () => {
       expect(f).toContain('tool-output-marker')
     } finally {
       handle.unmount()
+    }
+  })
+
+  it('collapses read tool results until that result id is expanded', async () => {
+    const longOutput = [
+      '1\tconst first = true',
+      '2\tconst hiddenReadLine = "should not be visible while collapsed"',
+      '3\texport const last = true',
+    ].join('\n')
+    const items: Message[] = [
+      userMsg('u1', 'read request'),
+      assistantToolUse('a1', 'read-1', 'Read', { path: '/tmp/example.ts' }),
+      toolResult('t1', 'read-1', longOutput),
+      assistantMsg('a2', 'after-read'),
+    ]
+
+    const collapsed = renderWithViewport(
+      <Messages items={items} streaming={null} />,
+      { cols: 80, rows: 24 },
+    )
+    try {
+      await flushInk()
+      const frame = collapsed.lastFrame() ?? ''
+      expect(frame).toContain('Read result: /tmp/example.ts')
+      expect(frame).toContain('3 lines collapsed')
+      expect(frame).toContain('after-read')
+      expect(frame).not.toContain('hiddenReadLine')
+    } finally {
+      collapsed.unmount()
+    }
+
+    const expanded = renderWithViewport(
+      <Messages items={items} streaming={null} expandedReadResultIds={new Set(['read-1'])} />,
+      { cols: 80, rows: 24 },
+    )
+    try {
+      await flushInk()
+      const frame = expanded.lastFrame() ?? ''
+      expect(frame).toContain('hiddenReadLine')
+      expect(frame).not.toContain('3 lines collapsed')
+    } finally {
+      expanded.unmount()
     }
   })
 })

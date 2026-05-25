@@ -55,6 +55,7 @@ import { useAgentStream } from './hooks/useAgentStream'
 import { runBangShell } from './bangShell'
 import { makeUserMessage } from '../core/message/factories'
 import { DISPATCH_AGENT_TOOL_NAME } from '../core/agents/dispatchTool'
+import { classifyToolForCollapse } from '../core/toolSummary/summary'
 import type { TodoState } from '../core/tools/todoWrite'
 import { TasksPanel, flattenedTasksLength } from './Tasks/TasksPanel'
 import { TasksSubmenu } from './Submenu/TasksSubmenu'
@@ -85,6 +86,30 @@ export function findLatestDispatchAgentCallId(messages: readonly import('../core
       if (b && b.type === 'tool_use' && b.name === DISPATCH_AGENT_TOOL_NAME) {
         return b.id
       }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Scan messages newest-first for the last read-like tool_result that has a
+ * matching assistant tool_use. Used by Ctrl+O to expand/collapse the latest
+ * read output without touching model-visible history.
+ */
+export function findLatestReadResultId(messages: readonly import('../core/message/types').Message[]): string | undefined {
+  const readToolIds = new Set<string>()
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue
+    for (const b of m.content) {
+      if (b.type === 'tool_use' && classifyToolForCollapse(b.name).isRead) {
+        readToolIds.add(b.id)
+      }
+    }
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (m?.role === 'tool' && !m.isError && readToolIds.has(m.toolUseId)) {
+      return m.toolUseId
     }
   }
   return undefined
@@ -664,6 +689,7 @@ export function App(props: AppProps): React.JSX.Element {
   }, [props, session, stream, handleSlashEffect, exit, appendAssistantNotice])
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
+  const [expandedReadResultIds, setExpandedReadResultIds] = useState<Set<string>>(() => new Set())
   const scrollConversation = useCallback((action: PromptNavigationAction) => {
     const maxOffset = Math.max(0, session.messages.length - 1)
     const page = Math.max(5, Math.floor(conversationAvailableRows / 2))
@@ -821,6 +847,20 @@ export function App(props: AppProps): React.JSX.Element {
           return next
         })
       }
+      return
+    }
+    // Ctrl+O: toggle expansion of the most-recent read-like tool result.
+    if (key.ctrl && inputKey === 'o') {
+      const latestId = findLatestReadResultId(session.messages)
+      if (latestId) {
+        setExpandedReadResultIds(prev => {
+          const next = new Set(prev)
+          if (next.has(latestId)) next.delete(latestId)
+          else next.add(latestId)
+          return next
+        })
+      }
+      return
     }
   })
 
@@ -981,6 +1021,7 @@ export function App(props: AppProps): React.JSX.Element {
           items={session.messages}
           streaming={streamingMsg}
           scrollOffset={messageScrollOffset}
+          expandedReadResultIds={expandedReadResultIds}
           expandedAgentCallIds={expandedAgentCallIds}
           resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
           resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}

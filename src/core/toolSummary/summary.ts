@@ -424,6 +424,7 @@ const READ_TOOLS: ReadonlySet<string> = new Set([
   'jira_get_project_issues',
   'jira_get_project_versions',
   // Filesystem
+  'read',
   'read_file',
   'read_text_file',
   'read_media_file',

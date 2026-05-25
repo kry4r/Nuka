@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
-import { App } from '../../src/tui/App'
+import { App, findLatestReadResultId } from '../../src/tui/App'
 import { SessionManager } from '../../src/core/session/manager'
 import { SlashRegistry } from '../../src/slash/registry'
 import { HelpCommand } from '../../src/slash/help'
@@ -249,8 +249,99 @@ describe('App', () => {
     )
 
     const f = lastFrame() ?? ''
-    expect(f).toContain('Nuka/gpt-5.5')
-    expect(f).not.toContain('custom-2/gpt-5.5')
+    expect(f).toContain('Nuka · gpt-5.5')
+    expect(f).not.toContain('custom-2')
+  })
+
+  it('Ctrl+O expands and collapses the latest read tool result', async () => {
+    const sessions = new SessionManager()
+    const session = sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    appendMessage(session, {
+      role: 'assistant',
+      id: 'a-read',
+      ts: 1,
+      content: [{ type: 'tool_use', id: 'read-app-1', name: 'Read', input: { path: '/tmp/app-read.ts' } }],
+    })
+    appendMessage(session, {
+      role: 'tool',
+      id: 't-read',
+      ts: 2,
+      toolUseId: 'read-app-1',
+      content: '1\tconst visibleWhenExpanded = true\n2\tconst stillHiddenWhileCollapsed = true',
+      isError: false,
+    })
+    appendMessage(session, {
+      role: 'assistant',
+      id: 'a-after',
+      ts: 3,
+      content: [{ type: 'text', text: 'after read' }],
+    })
+    const slash = new SlashRegistry()
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      expect(lastFrame() ?? '').toContain('Read result: /tmp/app-read.ts')
+      expect(lastFrame() ?? '').not.toContain('stillHiddenWhileCollapsed')
+
+      stdin.write('\u000f')
+      await new Promise(r => setImmediate(r))
+      expect(lastFrame() ?? '').toContain('stillHiddenWhileCollapsed')
+
+      stdin.write('\u000f')
+      await new Promise(r => setImmediate(r))
+      expect(lastFrame() ?? '').toContain('Read result: /tmp/app-read.ts')
+      expect(lastFrame() ?? '').not.toContain('stillHiddenWhileCollapsed')
+    } finally {
+      unmount()
+    }
+  })
+
+  it('findLatestReadResultId returns the newest successful read-like tool result', () => {
+    expect(findLatestReadResultId([
+      {
+        role: 'assistant',
+        id: 'a1',
+        ts: 1,
+        content: [{ type: 'tool_use', id: 'read-1', name: 'Read', input: { path: 'old.ts' } }],
+      },
+      {
+        role: 'tool',
+        id: 't1',
+        ts: 2,
+        toolUseId: 'read-1',
+        content: 'old',
+        isError: false,
+      },
+      {
+        role: 'assistant',
+        id: 'a2',
+        ts: 3,
+        content: [{ type: 'tool_use', id: 'read-2', name: 'read_file', input: { path: 'new.ts' } }],
+      },
+      {
+        role: 'tool',
+        id: 't2',
+        ts: 4,
+        toolUseId: 'read-2',
+        content: 'new',
+        isError: false,
+      },
+    ])).toBe('read-2')
   })
 
   it('renders the active session goal in the statusline', () => {
