@@ -66,7 +66,7 @@ export async function compactSession(session: Session, opts: CompactOpts): Promi
     content: [
       {
         type: 'text',
-        text: `${COMPACT_SUMMARY_MARKER}\n${summaryText.trim()}`,
+        text: `${COMPACT_SUMMARY_MARKER}\n${formatCompactSummaryText(summaryText)}`,
       },
     ],
   }
@@ -209,6 +209,11 @@ async function summarizeOnce(messages: Message[], opts: CompactOpts): Promise<st
     if (ev.type === 'text_delta') summaryText += ev.text
   }
   return summaryText
+}
+
+function formatCompactSummaryText(text: string): string {
+  const trimmed = text.trim()
+  return trimmed.length === 0 ? '' : `${trimmed}\n`
 }
 
 function shrinkMessagesForRetry(messages: Message[]): Message[] {

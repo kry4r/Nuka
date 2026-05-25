@@ -52,6 +52,24 @@ describe('compactSession', () => {
     expect(s.messages.length).toBe(before)
   })
 
+  it('preserves one trailing newline in text compact summaries', async () => {
+    const s = createSession({ providerId: 'p', model: 'm' })
+    for (let i = 0; i < 4; i++) {
+      s.messages.push({ role: 'user', id: `u${i}`, ts: i, content: [{ type: 'text', text: `u${i}` }] })
+      s.messages.push({ role: 'assistant', id: `a${i}`, ts: i, content: [{ type: 'text', text: `a${i}` }] })
+    }
+
+    await compactSession(s, { provider: stub('\nSUMMARY\n\n'), model: 'm', keepTurns: 1 })
+
+    expect(s.messages[0]).toMatchObject({ role: 'assistant' })
+    if (s.messages[0]?.role === 'assistant') {
+      expect(s.messages[0].content[0]).toMatchObject({
+        type: 'text',
+        text: `${COMPACT_SUMMARY_MARKER}\nSUMMARY\n`,
+      })
+    }
+  })
+
   it('honors retainedMessageBudget even when keepTurns would keep the transcript', async () => {
     const streamRequests: LLMRequest[] = []
     const provider: LLMProvider = {
