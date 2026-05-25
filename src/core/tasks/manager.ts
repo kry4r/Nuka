@@ -27,10 +27,12 @@ import type {
   TaskChangeListener,
   TaskSpec,
   TaskState,
+  LocalAgentSpec,
 } from './types'
 import type { EventBus } from '../events/bus'
 import type { TaskEvent } from '../events/types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
+import { defaultGitRunner, removeWorktree } from '../worktree/git'
 
 export type TaskManagerOpts = {
   /** Filesystem root for task logs (`<home>/.nuka/tasks/<id>.log`). */
@@ -43,6 +45,18 @@ type RunningEntry = {
   task: Task
   abort: AbortController
   done: Promise<void>
+}
+
+function terminalSummary(task: Task): string | undefined {
+  const source = task.error ?? (task.state === 'killed' ? 'killed' : undefined)
+  if (!source) return undefined
+  const oneLine = source.replace(/\s+/g, ' ').trim()
+  if (!oneLine) return undefined
+  return oneLine.length > 180 ? `${oneLine.slice(0, 177)}...` : oneLine
+}
+
+function localAgentSpec(task: Task): LocalAgentSpec | undefined {
+  return task.spec.kind === 'local_agent' ? task.spec : undefined
 }
 
 export class TaskManager {
@@ -218,6 +232,7 @@ export class TaskManager {
       case 'local_agent': {
         try {
           await runAgent({ spec, outputFile: task.outputFile, signal })
+          this.cleanupLocalAgentWorktree(task)
           this.complete(task, 0)
         } catch (err) {
           if (signal.aborted) return
@@ -279,6 +294,7 @@ export class TaskManager {
 
   private fail(task: Task, message: string): void {
     if (task.state === 'killed' || task.state === 'completed' || task.state === 'failed') return
+    this.cleanupLocalAgentWorktree(task)
     try { appendOutputSync(task.outputFile, `\n[task error] ${message}\n`) } catch { /* ignore */ }
     this.transition(task, 'failed', {
       finishedAt: Date.now(),
@@ -291,6 +307,7 @@ export class TaskManager {
     state: TaskState,
     patch: Partial<Task> = {},
   ): void {
+    const from = task.state
     // Cancel pending shutdown timer if the task moves on.
     if (task.state === 'shutdown_requested' && state !== 'shutdown_requested') {
       const t = this.shutdownTimers.get(task.id)
@@ -302,7 +319,87 @@ export class TaskManager {
     for (const cb of this.listeners) {
       try { cb({ ...task }) } catch { /* listener errors are best-effort */ }
     }
+    const summary = terminalSummary(task)
+    this.bus?.emit('task', {
+      type: 'task.state',
+      id: task.id,
+      from,
+      to: state,
+      ...(task.error ? { error: task.error } : {}),
+      ...(summary ? { summary } : {}),
+    })
+    this.emitLocalAgentLifecycle(task, from, state, summary)
     this.persistMeta(task)
+  }
+
+  private emitLocalAgentLifecycle(
+    task: Task,
+    from: TaskState,
+    to: TaskState,
+    summary?: string,
+  ): void {
+    const spec = localAgentSpec(task)
+    if (!spec || !this.bus) return
+    const agentId = task.agentId ?? spec.agentId
+    if (!agentId) return
+    const sessionId = spec.taskSessionId ?? task.id
+    const agentName = task.agentName ?? spec.agentName
+    if (from !== 'running' && to === 'running') {
+      this.bus.emit('agent', {
+        type: 'agent.subagent.start',
+        sessionId,
+        taskId: task.id,
+        agentId,
+        description: task.description,
+        ...(agentName ? { agentName } : {}),
+        ...(spec.providerId ? { providerId: spec.providerId } : {}),
+        ...(spec.model ? { model: spec.model } : {}),
+        ...(spec.cwd ? { cwd: spec.cwd } : {}),
+        ...(spec.resumed !== undefined ? { resumed: spec.resumed } : {}),
+      })
+      return
+    }
+    if (to === 'completed' || to === 'failed' || to === 'killed') {
+      this.bus.emit('agent', {
+        type: 'agent.subagent.end',
+        sessionId,
+        taskId: task.id,
+        agentId,
+        status: to,
+        ...(agentName ? { agentName } : {}),
+        ...(task.error ? { error: task.error } : {}),
+        ...(summary ? { summary } : {}),
+        ...(task.startedAt && task.finishedAt ? { durationMs: task.finishedAt - task.startedAt } : {}),
+      })
+    }
+  }
+
+  private cleanupLocalAgentWorktree(task: Task): void {
+    const spec = localAgentSpec(task)
+    const worktree = spec?.worktree
+    if (!spec || !worktree) return
+
+    const runner = spec.gitRunner ?? defaultGitRunner
+    const [path, repoRoot] = worktree
+    const status = runner(['status', '--porcelain'], { cwd: path })
+    if (status.code !== 0) {
+      this.appendCleanupWarning(task, `could not inspect worktree changes: ${status.stderr.trim() || status.stdout.trim() || `exit ${status.code}`}`)
+      return
+    }
+    if (status.stdout.trim().length !== 0) return
+
+    const removed = removeWorktree(runner, { repoRoot, worktreePath: path, force: false })
+    if (!removed.ok) {
+      this.appendCleanupWarning(task, removed.message)
+      return
+    }
+
+    delete spec.cwd
+    delete spec.worktree
+  }
+
+  private appendCleanupWarning(task: Task, message: string): void {
+    try { appendOutputSync(task.outputFile, `\n[worktree cleanup] ${message}\n`) } catch { /* ignore */ }
   }
 
   private persistMeta(task: Task): void {

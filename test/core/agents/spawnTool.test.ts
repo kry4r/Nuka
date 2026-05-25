@@ -125,7 +125,8 @@ describe('makeSpawnAgentTool', () => {
     expect(tool.tags).toContain('tasks')
     expect(tool.annotations?.readOnly).toBe(false)
     expect(tool.needsPermission({ agent: 'core:reviewer', task: 'review' })).toBe('none')
-    expect(JSON.stringify(tool.parameters)).toContain('Inject a summarized parent session context')
+    expect(JSON.stringify(tool.parameters)).toContain('summarized transcript fork')
+    expect(JSON.stringify(tool.parameters)).toContain('not a byte-identical tool-result placeholder fork')
     expect(JSON.stringify(tool.parameters)).not.toContain('Currently returns a clear unsupported error')
   })
 
@@ -227,6 +228,65 @@ describe('makeSpawnAgentTool', () => {
     expect(tasks.specs[0]?.context).toContain('user: parent request')
     expect(tasks.specs[0]?.context).toContain('assistant: parent answer')
     expect(tasks.specs[0]?.context).toContain('extra context')
+    expect(result.output as string).toContain('fork_context=summarized_transcript')
+    expect(result.output as string).toContain('fork_context_note=summary-only; not a byte-identical tool-result placeholder fork')
+  })
+
+  it('accepts write_scope and includes it in the queued local_agent context', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const { deps, tasks } = makeDeps(agents)
+    const tool = makeSpawnAgentTool(deps)
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'review this',
+        context: 'extra context',
+        write_scope: {
+          allow: [' src/core/agents ', 'test/core/agents'],
+          deny: ['docs/plans '],
+          note: 'Do not edit roadmap docs from this worker.',
+        },
+      },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(false)
+    expect(tasks.specs[0]?.writeScope).toEqual({
+      allow: ['src/core/agents', 'test/core/agents'],
+      deny: ['docs/plans'],
+      note: 'Do not edit roadmap docs from this worker.',
+    })
+    expect(tasks.specs[0]?.context).toContain('Write scope:')
+    expect(tasks.specs[0]?.context).toContain('- Allowed paths: src/core/agents, test/core/agents')
+    expect(tasks.specs[0]?.context).toContain('- Denied paths: docs/plans')
+    expect(tasks.specs[0]?.context).toContain('- Note: Do not edit roadmap docs from this worker.')
+    expect(tasks.specs[0]?.context).toContain('extra context')
+  })
+
+  it('rejects write_scope path lists with empty entries', async () => {
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', 'reviews code'))
+    const { deps, tasks } = makeDeps(agents)
+    const tool = makeSpawnAgentTool(deps)
+    const session = createSession({ providerId: 'p', model: 'm' })
+
+    const result = await tool.run(
+      {
+        agent: 'core:reviewer',
+        task: 'review this',
+        write_scope: {
+          allow: ['src/core/agents', '   '],
+        },
+      },
+      { signal: new AbortController().signal, cwd: process.cwd(), session },
+    )
+
+    expect(result.isError).toBe(true)
+    expect(result.output as string).toContain('write_scope.allow contains an empty path')
+    expect(tasks.specs).toHaveLength(0)
   })
 
   it('recursion guard: refuses inside a sub-agent session', async () => {
@@ -257,6 +317,7 @@ describe('makeSpawnAgentTool', () => {
       description: 'peek cwd',
       parameters: { type: 'object', properties: {} },
       source: 'builtin',
+      tags: ['core'],
       needsPermission: () => 'none',
       run: async (_input, ctx) => {
         cwdSeen.push(ctx.cwd)
@@ -327,6 +388,7 @@ describe('makeSpawnAgentTool', () => {
       description: 'peek cwd',
       parameters: { type: 'object', properties: {} },
       source: 'builtin',
+      tags: ['core'],
       needsPermission: () => 'none',
       run: async (_input, ctx) => {
         cwdSeen.push(ctx.cwd)
@@ -390,6 +452,7 @@ describe('makeSpawnAgentTool', () => {
       description: 'peek cwd',
       parameters: { type: 'object', properties: {} },
       source: 'builtin',
+      tags: ['core'],
       needsPermission: () => 'none',
       run: async (_input, ctx) => {
         cwdSeen.push(ctx.cwd)
@@ -445,7 +508,9 @@ describe('makeSpawnAgentTool', () => {
     expect(worktreeStore.list()).toHaveLength(1)
     expect(tasks.specs[0]).toMatchObject({
       cwd: '/repo/.nuka/worktrees/review-branch',
+      worktree: ['/repo/.nuka/worktrees/review-branch', '/repo'],
     })
+    expect(tasks.specs[0]?.gitRunner).toBeTypeOf('function')
     expect(result.output as string).toContain('worktree=/repo/.nuka/worktrees/review-branch')
 
     for await (const _chunk of tasks.specs[0]!.agentRunner(new AbortController().signal)) {

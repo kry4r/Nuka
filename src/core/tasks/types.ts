@@ -18,6 +18,7 @@
 import type { ResolvedAgentDef } from '../agents/types'
 import type { ProgressTrackerSnapshot } from './progressTracker'
 import type { HookRegistry } from '../hooks/registry'
+import type { GitRunner } from '../worktree/git'
 
 export type { ProgressTrackerSnapshot } from './progressTracker'
 
@@ -55,6 +56,20 @@ export type LocalBashSpec = {
  * stringify the chunks they care about into `text` before yielding.
  */
 export type AgentChunk = { text: string }
+
+export type LocalAgentWorktreeSpec = [
+  path: string,
+  repoRoot: string,
+]
+
+export type LocalAgentWriteScope = {
+  /** Paths this logical subagent is expected to own or edit. Descriptive only for now. */
+  allow?: string[]
+  /** Paths this logical subagent should avoid. Descriptive only for now. */
+  deny?: string[]
+  /** Free-form scope note from the parent agent. */
+  note?: string
+}
 
 export type LocalAgentSpec = {
   kind: 'local_agent'
@@ -99,6 +114,12 @@ export type LocalAgentSpec = {
   model?: string
   /** Effective cwd/worktree path for this local-agent execution. */
   cwd?: string
+  /** Descriptive write ownership metadata for forked/background subagents. */
+  writeScope?: LocalAgentWriteScope
+  /** Worktree lifecycle tuple: [path, repoRoot]. Clean trees are removed; dirty trees are kept. */
+  worktree?: LocalAgentWorktreeSpec
+  /** Optional mockable git runner for worktree cleanup. */
+  gitRunner?: GitRunner
 }
 
 export type InProcessTeammateSpec = {

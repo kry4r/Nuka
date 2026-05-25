@@ -23,10 +23,11 @@ import type { OutputStyle } from '../outputStyles/types'
 import type { Effort } from '../provider/types'
 import type { Skill } from '../skill/types'
 import type { Message } from '../message/types'
-import type { LocalAgentSpec, Task } from '../tasks/types'
+import type { LocalAgentSpec, LocalAgentWorktreeSpec, Task } from '../tasks/types'
 import type { AgentRegistry } from './registry'
 import { defineTool } from '../tools/define'
 import { dispatchAgent } from './dispatch'
+import { formatWriteScopeContext, normalizeWriteScope, type WriteScopeInput } from './writeScope'
 
 export type SpawnAgentTaskManagerLike = {
   enqueue(spec: LocalAgentSpec): Task
@@ -40,6 +41,7 @@ export type SpawnAgentInput = {
   fork_context?: boolean
   isolation?: 'inherit' | 'worktree'
   worktree_name?: string
+  write_scope?: WriteScopeInput
 }
 
 export function makeSpawnAgentTool(deps: {
@@ -68,50 +70,64 @@ export function makeSpawnAgentTool(deps: {
 
   return defineTool<SpawnAgentInput>({
     name: 'spawn_agent',
-    description:
-      'Start a specialist agent in the background. Returns task_id and agent_id; use TaskOutput with agent_id to read progress/output and TaskStop with agent_id to stop it. ' +
-      `Available: ${summary}.`,
+    description: `Start a background agent. Available: ${summary}.`,
     parameters: {
       type: 'object',
       required: ['agent', 'task'],
       properties: {
         agent: {
           type: 'string',
-          description:
-            'Qualified agent name `<plugin>:<name>` as listed in this tool\'s description.',
+          description: 'Qualified agent name.',
           minLength: 1,
         },
         task: {
           type: 'string',
-          description: 'Concrete instruction for the specialist agent to execute.',
+          description: 'Instruction.',
           minLength: 1,
         },
         context: {
           type: 'string',
-          description:
-            'Optional background context — included verbatim after the task in the sub-agent\'s first user message.',
+          description: 'Context.',
         },
         description: {
           type: 'string',
-          description:
-            'Short label for the background task. Defaults to the selected agent and task preview.',
+          description: 'Task label.',
         },
         fork_context: {
           type: 'boolean',
           description:
-            'Inject a summarized parent session context into the background subagent. This is a lightweight context fork, not a full transcript/worktree clone.',
+            'Inject a summarized transcript fork from the parent session; not a byte-identical tool-result placeholder fork.',
         },
         isolation: {
           type: 'string',
           enum: ['inherit', 'worktree'],
-          description:
-            'Cwd isolation for the background agent. "inherit" uses the current active cwd; "worktree" creates a tracked git worktree and runs the agent there.',
+          description: 'Cwd isolation.',
         },
         worktree_name: {
           type: 'string',
-          description:
-            'Optional worktree branch/name when isolation="worktree"; slugified before git worktree creation.',
+          description: 'Worktree name.',
           minLength: 1,
+        },
+        write_scope: {
+          type: 'object',
+          description: 'Descriptive write ownership boundary.',
+          properties: {
+            allow: {
+              type: 'array',
+              items: { type: 'string', minLength: 1 },
+              description: 'Paths this agent may edit.',
+            },
+            deny: {
+              type: 'array',
+              items: { type: 'string', minLength: 1 },
+              description: 'Paths this agent should avoid.',
+            },
+            note: {
+              type: 'string',
+              description: 'Scope note.',
+            },
+          },
+          additionalProperties: false,
         },
       },
       additionalProperties: false,
@@ -144,10 +160,15 @@ export function makeSpawnAgentTool(deps: {
       const description = normalizeDescription(input.description)
         ?? `${resolved.name}: ${input.task.slice(0, 80)}`
       const activeStyle = deps.outputStyle ? deps.outputStyle() : null
+      const writeScope = normalizeWriteScope(input.write_scope)
+      if (!writeScope.ok) {
+        return { isError: true, output: writeScope.error }
+      }
       const context = mergeContext(
         input.fork_context === true
           ? formatForkContext(ctx.session?.messages ?? [])
           : undefined,
+        formatWriteScopeContext(writeScope.value),
         input.context,
       )
       const effectiveInput: SpawnAgentInput = {
@@ -156,7 +177,7 @@ export function makeSpawnAgentTool(deps: {
       }
       const cwdResolution = resolveSpawnCwd(effectiveInput, ctx.cwd, deps)
       if (cwdResolution.isError) return cwdResolution.result
-      const { cwd, worktreePath } = cwdResolution
+      const { cwd, worktreePath, worktree } = cwdResolution
 
       const task = deps.taskManager.enqueue({
         kind: 'local_agent',
@@ -164,9 +185,11 @@ export function makeSpawnAgentTool(deps: {
         agentName: resolved.name,
         task: input.task,
         ...(context !== undefined ? { context } : {}),
+        ...(writeScope.value !== undefined ? { writeScope: writeScope.value } : {}),
         providerId: parentSession?.providerId,
         model: resolved.model ?? parentSession?.model,
         cwd,
+        ...(worktree ? { worktree, gitRunner: deps.gitRunner ?? defaultGitRunner } : {}),
         agentRunner: async function* (signal) {
           const result = await dispatchAgent({
             agent: resolved,
@@ -197,6 +220,12 @@ export function makeSpawnAgentTool(deps: {
           `agent=${resolved.name}`,
           `description=${task.description}`,
           ...(worktreePath ? [`worktree=${worktreePath}`] : []),
+          ...(input.fork_context === true
+            ? [
+                'fork_context=summarized_transcript',
+                'fork_context_note=summary-only; not a byte-identical tool-result placeholder fork',
+              ]
+            : []),
           `output_file=${task.outputFile}`,
           'Use TaskOutput with agent_id to read output; use TaskStop with agent_id to stop it.',
         ].join('\n'),
@@ -212,7 +241,7 @@ function resolveSpawnCwd(
     worktreeStore?: WorktreeStore
     gitRunner?: GitRunner
   },
-): { isError: false; cwd: string; worktreePath?: string } | { isError: true; result: ToolResult } {
+): { isError: false; cwd: string; worktreePath?: string; worktree?: LocalAgentWorktreeSpec } | { isError: true; result: ToolResult } {
   if (input.isolation !== 'worktree') {
     return {
       isError: false,
@@ -254,6 +283,7 @@ function resolveSpawnCwd(
     isError: false,
     cwd: created.worktreePath,
     worktreePath: created.worktreePath,
+    worktree: [created.worktreePath, repoRoot],
   }
 }
 
@@ -262,11 +292,8 @@ function normalizeDescription(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-function mergeContext(
-  first: string | undefined,
-  second: string | undefined,
-): string | undefined {
-  const parts = [first, second]
+function mergeContext(...values: Array<string | undefined>): string | undefined {
+  const parts = values
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value))
   return parts.length > 0 ? parts.join('\n\n') : undefined

@@ -13,6 +13,7 @@ import type { LLMProvider, ProviderEvent } from '../../../src/core/provider/type
 import type { ProviderResolver } from '../../../src/core/provider/resolver'
 import { PermissionChecker } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
+import type { Skill } from '../../../src/core/skill/types'
 
 const ctx = (): ToolContext => ({
   signal: new AbortController().signal,
@@ -36,13 +37,30 @@ function makeDelegate<I>(name: string): Tool<I> & { calls: I[] } {
   }
 }
 
-function mkAgent(pluginName: string, name: string): ResolvedAgentDef {
+function mkAgent(
+  pluginName: string,
+  name: string,
+  overrides: Partial<ResolvedAgentDef> = {},
+): ResolvedAgentDef {
   return {
     name,
     description: 'agent',
     systemPrompt: 'system',
     maxTurns: 20,
     pluginName,
+    ...overrides,
+  }
+}
+
+function mkSkill(overrides: Partial<Skill> = {}): Skill {
+  return {
+    name: 'test-first',
+    description: 'test first',
+    when: 'on-session-start',
+    body: 'Always write the regression test first.',
+    source: 'project',
+    path: '/tmp/test-first/SKILL.md',
+    ...overrides,
   }
 }
 
@@ -172,6 +190,11 @@ describe('agent lifecycle wrapper tools', () => {
         agentName: 'core:reviewer',
         task: 'original',
         context: 'old context',
+        writeScope: {
+          allow: ['src/core/agents'],
+          deny: ['docs/plans'],
+          note: 'Keep edits in the runtime files.',
+        },
         description: 'core:reviewer: original',
         agentRunner: async function* () { yield { text: 'old' } },
       },
@@ -215,11 +238,21 @@ describe('agent lifecycle wrapper tools', () => {
       agentId: 'agent-123',
       agentName: 'core:reviewer',
       task: 'continue from here',
-      context: ['old context', 'new facts'].join('\n\n'),
+      writeScope: {
+        allow: ['src/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Keep edits in the runtime files.',
+      },
       resumed: true,
       providerId: undefined,
       model: undefined,
     })
+    expect(specs[0]!.context).toContain('old context')
+    expect(specs[0]!.context).toContain('Write scope:')
+    expect(specs[0]!.context).toContain('- Allowed paths: src/core/agents')
+    expect(specs[0]!.context).toContain('- Denied paths: docs/plans')
+    expect(specs[0]!.context).toContain('- Note: Keep edits in the runtime files.')
+    expect(specs[0]!.context).toContain('new facts')
     expect(specs[0]!.description).toBe('core:reviewer: continue from here')
     expect(result.output as string).toContain('status=resumed')
     expect(result.output as string).toContain('task_id=task-2')
@@ -443,6 +476,88 @@ describe('agent lifecycle wrapper tools', () => {
     expect(seenPrompts[0]).toContain('new facts')
   })
 
+  it('resume_agent rebuilt runner preserves agent skills and effort filtering', async () => {
+    const specs: LocalAgentSpec[] = []
+    let seenSystem = ''
+    let seenEffort: unknown
+    const seenResolveEffort: Array<[unknown, string, string]> = []
+    const existing: Task = {
+      id: 'task-1',
+      kind: 'local_agent',
+      description: 'core:reviewer: original',
+      state: 'completed',
+      outputFile: '/tmp/task-1.log',
+      agentId: 'agent-123',
+      spec: {
+        kind: 'local_agent',
+        agentId: 'agent-123',
+        agentName: 'core:reviewer',
+        task: 'original',
+        providerId: 'p',
+        model: 'm',
+        description: 'core:reviewer: original',
+        agentRunner: async function* () { yield { text: 'old' } },
+      },
+    }
+    const manager = {
+      get: (id: string) => id === existing.id ? existing : undefined,
+      list: () => [existing],
+      enqueue: (spec: LocalAgentSpec): Task => {
+        specs.push(spec)
+        return {
+          id: 'task-2',
+          kind: 'local_agent',
+          description: spec.description,
+          state: 'running',
+          outputFile: '/tmp/task-2.log',
+          agentId: spec.agentId ?? 'agent-task-2',
+          spec,
+        }
+      },
+    }
+    const agents = new AgentRegistry()
+    agents.register(mkAgent('core', 'reviewer', {
+      skills: ['test-first'],
+      effort: 'high',
+    }))
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream(req) {
+        seenSystem = req.system
+        seenEffort = req.effort
+        yield { type: 'text_delta', text: 'resumed-response' }
+        yield { type: 'message_stop', stopReason: 'end_turn', usage: { inputTokens: 0, outputTokens: 0 } }
+      },
+      async listRemoteModels() { return [] },
+    } as LLMProvider
+    const tool = makeResumeAgentTool({
+      taskManager: manager,
+      agents,
+      registry: new ToolRegistry(),
+      providerResolver: mkResolver(provider),
+      permission: new PermissionChecker(() => new PermissionCache(), async () => ({ allowed: true })),
+      skills: [mkSkill()],
+      resolveEffort: (effort, providerId, model) => {
+        seenResolveEffort.push([effort, providerId, model])
+        return 'medium'
+      },
+    })
+
+    await tool.run({
+      agent_id: 'agent-123',
+      prompt: 'continue from here',
+    }, ctx())
+
+    for await (const _chunk of specs[0]!.agentRunner(new AbortController().signal)) {
+      // drain
+    }
+    expect(seenSystem).toContain('[Skill: test-first]')
+    expect(seenSystem).toContain('Always write the regression test first.')
+    expect(seenResolveEffort).toEqual([['high', 'p', 'm']])
+    expect(seenEffort).toBe('medium')
+  })
+
   it('resume_agent can rebuild from persisted task metadata when task is not in memory', async () => {
     const specs: LocalAgentSpec[] = []
     const seenPrompts: string[] = []
@@ -459,6 +574,11 @@ describe('agent lifecycle wrapper tools', () => {
       providerId: 'p',
       model: 'm',
       cwd: '/tmp/persisted-worktree',
+      writeScope: {
+        allow: ['src/core/agents', 'test/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Keep follow-up edits inside subagent lifecycle files.',
+      },
     })
     writeTranscript(home, {
       id: 'old-task',
@@ -466,6 +586,11 @@ describe('agent lifecycle wrapper tools', () => {
       agentName: 'core:reviewer',
       providerId: 'p',
       model: 'm',
+      writeScope: {
+        allow: ['src/core/agents', 'test/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Keep follow-up edits inside subagent lifecycle files.',
+      },
       messages: [
         { role: 'user', content: 'old prompt\n\npersisted context' },
         { role: 'assistant', content: 'previous final output' },
@@ -513,10 +638,19 @@ describe('agent lifecycle wrapper tools', () => {
       providerId: 'p',
       model: 'm',
       cwd: '/tmp/persisted-worktree',
+      writeScope: {
+        allow: ['src/core/agents', 'test/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Keep follow-up edits inside subagent lifecycle files.',
+      },
       resumed: true,
     })
     expect(specs[0]!.context).toContain('persisted context')
     expect(specs[0]!.context).toContain('previous final output')
+    expect(specs[0]!.context).toContain('Write scope:')
+    expect(specs[0]!.context).toContain('- Allowed paths: src/core/agents, test/core/agents')
+    expect(specs[0]!.context).toContain('- Denied paths: docs/plans')
+    expect(specs[0]!.context).toContain('- Note: Keep follow-up edits inside subagent lifecycle files.')
     expect(specs[0]!.context).toContain('new disk facts')
 
     for await (const _chunk of specs[0]!.agentRunner(new AbortController().signal)) {
@@ -525,6 +659,8 @@ describe('agent lifecycle wrapper tools', () => {
     expect(seenPrompts[0]).toContain('continue from disk')
     expect(seenPrompts[0]).toContain('persisted context')
     expect(seenPrompts[0]).toContain('previous final output')
+    expect(seenPrompts[0]).toContain('Write scope:')
+    expect(seenPrompts[0]).toContain('Allowed paths: src/core/agents, test/core/agents')
     expect(seenPrompts[0]).toContain('new disk facts')
   })
 

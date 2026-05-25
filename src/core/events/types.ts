@@ -5,7 +5,7 @@ export type Topic = 'task' | 'agent' | 'message' | 'harness'
 
 export type TaskEvent =
   | { type: 'task.created'; task: Task }
-  | { type: 'task.state'; id: string; from: TaskState; to: TaskState }
+  | { type: 'task.state'; id: string; from: TaskState; to: TaskState; error?: string; summary?: string }
   | { type: 'task.progress'; id: string; snapshot: ProgressTrackerSnapshot }
   | { type: 'task.evicted'; id: string }
 
@@ -14,6 +14,29 @@ export type AgentBusEvent =
   | { type: 'agent.tool.end'; sessionId: string; toolName: string; ok: boolean; durationMs: number }
   | { type: 'agent.message.assistant'; sessionId: string; text: string }
   | { type: 'agent.usage'; sessionId: string; inputTokens: number; outputTokens: number }
+  | {
+      type: 'agent.subagent.start'
+      sessionId: string
+      taskId: string
+      agentId: string
+      description: string
+      agentName?: string
+      providerId?: string
+      model?: string
+      cwd?: string
+      resumed?: boolean
+    }
+  | {
+      type: 'agent.subagent.end'
+      sessionId: string
+      taskId: string
+      agentId: string
+      status: 'completed' | 'failed' | 'killed'
+      agentName?: string
+      error?: string
+      summary?: string
+      durationMs?: number
+    }
 
 export type MessageEvent =
   | { type: 'message.sent'; envelope: MessageEnvelope }

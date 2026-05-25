@@ -8,7 +8,7 @@ import type { Tool, ToolContext, ToolResult } from '../tools/types'
 import { defineTool } from '../tools/define'
 import type { TaskOutputToolInput } from '../tasks/outputTool'
 import type { TaskStopToolInput } from '../tasks/stopTool'
-import type { LocalAgentSpec, Task } from '../tasks/types'
+import type { LocalAgentSpec, LocalAgentWriteScope, Task } from '../tasks/types'
 import { cleanLookupId, findTaskByAgentId, type TaskLookupManagerLike } from '../tasks/lookup'
 import { findLatestMetaByAgentId, readTranscript, type TaskTranscript } from '../tasks/meta'
 import type { AgentRegistry } from './registry'
@@ -20,6 +20,9 @@ import type { WorktreeStore } from '../worktree/store'
 import { resolveToolCwd } from '../worktree/store'
 import type { OutputStyle } from '../outputStyles/types'
 import { dispatchAgent } from './dispatch'
+import type { Skill } from '../skill/types'
+import type { Effort } from '../provider/types'
+import { formatWriteScopeContext } from './writeScope'
 
 export type WaitAgentInput = {
   agent_id?: string
@@ -68,6 +71,14 @@ export type ResumeAgentDeps = {
   hookRegistry?: HookRegistry
   worktreeStore?: WorktreeStore
   outputStyle?: () => OutputStyle | null
+  /** Skill catalog available to resumed sub-agents for agent.skills preloading. */
+  skills?: Skill[]
+  /** Optional final provider/model capability filter before each resumed request. */
+  resolveEffort?: (
+    effort: Effort | undefined,
+    providerId: string,
+    model: string,
+  ) => Effort | undefined
 }
 
 export function makeWaitAgentTool(
@@ -76,31 +87,28 @@ export function makeWaitAgentTool(
   return defineTool<WaitAgentInput>({
     name: 'wait_agent',
     description:
-      'Wait for a background subagent to finish, then return its final output and task metadata. Prefer agent_id from spawn_agent; task_id is accepted for compatibility.',
+      'Wait for a background subagent and return output.',
     parameters: {
       type: 'object',
       properties: {
         agent_id: {
           type: 'string',
-          description: 'Stable subagent ID returned by spawn_agent.',
+          description: 'Stable subagent ID.',
           minLength: 1,
         },
         task_id: {
           type: 'string',
-          description:
-            'Background task ID. Compatibility escape hatch; agent_id is preferred.',
+          description: 'Background task ID.',
           minLength: 1,
         },
         timeout_ms: {
           type: 'integer',
-          description:
-            'Max wait in milliseconds. Passed through to TaskOutput.',
+          description: 'Max wait in milliseconds.',
           minimum: 0,
         },
         lines: {
           type: 'integer',
-          description:
-            'Max number of trailing output lines to return. Passed through to TaskOutput.',
+          description: 'Max trailing output lines.',
           minimum: 1,
         },
       },
@@ -129,19 +137,18 @@ export function makeCloseAgentTool(
   return defineTool<CloseAgentInput>({
     name: 'close_agent',
     description:
-      'Stop a background subagent. Prefer agent_id from spawn_agent; task_id is accepted for compatibility.',
+      'Stop a background subagent.',
     parameters: {
       type: 'object',
       properties: {
         agent_id: {
           type: 'string',
-          description: 'Stable subagent ID returned by spawn_agent.',
+          description: 'Stable subagent ID.',
           minLength: 1,
         },
         task_id: {
           type: 'string',
-          description:
-            'Background task ID. Compatibility escape hatch; agent_id is preferred.',
+          description: 'Background task ID.',
           minLength: 1,
         },
       },
@@ -167,28 +174,28 @@ export function makeResumeAgentTool(
   return defineTool<ResumeAgentInput>({
     name: 'resume_agent',
     description:
-      'Start a new background execution for an existing logical subagent. Reuses the prior agent_id and task metadata; prompt is appended as the new instruction. This is a lightweight resume and does not yet reconstruct full transcript/worktree state.',
+      'Resume a logical background subagent with a new prompt.',
     parameters: {
       type: 'object',
       required: ['agent_id', 'prompt'],
       properties: {
         agent_id: {
           type: 'string',
-          description: 'Stable subagent ID returned by spawn_agent.',
+          description: 'Stable subagent ID.',
           minLength: 1,
         },
         prompt: {
           type: 'string',
-          description: 'Follow-up instruction for the resumed subagent execution.',
+          description: 'Follow-up instruction.',
           minLength: 1,
         },
         context: {
           type: 'string',
-          description: 'Optional additional context to append after prior context.',
+          description: 'Additional context.',
         },
         description: {
           type: 'string',
-          description: 'Short label for the resumed background task.',
+          description: 'Short label.',
         },
       },
       additionalProperties: false,
@@ -218,28 +225,28 @@ export function makeSendAgentTool(
   return defineTool<SendAgentInput>({
     name: 'send_agent',
     description:
-      'Send a follow-up instruction to an existing background subagent. Reuses the same stable agent_id and starts a new background execution. This is currently equivalent to resume_agent with message instead of prompt.',
+      'Send a follow-up instruction to a background subagent.',
     parameters: {
       type: 'object',
       required: ['agent_id', 'message'],
       properties: {
         agent_id: {
           type: 'string',
-          description: 'Stable subagent ID returned by spawn_agent.',
+          description: 'Stable subagent ID.',
           minLength: 1,
         },
         message: {
           type: 'string',
-          description: 'Follow-up instruction to send to the subagent.',
+          description: 'Follow-up instruction.',
           minLength: 1,
         },
         context: {
           type: 'string',
-          description: 'Optional additional context to append after prior context.',
+          description: 'Additional context.',
         },
         description: {
           type: 'string',
-          description: 'Short label for the follow-up background task.',
+          description: 'Short label.',
         },
       },
       additionalProperties: false,
@@ -269,28 +276,28 @@ export function makeSendInputTool(
   return defineTool<SendInputInput>({
     name: 'send_input',
     description:
-      'Compatibility alias for send_agent. Send a follow-up input to an existing background subagent and start a new background execution under the same stable agent_id.',
+      'Compatibility alias for send_agent.',
     parameters: {
       type: 'object',
       required: ['agent_id', 'input'],
       properties: {
         agent_id: {
           type: 'string',
-          description: 'Stable subagent ID returned by spawn_agent.',
+          description: 'Stable subagent ID.',
           minLength: 1,
         },
         input: {
           type: 'string',
-          description: 'Follow-up instruction/input to send to the subagent.',
+          description: 'Follow-up input.',
           minLength: 1,
         },
         context: {
           type: 'string',
-          description: 'Optional additional context to append after prior context.',
+          description: 'Additional context.',
         },
         description: {
           type: 'string',
-          description: 'Short label for the follow-up background task.',
+          description: 'Short label.',
         },
       },
       additionalProperties: false,
@@ -349,7 +356,11 @@ async function enqueueAgentFollowup(
       output: `Cannot resume agent '${agentName}': definition is not registered. Available: ${available}`,
     }
   }
-  const context = mergeContext(seed.context, opts.context)
+  const context = mergeContext(
+    seed.context,
+    formatWriteScopeContext(seed.writeScope),
+    opts.context,
+  )
   const description = normalizeDescription(opts.description)
     ?? `${agentName}: ${prompt.slice(0, 80)}`
   const providerId = seed.providerId
@@ -368,6 +379,7 @@ async function enqueueAgentFollowup(
     providerId,
     model,
     cwd,
+    ...(seed.writeScope !== undefined ? { writeScope: seed.writeScope } : {}),
     ...(seed.hookRegistry ? { hookRegistry: seed.hookRegistry } : {}),
     ...(seed.taskSessionId ? { taskSessionId: seed.taskSessionId } : {}),
     agentRunner: async function* (signal) {
@@ -384,6 +396,8 @@ async function enqueueAgentFollowup(
         ...(deps.hookRegistry ? { hookRegistry: deps.hookRegistry } : {}),
         ...(deps.worktreeStore ? { worktreeStore: deps.worktreeStore } : {}),
         ...(activeStyle ? { outputStyle: activeStyle } : {}),
+        ...(deps.skills ? { skills: deps.skills } : {}),
+        ...(deps.resolveEffort ? { resolveEffort: deps.resolveEffort } : {}),
       })
       yield { text: stringifyOutput(result.output) }
     },
@@ -413,6 +427,7 @@ type ResumeSeed =
       providerId?: string
       model?: string
       cwd?: string
+      writeScope?: LocalAgentWriteScope
       hookRegistry?: HookRegistry
       taskSessionId?: string
     }
@@ -440,6 +455,7 @@ function findResumeSeed(deps: ResumeAgentDeps, agentId: string): ResumeSeed {
       providerId: prior.providerId,
       model: prior.model,
       cwd: prior.cwd,
+      writeScope: prior.writeScope,
       hookRegistry: prior.hookRegistry,
       taskSessionId: prior.taskSessionId,
     }
@@ -472,6 +488,7 @@ function findResumeSeed(deps: ResumeAgentDeps, agentId: string): ResumeSeed {
     providerId: persisted.providerId,
     model: persisted.model,
     cwd: persisted.cwd,
+    writeScope: persisted.writeScope,
   }
 }
 
@@ -480,11 +497,8 @@ function normalizeDescription(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
-function mergeContext(
-  prior: string | undefined,
-  next: string | undefined,
-): string | undefined {
-  const parts = [prior, next]
+function mergeContext(...values: Array<string | undefined>): string | undefined {
+  const parts = values
     .map(value => value?.trim())
     .filter((value): value is string => Boolean(value))
   return parts.length > 0 ? parts.join('\n\n') : undefined

@@ -6,6 +6,8 @@ import * as path from 'node:path'
 import { TaskManager } from '../../../src/core/tasks/manager'
 import type { LocalAgentSpec } from '../../../src/core/tasks/types'
 import { readMeta, readTranscript } from '../../../src/core/tasks/meta'
+import { createEventBus } from '../../../src/core/events/bus'
+import type { GitResult } from '../../../src/core/worktree/git'
 
 async function newHome(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), 'nuka-tasks-'))
@@ -125,6 +127,11 @@ describe('TaskManager', () => {
       providerId: 'p',
       model: 'm',
       cwd: '/tmp/nuka-agent-cwd',
+      writeScope: {
+        allow: ['src/core/agents', 'test/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Stay inside the subagent runtime slice.',
+      },
       agentRunner: async function* () {
         yield { text: 'final answer' }
       },
@@ -140,11 +147,178 @@ describe('TaskManager', () => {
       providerId: 'p',
       model: 'm',
       cwd: '/tmp/nuka-agent-cwd',
+      writeScope: {
+        allow: ['src/core/agents', 'test/core/agents'],
+        deny: ['docs/plans'],
+        note: 'Stay inside the subagent runtime slice.',
+      },
       messages: [
         { role: 'user', content: 'inspect this\n\nprior context' },
         { role: 'assistant', content: 'final answer' },
       ],
     })
+    expect(readMeta(home, t.id)?.writeScope).toEqual({
+      allow: ['src/core/agents', 'test/core/agents'],
+      deny: ['docs/plans'],
+      note: 'Stay inside the subagent runtime slice.',
+    })
+  })
+
+  it('removes clean local_agent worktree isolation after completion', async () => {
+    const gitCalls: string[][] = []
+    const gitRunner = (args: string[], opts: { cwd: string }): GitResult => {
+      gitCalls.push([opts.cwd, ...args])
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') {
+        return { code: 0, stdout: '/repo\n', stderr: '' }
+      }
+      if (args[0] === 'status' && args[1] === '--porcelain') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (args[0] === 'worktree' && args[1] === 'remove') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      return { code: 1, stdout: '', stderr: `unexpected git call: ${args.join(' ')}` }
+    }
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: clean worktree',
+      cwd: '/repo/.nuka/worktrees/clean-agent',
+      worktree: ['/repo/.nuka/worktrees/clean-agent', '/repo'],
+      gitRunner,
+      agentRunner: async function* () {
+        yield { text: 'done' }
+      },
+    })
+
+    await m.drain()
+
+    expect(m.get(t.id)?.state).toBe('completed')
+    expect(gitCalls).toContainEqual(['/repo/.nuka/worktrees/clean-agent', 'status', '--porcelain'])
+    expect(gitCalls).toContainEqual([
+      '/repo',
+      'worktree',
+      'remove',
+      '/repo/.nuka/worktrees/clean-agent',
+    ])
+    expect(readMeta(home, t.id)?.cwd).toBeUndefined()
+  })
+
+  it('keeps dirty local_agent worktree isolation after completion', async () => {
+    const gitCalls: string[][] = []
+    const gitRunner = (args: string[], opts: { cwd: string }): GitResult => {
+      gitCalls.push([opts.cwd, ...args])
+      if (args[0] === 'status' && args[1] === '--porcelain') {
+        return { code: 0, stdout: ' M src/app.ts\n', stderr: '' }
+      }
+      if (args[0] === 'worktree' && args[1] === 'remove') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      return { code: 1, stdout: '', stderr: `unexpected git call: ${args.join(' ')}` }
+    }
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: dirty worktree',
+      cwd: '/repo/.nuka/worktrees/dirty-agent',
+      worktree: ['/repo/.nuka/worktrees/dirty-agent', '/repo'],
+      gitRunner,
+      agentRunner: async function* () {
+        yield { text: 'changed files' }
+      },
+    })
+
+    await m.drain()
+
+    expect(m.get(t.id)?.state).toBe('completed')
+    expect(gitCalls).toContainEqual(['/repo/.nuka/worktrees/dirty-agent', 'status', '--porcelain'])
+    expect(gitCalls).not.toContainEqual([
+      '/repo',
+      'worktree',
+      'remove',
+      '/repo/.nuka/worktrees/dirty-agent',
+    ])
+    expect(readMeta(home, t.id)?.cwd).toBe('/repo/.nuka/worktrees/dirty-agent')
+  })
+
+  it('removes clean local_agent worktree isolation after failure', async () => {
+    const gitCalls: string[][] = []
+    const gitRunner = (args: string[], opts: { cwd: string }): GitResult => {
+      gitCalls.push([opts.cwd, ...args])
+      if (args[0] === 'status' && args[1] === '--porcelain') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (args[0] === 'worktree' && args[1] === 'remove') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      return { code: 1, stdout: '', stderr: `unexpected git call: ${args.join(' ')}` }
+    }
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: failed worktree',
+      cwd: '/repo/.nuka/worktrees/failed-agent',
+      worktree: ['/repo/.nuka/worktrees/failed-agent', '/repo'],
+      gitRunner,
+      agentRunner: async function* () {
+        throw new Error('agent failed')
+      },
+    })
+
+    await m.drain()
+
+    expect(m.get(t.id)?.state).toBe('failed')
+    expect(gitCalls).toContainEqual(['/repo/.nuka/worktrees/failed-agent', 'status', '--porcelain'])
+    expect(gitCalls).toContainEqual([
+      '/repo',
+      'worktree',
+      'remove',
+      '/repo/.nuka/worktrees/failed-agent',
+    ])
+    expect(readMeta(home, t.id)?.cwd).toBeUndefined()
+  })
+
+  it('removes clean local_agent worktree isolation after cancellation settles', async () => {
+    const gitCalls: string[][] = []
+    const gitRunner = (args: string[], opts: { cwd: string }): GitResult => {
+      gitCalls.push([opts.cwd, ...args])
+      if (args[0] === 'status' && args[1] === '--porcelain') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (args[0] === 'worktree' && args[1] === 'remove') {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      return { code: 1, stdout: '', stderr: `unexpected git call: ${args.join(' ')}` }
+    }
+    const m = new TaskManager({ home })
+    const t = m.enqueue({
+      kind: 'local_agent',
+      description: 'core:reviewer: cancelled worktree',
+      cwd: '/repo/.nuka/worktrees/cancelled-agent',
+      worktree: ['/repo/.nuka/worktrees/cancelled-agent', '/repo'],
+      gitRunner,
+      agentRunner: async function* (signal) {
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            resolve()
+            return
+          }
+          signal.addEventListener('abort', () => resolve(), { once: true })
+        })
+      },
+    })
+
+    await m.cancel(t.id)
+
+    expect(m.get(t.id)?.state).toBe('killed')
+    expect(gitCalls).toContainEqual(['/repo/.nuka/worktrees/cancelled-agent', 'status', '--porcelain'])
+    expect(gitCalls).toContainEqual([
+      '/repo',
+      'worktree',
+      'remove',
+      '/repo/.nuka/worktrees/cancelled-agent',
+    ])
+    expect(readMeta(home, t.id)?.cwd).toBeUndefined()
   })
 
   it('list() returns enqueued tasks (newest first)', async () => {
@@ -188,6 +362,90 @@ describe('TaskManager', () => {
     })
     await m.drain()
     expect(events).toContain('completed')
+  })
+
+  it('emits extension-visible local subagent start and end events', async () => {
+    const bus = createEventBus()
+    const agentEvents: any[] = []
+    bus.subscribe('agent', (event: any) => agentEvents.push(event))
+    const m = new TaskManager({ home, bus })
+
+    const task = m.enqueue({
+      kind: 'local_agent',
+      description: 'verify patch',
+      agentId: 'agent-visible',
+      agentName: 'core:verifier',
+      providerId: 'custom-mimo',
+      model: 'mimo-v2-pro',
+      cwd: '/tmp/nuka-visible',
+      resumed: true,
+      taskSessionId: 'parent-session',
+      agentRunner: async function* () {
+        yield { text: 'checked' }
+      },
+    })
+
+    await m.drain()
+
+    expect(agentEvents).toContainEqual(expect.objectContaining({
+      type: 'agent.subagent.start',
+      taskId: task.id,
+      agentId: 'agent-visible',
+      agentName: 'core:verifier',
+      sessionId: 'parent-session',
+      description: 'verify patch',
+      providerId: 'custom-mimo',
+      model: 'mimo-v2-pro',
+      cwd: '/tmp/nuka-visible',
+      resumed: true,
+    }))
+    expect(agentEvents).toContainEqual(expect.objectContaining({
+      type: 'agent.subagent.end',
+      taskId: task.id,
+      agentId: 'agent-visible',
+      agentName: 'core:verifier',
+      sessionId: 'parent-session',
+      status: 'completed',
+    }))
+  })
+
+  it('emits failed local subagent summaries on agent and task events', async () => {
+    const bus = createEventBus()
+    const agentEvents: any[] = []
+    const taskEvents: any[] = []
+    bus.subscribe('agent', (event: any) => agentEvents.push(event))
+    bus.subscribe('task', (event: any) => taskEvents.push(event))
+    const m = new TaskManager({ home, bus })
+
+    const task = m.enqueue({
+      kind: 'local_agent',
+      description: 'review unsafe edit',
+      agentId: 'agent-failed',
+      agentName: 'core:verifier',
+      taskSessionId: 'parent-session',
+      agentRunner: async function* () {
+        throw new Error('permission denied while editing src/app.ts')
+      },
+    })
+
+    await m.drain()
+
+    expect(m.get(task.id)?.state).toBe('failed')
+    expect(agentEvents).toContainEqual(expect.objectContaining({
+      type: 'agent.subagent.end',
+      taskId: task.id,
+      agentId: 'agent-failed',
+      status: 'failed',
+      error: 'permission denied while editing src/app.ts',
+      summary: 'permission denied while editing src/app.ts',
+    }))
+    expect(taskEvents).toContainEqual(expect.objectContaining({
+      type: 'task.state',
+      id: task.id,
+      to: 'failed',
+      error: 'permission denied while editing src/app.ts',
+      summary: 'permission denied while editing src/app.ts',
+    }))
   })
 
   it('drain() resolves once all tasks settle', async () => {
