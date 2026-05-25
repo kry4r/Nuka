@@ -2,7 +2,7 @@
 
 Date: 2026-05-23
 
-Refresh: 2026-05-24 (Asia/Shanghai)
+Refresh: 2026-05-25 (Asia/Shanghai)
 
 Purpose: turn current Claude Code, Codex, and Pi feature research into a Nuka
 iteration queue. This is an intake list, not an implementation spec; each
@@ -13,9 +13,9 @@ it touches Ink.
 
 | Source | Evidence | Version / date | License / constraint |
 | --- | --- | --- | --- |
-| Codex | Local repo `/tmp/openai-codex`; remote `https://github.com/openai/codex.git`; official changelog `https://developers.openai.com/codex/changelog`; May 21 ChatGPT/OpenAI release notes for Codex app updates | local commit `7d47056ea42636271ac020b86347fbbef49490aa`; latest official observed entries: Codex app `26.519` and CLI `0.133.0`, 2026-05-21 | Apache-2.0 in `/tmp/openai-codex/LICENSE`; official docs/changelog are product references, implementation ideas can be ported from the open-source repo with attribution awareness |
-| Claude Code | Official changelog `https://code.claude.com/docs/en/changelog`; docs fetched from `https://code.claude.com/docs/en/sub-agents` and `https://code.claude.com/docs/en/hooks`; sidebar/docs pages observed for agent view, teams, worktrees, MCP, plugins, skills, scheduled tasks, goals, checkpointing | latest observed `2.1.150` dated 2026-05-23; latest user-facing feature/fix release `2.1.149` dated 2026-05-22 | Docs are proprietary product documentation; use as behavioral reference, do not copy text or assets |
-| Pi | Official `https://pi.dev/news/releases` changelog; current release page links to GitHub/npm; latest release page `https://pi.dev/news/releases/0.75.4` | latest observed release page entry: 0.75.4 dated 2026-05-20 | Pi release page/footer identifies MIT license, but repository-level confirmation is still required before code porting; use changelog as product-behavior reference only |
+| Codex | Local repo `/tmp/openai-codex`; remote `https://github.com/openai/codex.git`; official changelog `https://developers.openai.com/codex/changelog`; May 21 ChatGPT/OpenAI release notes for Codex app updates | local commit `7d47056ea42636271ac020b86347fbbef49490aa`; latest official observed entries still Codex app `26.519` and CLI `0.133.0`, 2026-05-21 | Apache-2.0 in `/tmp/openai-codex/LICENSE`; official docs/changelog are product references, implementation ideas can be ported from the open-source repo with attribution awareness |
+| Claude Code | Official changelog `https://code.claude.com/docs/en/changelog`; docs fetched from `https://code.claude.com/docs/en/sub-agents` and `https://code.claude.com/docs/en/hooks`; sidebar/docs pages observed for agent view, teams, worktrees, MCP, plugins, skills, scheduled tasks, goals, checkpointing | latest observed `2.1.150` dated 2026-05-23; latest user-facing feature/fix release remains `2.1.149` dated 2026-05-22 | Docs are proprietary product documentation; use as behavioral reference, do not copy text or assets |
+| Pi | Official `https://pi.dev/news/releases` changelog; current release page links to GitHub/npm; latest release page `https://pi.dev/news/releases/0.75.5` | latest observed release page entry: 0.75.5 dated 2026-05-23 | Pi release page/footer identifies MIT license, but repository-level confirmation is still required before code porting; use changelog as product-behavior reference only |
 | Nuka-Code | Local repo `/data/xtzhang/Nuka-Code`; remote `http://47.93.142.235:3000/Teng/Nuka-Code.git` | commit `b873d92069a30be6187d3a4e57be871b6ae602f5`, 2026-04-23 | Internal reference; direct behavioral target for subagent system |
 
 ## Feature Checklist
@@ -39,6 +39,9 @@ it touches Ink.
 | P1 | Pi | Model thinking-level metadata (`thinkingLevelMap`) | UI only exposes valid reasoning/thinking levels per model | Provider config now supports per-model `effort` capability metadata; agent loop filters unsupported effort before provider requests; `/effort` warns from the same metadata; EffortPicker marks unsupported levels unavailable and skips them in keyboard navigation | Need broader provider preset metadata so built-ins ship useful defaults | Bad mapping can hide valid settings or send invalid ones | Model picker tests; provider request payload tests |
 | P1 | Pi | Extension-controlled working row and message replacement | Extensions can present cleaner progress/cost UI | Nuka output styles can render tool results; statusline is internal | No extension event for finalized assistant message replacement | Can obscure real model output or cost if untrusted | Extension API tests; TUI frame tests |
 | P1 | Pi | Provider retry/idle-timeout controls and lifecycle-settled retry/compaction events | Long provider streams and compaction retries fail less mysteriously | Nuka has provider request paths, compact retry/shrink, and streaming events | No user-facing provider idle-timeout control or `willRetry`-style lifecycle event | Retrying unsafe tool-adjacent turns can duplicate side effects if scoped poorly | Provider config tests; fake stream timeout tests; compact retry tests |
+| P1 | Pi | Fish shell prompt paste/newline fixes | Long commands and pasted prompts behave predictably across shells | Nuka now recognizes more scroll escape sequences, but prompt paste handling is not shell-specific | Fish-specific prompt/input regression coverage is missing | Prompt input fixes can regress cursor math and history navigation | `PromptInput` paste/newline tests; cursor ANSI harness |
+| P1 | Pi | Output style hinting and customization UI | Users can discover and tune response style without memorizing files | Nuka has output styles in the agent path and statusline display improvements | No first-class UI for current style, available styles, or per-agent override visibility | Style controls can become statusline noise or conflict with provider/model identity | Settings submenu tests; agent system-prompt tests; statusline narrow harness |
+| P1 | Pi | Preserved trailing newline in compact summaries | Compact output keeps formatting-sensitive summaries readable | Nuka has manual/native compact and retained-message budget | Need an explicit compact-summary formatting invariant for trailing newline preservation | Formatting changes can affect later prompt comprehension | Compact tests for summary text shape and retained transcript formatting |
 | P2 | Pi | Provider catalog additions and friendly `/login` display | Easier provider onboarding, clearer identity | Custom provider name/id fixes are done; Xiaomi custom works via custom provider | Built-in Cloudflare/Moonshot/Mistral/Xiaomi provider presets not complete | Provider churn and credentials docs burden | Onboarding wizard tests; provider probe tests |
 | P2 | Codex | MCP OAuth/login/status and resource read APIs | Better MCP reliability and introspection | Nuka has MCP resource tools via platform capabilities, not product UI | No server status dashboard or OAuth flow | Requires cross-process auth state | MCP config tests; settings UI harness |
 | P2 | Codex app | Appshots and advanced browser annotations | Visual/frontend feedback can be captured precisely without long prompts | Nuka has terminal UI harness and file/image prompt references | No desktop app, browser surface, or annotation attachment model | Large scope; not useful until terminal workflow is cleaner | Defer to GUI/browser track; attachment schema tests before UI work |
@@ -67,6 +70,7 @@ it touches Ink.
 5. Tighten review and TUI inspection loops:
    - scrollable diff/detail view
    - GFM task checkbox rendering
+   - Fish-shell prompt paste/newline regression coverage
    - effective effort display from skill/agent overrides, not only configured baseline
 6. Then expand extension surfaces:
    - hook list/trust UI
@@ -91,4 +95,5 @@ it touches Ink.
 - Pi release items were taken from `pi.dev/news/releases` entries with links to npm/GitHub releases.
 - Claude Code features were taken from official docs page metadata/navigation and fetched HTML for subagents/hooks.
 - Refresh on 2026-05-24 inspected official Claude Code changelog, official OpenAI Codex changelog/release notes, and Pi `0.75.4` release notes.
+- Refresh on 2026-05-25 inspected official Claude Code changelog, official OpenAI Codex changelog/release notes, and Pi `0.75.5` release notes.
 - OpenAI developer pages were reachable through indexed browsing; direct `curl` received a 403 from the OpenAI edge, so the official web view and local Codex checkout remain the recorded evidence.
