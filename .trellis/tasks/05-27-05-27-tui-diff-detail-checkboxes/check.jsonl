@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-27-05-27-tui-diff-detail-checkboxes/prd.md", "reason": "Verify requirements and acceptance criteria against the final diff."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Review Ink row rendering, stable dimensions, and keyboard-visible behavior."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Review root input and nested prompt navigation ownership."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check width/viewport behavior and ref-backed shared navigation state."}
+{"file": "test/tui/Markdown.test.tsx", "reason": "Verify GFM task checkbox rendering."}
+{"file": "test/tui/Messages.static.test.tsx", "reason": "Verify bounded expanded diff/read detail rendering."}
+{"file": "test/tui/app.test.tsx", "reason": "Verify Ctrl+O and PageDown integration behavior."}

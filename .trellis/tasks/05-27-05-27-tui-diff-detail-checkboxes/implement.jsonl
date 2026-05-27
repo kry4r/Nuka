@@ -1,0 +1,6 @@
+{"file": ".trellis/tasks/05-27-05-27-tui-diff-detail-checkboxes/prd.md", "reason": "Task requirements and acceptance criteria for bounded tool details and checkbox rendering."}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend pre-development checklist for TUI changes."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Ink component rendering, stable dimensions, and visible text guidance."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Input ownership guidance for App and PromptInput navigation behavior."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Local UI state ownership for expanded detail scroll state."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Visible TUI quality requirements for ref-backed shared navigation state."}

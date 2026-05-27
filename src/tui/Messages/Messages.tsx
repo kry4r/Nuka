@@ -67,6 +67,8 @@ export function Messages(props: {
   streaming: Message | null
   scrollOffset?: number
   expandedReadResultIds?: Set<string>
+  toolDetailMaxLines?: number
+  toolDetailScrollOffset?: number
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
   resolveToolAnnotations?: (toolName: string) => { readOnly?: boolean; destructive?: boolean; openWorld?: boolean } | undefined
@@ -127,6 +129,8 @@ export function Messages(props: {
               toolResultsById={toolResultsById}
               toolCallsById={toolCallsById}
               expandedReadResultIds={props.expandedReadResultIds}
+              toolDetailMaxLines={props.toolDetailMaxLines}
+              toolDetailScrollOffset={props.toolDetailScrollOffset}
               expandedAgentCallIds={props.expandedAgentCallIds}
               resolveToolSource={props.resolveToolSource}
               resolveToolAnnotations={props.resolveToolAnnotations}
@@ -139,6 +143,8 @@ export function Messages(props: {
             toolResultsById={toolResultsById}
             toolCallsById={toolCallsById}
             expandedReadResultIds={props.expandedReadResultIds}
+            toolDetailMaxLines={props.toolDetailMaxLines}
+            toolDetailScrollOffset={props.toolDetailScrollOffset}
             expandedAgentCallIds={props.expandedAgentCallIds}
             resolveToolSource={props.resolveToolSource}
             resolveToolAnnotations={props.resolveToolAnnotations}

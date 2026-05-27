@@ -691,7 +691,24 @@ export function App(props: AppProps): React.JSX.Element {
 
   const [expandedAgentCallIds, setExpandedAgentCallIds] = useState<Set<string>>(() => new Set())
   const [expandedReadResultIds, setExpandedReadResultIds] = useState<Set<string>>(() => new Set())
+  const expandedReadResultIdsRef = useRef(expandedReadResultIds)
+  expandedReadResultIdsRef.current = expandedReadResultIds
+  const [toolDetailScrollOffset, setToolDetailScrollOffset] = useState(0)
+  const toolDetailMaxLines = Math.max(6, Math.min(18, conversationAvailableRows - 4))
   const scrollConversation = useCallback((action: PromptNavigationAction) => {
+    if (expandedReadResultIdsRef.current.size > 0) {
+      const page = Math.max(3, Math.floor(toolDetailMaxLines / 2))
+      if (action === 'page-down') {
+        setToolDetailScrollOffset(v => v + page)
+      } else if (action === 'page-up') {
+        setToolDetailScrollOffset(v => Math.max(0, v - page))
+      } else if (action === 'home') {
+        setToolDetailScrollOffset(0)
+      } else {
+        setToolDetailScrollOffset(Number.MAX_SAFE_INTEGER)
+      }
+      return
+    }
     const maxOffset = Math.max(0, session.messages.length - 1)
     const page = Math.max(5, Math.floor(conversationAvailableRows / 2))
     if (action === 'page-up') {
@@ -703,7 +720,7 @@ export function App(props: AppProps): React.JSX.Element {
     } else {
       setMessageScrollOffset(0)
     }
-  }, [conversationAvailableRows, session.messages.length])
+  }, [conversationAvailableRows, session.messages.length, toolDetailMaxLines])
 
   // Bug fix #18: live count of focusable Tasks rows. When a subagent finishes
   // and rolls off the panel mid-focus, dispatch a clamp so cursor never
@@ -858,8 +875,10 @@ export function App(props: AppProps): React.JSX.Element {
           const next = new Set(prev)
           if (next.has(latestId)) next.delete(latestId)
           else next.add(latestId)
+          expandedReadResultIdsRef.current = next
           return next
         })
+        setToolDetailScrollOffset(0)
       }
       return
     }
@@ -1023,6 +1042,8 @@ export function App(props: AppProps): React.JSX.Element {
           streaming={streamingMsg}
           scrollOffset={messageScrollOffset}
           expandedReadResultIds={expandedReadResultIds}
+          toolDetailMaxLines={toolDetailMaxLines}
+          toolDetailScrollOffset={toolDetailScrollOffset}
           expandedAgentCallIds={expandedAgentCallIds}
           resolveToolSource={props.tools ? (n) => props.tools!.find(n)?.source : undefined}
           resolveToolAnnotations={props.tools ? (n) => props.tools!.find(n)?.annotations : undefined}

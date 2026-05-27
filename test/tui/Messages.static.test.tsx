@@ -255,4 +255,63 @@ describe('Messages — live transcript', () => {
       expanded.unmount()
     }
   })
+
+  it('bounds expanded diff details to a line window', async () => {
+    const diffOutput = Array.from(
+      { length: 18 },
+      (_, i) => `diff-line-${String(i + 1).padStart(2, '0')}`,
+    ).join('\n')
+    const items: Message[] = [
+      userMsg('u1', 'show diff'),
+      assistantToolUse('a1', 'diff-1', 'git_diff', { path: 'src/app.ts' }),
+      toolResult('t1', 'diff-1', diffOutput),
+      assistantMsg('a2', 'after-diff'),
+    ]
+
+    const top = renderWithViewport(
+      <Messages
+        items={items}
+        streaming={null}
+        expandedReadResultIds={new Set(['diff-1'])}
+        toolDetailMaxLines={6}
+        toolDetailScrollOffset={0}
+      />,
+      { cols: 80, rows: 24 },
+    )
+    try {
+      await flushInk()
+      expect(staticTap(top).staticLines).toEqual([])
+      const frame = top.lastFrame() ?? ''
+      expect(frame).toContain('git_diff result: src/app.ts · lines 1-6/18')
+      expect(frame).toContain('diff-line-01')
+      expect(frame).toContain('diff-line-06')
+      expect(frame).not.toContain('diff-line-07')
+      expect(frame).not.toContain('diff-line-18')
+      expect(frame).toContain('after-diff')
+    } finally {
+      top.unmount()
+    }
+
+    const middle = renderWithViewport(
+      <Messages
+        items={items}
+        streaming={null}
+        expandedReadResultIds={new Set(['diff-1'])}
+        toolDetailMaxLines={6}
+        toolDetailScrollOffset={10}
+      />,
+      { cols: 80, rows: 24 },
+    )
+    try {
+      await flushInk()
+      const frame = middle.lastFrame() ?? ''
+      expect(frame).toContain('git_diff result: src/app.ts · lines 11-16/18')
+      expect(frame).toContain('diff-line-11')
+      expect(frame).toContain('diff-line-16')
+      expect(frame).not.toContain('diff-line-01')
+      expect(frame).not.toContain('diff-line-18')
+    } finally {
+      middle.unmount()
+    }
+  })
 })

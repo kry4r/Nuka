@@ -427,6 +427,74 @@ describe('App', () => {
     }
   })
 
+  it('Ctrl+O opens a bounded diff detail and PageDown scrolls it', async () => {
+    const sessions = new SessionManager()
+    const session = sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    appendMessage(session, {
+      role: 'assistant',
+      id: 'a-diff',
+      ts: 1,
+      content: [{ type: 'tool_use', id: 'diff-app-1', name: 'git_diff', input: { path: 'src/app.ts' } }],
+    })
+    appendMessage(session, {
+      role: 'tool',
+      id: 't-diff',
+      ts: 2,
+      toolUseId: 'diff-app-1',
+      content: Array.from(
+        { length: 18 },
+        (_, i) => `diff-app-line-${String(i + 1).padStart(2, '0')}`,
+      ).join('\n'),
+      isError: false,
+    })
+    appendMessage(session, {
+      role: 'assistant',
+      id: 'a-after-diff',
+      ts: 3,
+      content: [{ type: 'text', text: 'after diff detail' }],
+    })
+    const slash = new SlashRegistry()
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      expect(lastFrame() ?? '').toContain('git_diff result: src/app.ts')
+      expect(lastFrame() ?? '').not.toContain('diff-app-line-18')
+
+      stdin.write('\u000f')
+      await new Promise(r => setImmediate(r))
+      expect(lastFrame() ?? '').toContain('git_diff result: src/app.ts · lines 1-6/18')
+      expect(lastFrame() ?? '').toContain('diff-app-line-01')
+      expect(lastFrame() ?? '').not.toContain('diff-app-line-18')
+
+      stdin.write('\u001B[6~')
+      await new Promise(r => setImmediate(r))
+      const f = lastFrame() ?? ''
+      expect(f).toContain('git_diff result: src/app.ts · lines 4-9/18')
+      expect(f).toContain('diff-app-line-04')
+      expect(f).toContain('diff-app-line-09')
+      expect(f).not.toContain('diff-app-line-01')
+      expect(f).not.toContain('[6~')
+      expect(f).toContain('after diff detail')
+    } finally {
+      unmount()
+    }
+  })
+
   it('findLatestReadResultId returns the newest successful read-like tool result', () => {
     expect(findLatestReadResultId([
       {

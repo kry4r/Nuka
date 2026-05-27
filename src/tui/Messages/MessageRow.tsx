@@ -105,6 +105,10 @@ export function MessageRow(props: {
   toolCallsById?: Map<string, { name: string; input: unknown }>
   /** Ids of read-like tool_result blocks that should render expanded. */
   expandedReadResultIds?: Set<string>
+  /** Maximum visible lines for expanded read/diff detail before clipping. */
+  toolDetailMaxLines?: number
+  /** Top line offset for the currently expanded read/diff detail. */
+  toolDetailScrollOffset?: number
   /** Ids of dispatch_agent tool_use blocks that should render expanded. */
   expandedAgentCallIds?: Set<string>
   resolveToolSource?: (toolName: string) => 'builtin' | 'skill' | 'plugin' | undefined
@@ -137,7 +141,8 @@ export function MessageRow(props: {
         ? m.content
         : m.content.map(b => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n')
     const toolUse = props.toolCallsById?.get(m.toolUseId)
-    if (toolUse && !m.isError && !props.expandedReadResultIds?.has(m.toolUseId)) {
+    const isExpandedDetail = props.expandedReadResultIds?.has(m.toolUseId) ?? false
+    if (toolUse && !m.isError && !isExpandedDetail) {
       const input = toolUse.input && typeof toolUse.input === 'object' && !Array.isArray(toolUse.input)
         ? toolUse.input as Readonly<Record<string, unknown>>
         : undefined
@@ -153,6 +158,36 @@ export function MessageRow(props: {
             </Box>
           </Box>
         )
+      }
+    }
+    if (toolUse && !m.isError && isExpandedDetail) {
+      const input = toolUse.input && typeof toolUse.input === 'object' && !Array.isArray(toolUse.input)
+        ? toolUse.input as Readonly<Record<string, unknown>>
+        : undefined
+      const row = buildToolCallRow(toolUse.name, input)
+      if (row.isRead) {
+        const lines = toolContent.length === 0 ? [] : toolContent.split('\n')
+        const maxLines = Math.max(1, Math.floor(props.toolDetailMaxLines ?? 12))
+        if (lines.length > maxLines) {
+          const maxOffset = Math.max(0, lines.length - maxLines)
+          const scrollOffset = Math.max(
+            0,
+            Math.min(Math.floor(props.toolDetailScrollOffset ?? 0), maxOffset),
+          )
+          const visibleLines = lines.slice(scrollOffset, scrollOffset + maxLines)
+          const startLine = scrollOffset + 1
+          const endLine = scrollOffset + visibleLines.length
+          const label = row.summary ?? toolUse.name
+          return (
+            <Box flexDirection="row">
+              <Text color={barColor} bold>▎ </Text>
+              <Box flexDirection="column" flexGrow={1}>
+                <Text dimColor>{toolUse.name} result: {label} · lines {startLine}-{endLine}/{lines.length}</Text>
+                <Markdown source={visibleLines.join('\n')} />
+              </Box>
+            </Box>
+          )
+        }
       }
     }
     return (

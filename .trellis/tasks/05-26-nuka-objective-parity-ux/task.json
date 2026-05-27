@@ -22,7 +22,8 @@
     "05-26-subagent-resume-fork-scope",
     "05-26-subagent-true-fork-transcript-parity",
     "05-26-subagent-frontmatter-runtime-parity",
-    "05-27-05-27-local-history-search"
+    "05-27-05-27-local-history-search",
+    "05-27-05-27-tui-diff-detail-checkboxes"
   ],
   "parent": null,
   "relatedFiles": [],
