@@ -154,3 +154,42 @@ Recorded Nuka-specific frontend, TUI, state, type-safety, and thinking-guide spe
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: TUI diff detail and checkbox rendering
+
+**Date**: 2026-05-27
+**Task**: TUI diff detail and checkbox rendering
+**Branch**: `main`
+
+### Summary
+
+Rendered GFM task-list checkboxes quietly and added a bounded, scrollable Ctrl+O read/diff detail window with focused TUI coverage.
+
+### Main Changes
+
+- Added quiet GFM task checkbox rendering in transcript Markdown.
+- Added bounded expanded read/diff detail rendering with line-range headers and scroll offsets.
+- Wired `Ctrl+O` detail state through App into Messages so PageDown scrolls the expanded detail window.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e7ba6f` | (see git log) |
+
+### Testing
+
+- [OK] `npm test -- test/tui/Markdown.test.tsx test/tui/Messages.static.test.tsx test/tui/app.test.tsx` passed with 3 files / 26 tests.
+- [OK] `npm run typecheck`
+- [OK] `npm run lint` with the existing 55 warning baseline.
+- [OK] `npm run build`
+- [OK] `git diff --check` and `git diff --cached --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
