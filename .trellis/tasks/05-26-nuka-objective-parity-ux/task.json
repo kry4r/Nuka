@@ -3,7 +3,7 @@
   "name": "nuka-objective-parity-ux",
   "title": "Complete Nuka objective parity and UX roadmap",
   "description": "",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -21,7 +21,8 @@
   "children": [
     "05-26-subagent-resume-fork-scope",
     "05-26-subagent-true-fork-transcript-parity",
-    "05-26-subagent-frontmatter-runtime-parity"
+    "05-26-subagent-frontmatter-runtime-parity",
+    "05-27-05-27-local-history-search"
   ],
   "parent": null,
   "relatedFiles": [],

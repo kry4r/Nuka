@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend pre-development checklist for the history dialog slice."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Ink component and width-aware rendering guidance for SessionList changes."}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Input ownership guidance for preserving SessionList keyboard behavior."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Core/store versus TUI state boundaries for persisted history search."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Typed dialog/history contracts."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Visible TUI quality and truncation requirements."}
+{"file": ".trellis/tasks/05-27-05-27-local-history-search/research/codex-history-search.md", "reason": "Codex reference mapping and MVP boundary."}

@@ -1,0 +1,7 @@
+{"file": ".trellis/tasks/05-27-05-27-local-history-search/prd.md", "reason": "Task requirements and acceptance criteria."}
+{"file": ".trellis/tasks/05-27-05-27-local-history-search/design.md", "reason": "Technical design and boundaries."}
+{"file": ".trellis/tasks/05-27-05-27-local-history-search/implement.md", "reason": "Execution checklist and verification commands."}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Review visible Ink changes for width and keyboard consistency."}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "Review core/store versus TUI state ownership."}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Review typed contracts added for dialog/history search."}
+{"file": "test/tui/app.test.tsx", "reason": "Verify App-level slash-to-history dialog orchestration for /history <query>."}
