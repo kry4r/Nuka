@@ -76,3 +76,44 @@ Implemented Nuka-Code-style subagent runtime frontmatter metadata preservation a
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Local history search
+
+**Date**: 2026-05-27
+**Task**: Local history search
+**Branch**: `main`
+
+### Summary
+
+Implemented Codex-style persisted session history search, added focused core/slash/TUI coverage, and recorded the Trellis child task.
+
+### Main Changes
+
+- Added `/history <query>` plumbing from slash command to the full history dialog.
+- Implemented case-insensitive persisted-session search with matched previews.
+- Added focused core, slash, App, SessionList, and explorer fixture coverage.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2f34612` | (see git log) |
+| `a16b8bf` | (see git log) |
+
+### Testing
+
+- [OK] `npm test -- test/core/session/history/store.test.ts test/slash/history.test.ts test/tui/History/SessionList.test.tsx test/tui/app.test.tsx` (4 files / 36 tests)
+- [OK] `npm run typecheck`
+- [OK] `npm run lint` (0 errors, known 55 warning baseline)
+- [OK] `npm run build` (`dist/cli.js` 576.1 KiB)
+- [OK] `node dist/cli.js explore sweep --fixture-root=test/ui-auto/fixtures --no-judge` (209 passed / 0 failed)
+- [OK] `git diff --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

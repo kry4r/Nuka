@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
-- **Last Active**: 2026-05-26
+- **Total Sessions**: 3
+- **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~78 | Active |
+| `journal-1.md` | ~112 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-05-27 | Local history search | `2f34612`, `a16b8bf` | `main` |
 | 2 | 2026-05-26 | Subagent runtime frontmatter parity | `c2c2b4c`, `6ca50c5` | `main` |
 | 1 | 2026-05-26 | Subagent resume scope parity | `2995303` | `main` |
 <!-- @@@/auto:session-history -->
