@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { PermissionChecker, PLAN_BLOCKED_REASON } from '../../../src/core/permission/checker'
 import { PermissionCache } from '../../../src/core/permission/cache'
 import type { PermissionPayload } from '../../../src/core/permission/bridge'
+import { resolvePermissionProfile } from '../../../src/core/permission/profiles'
 
 describe('PermissionChecker', () => {
   it('auto-allows hint=none without prompting', async () => {
@@ -378,6 +379,68 @@ describe('PermissionChecker', () => {
       })
       expect(d.allowed).toBe(true)
       expect(ask).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('permission profiles', () => {
+    it('rejects profile-denied calls before cache or UI prompt', async () => {
+      const cache = new PermissionCache()
+      cache.add({ scope: 'session', hint: 'exec' })
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const profile = resolvePermissionProfile({
+        active: 'audit',
+        profiles: {
+          audit: {
+            description: 'No process execution.',
+            rules: { exec: 'deny' },
+          },
+        },
+      })
+      const checker = new PermissionChecker(() => cache, ask, () => profile)
+
+      const d = await checker.check({
+        toolName: 'Bash',
+        hint: 'exec',
+        input: { command: 'npm test' },
+      })
+
+      expect(d.allowed).toBe(false)
+      expect(d.reason).toMatch(/permission profile "audit" denies exec/)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('auto-allows profile-allowed calls without prompting', async () => {
+      const ask = vi.fn()
+      const profile = resolvePermissionProfile({
+        active: ':danger-full-access',
+      })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask, () => profile)
+
+      const d = await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'src/app.ts' },
+      })
+
+      expect(d.allowed).toBe(true)
+      expect(ask).not.toHaveBeenCalled()
+    })
+
+    it('profile ask policy keeps the existing prompt path', async () => {
+      const ask = vi.fn().mockResolvedValue({ allowed: true })
+      const profile = resolvePermissionProfile({
+        active: ':workspace',
+      })
+      const checker = new PermissionChecker(() => new PermissionCache(), ask, () => profile)
+
+      const d = await checker.check({
+        toolName: 'Write',
+        hint: 'write',
+        input: { path: 'src/app.ts' },
+      })
+
+      expect(d.allowed).toBe(true)
+      expect(ask).toHaveBeenCalledOnce()
     })
   })
 })

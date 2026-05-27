@@ -220,6 +220,7 @@ export async function loadConfig(opts: {
     compact: projectCfg.compact ?? globalCfg.compact,
     search: projectCfg.search ?? globalCfg.search,
     provider: projectCfg.provider ?? globalCfg.provider,
+    permissions: projectCfg.permissions ?? globalCfg.permissions,
     plugins: projectCfg.plugins ?? globalCfg.plugins,
     vim: projectCfg.vim ?? globalCfg.vim,
     rewind: projectCfg.rewind ?? globalCfg.rewind,

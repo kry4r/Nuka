@@ -2,8 +2,11 @@
 import type { PermissionCache } from './cache'
 import type { PermissionCall, PermissionDecision } from './types'
 import type { PermissionPayload, AnnotationBadge, PermissionVariant } from './bridge'
+import type { ResolvedPermissionProfile } from './profiles'
+import { permissionProfileActionFor } from './profiles'
 
 export type AskUser = (payload: PermissionPayload) => Promise<PermissionDecision>
+export type GetPermissionProfile = () => ResolvedPermissionProfile | null | undefined
 
 /** Derive annotation badges from a PermissionCall's annotations field. */
 function deriveBadges(call: PermissionCall): AnnotationBadge[] | undefined {
@@ -47,6 +50,7 @@ export class PermissionChecker {
   constructor(
     private getCache: () => PermissionCache,
     private askUser: AskUser,
+    private getProfile?: GetPermissionProfile,
   ) {}
 
   async check(call: PermissionCall): Promise<PermissionDecision> {
@@ -71,6 +75,16 @@ export class PermissionChecker {
     }
 
     if (call.hint === 'none') return { allowed: true }
+    const profile = this.getProfile?.()
+    const profileAction = permissionProfileActionFor(profile, call.hint)
+    if (profileAction === 'deny') {
+      return {
+        allowed: false,
+        reason: `permission profile "${profile!.id}" denies ${call.hint}`,
+      }
+    }
+    if (profileAction === 'allow') return { allowed: true }
+
     // Iter LLLL — `'bypass'` mode trusts the session fully and skips
     // confirmation prompts for the `'ask'` hint. Other hints still go
     // through their normal cache/askUser path (bypass for write/exec is

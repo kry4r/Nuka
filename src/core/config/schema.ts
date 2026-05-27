@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { PermissionCatalogSchema } from '../permission/profiles'
 
 export const ProviderFormatSchema = z.enum(['anthropic', 'openai'])
 export type ProviderFormat = z.infer<typeof ProviderFormatSchema>
@@ -222,6 +223,7 @@ export const ConfigSchema = z.object({
   compact: CompactSchema,
   search: SearchSchema,
   provider: ProviderRuntimeConfigSchema,
+  permissions: PermissionCatalogSchema,
   plugins: PluginsConfigSchema,
   vim: VimConfigSchema,
   rewind: RewindConfigSchema,

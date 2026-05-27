@@ -148,6 +148,31 @@ recap:
     })
   })
 
+  it('loads permission profile catalog from project scope', async () => {
+    const home = tmp()
+    const cwd = tmp()
+    mkdirSync(join(cwd, '.nuka'))
+    writeFileSync(
+      join(cwd, '.nuka', 'config.yaml'),
+      `permissions:
+  active: dev
+  profiles:
+    dev:
+      description: Day-to-day coding.
+      extends: ":workspace"
+      rules:
+        network: deny
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd })
+
+    expect(cfg.permissions?.active).toBe('dev')
+    expect(cfg.permissions?.profiles?.dev?.description).toBe('Day-to-day coding.')
+    expect(cfg.permissions?.profiles?.dev?.extends).toBe(':workspace')
+    expect(cfg.permissions?.profiles?.dev?.rules?.network).toBe('deny')
+  })
+
   it('every ConfigSchema top-level key is reachable through loadConfig', async () => {
     // Regression guard: loadConfig enumerates fields explicitly. If a new
     // field is added to ConfigSchema but not to loadConfig's merge object,
@@ -175,6 +200,7 @@ recap:
       notices: 'notices:\n  emergency:\n    tip: sentinel\n',
       effort: 'effort: high\n',
       provider: 'provider:\n  retry:\n    maxAttempts: 2\n',
+      permissions: 'permissions:\n  active: ":workspace"\n',
       locked: 'locked: ["providers.x.apiKey"]\n',
       teamId: 'teamId: sentinel-team\n',
     }

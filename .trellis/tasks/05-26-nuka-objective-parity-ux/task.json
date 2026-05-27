@@ -24,7 +24,8 @@
     "05-26-subagent-frontmatter-runtime-parity",
     "05-27-05-27-local-history-search",
     "05-27-05-27-tui-diff-detail-checkboxes",
-    "05-27-05-27-provider-retry-status"
+    "05-27-05-27-provider-retry-status",
+    "05-27-05-27-permission-profile-runtime"
   ],
   "parent": null,
   "relatedFiles": [],

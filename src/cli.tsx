@@ -18,6 +18,7 @@ import { createHookRegistry, wrapWithHooks, applyHookConfig, defaultHookConfigPa
 import { PermissionChecker } from './core/permission/checker'
 import { PermissionBridge } from './core/permission/bridge'
 import { suggestPattern } from './core/permission/suggest'
+import { resolvePermissionProfile } from './core/permission/profiles'
 import { SlashRegistry } from './slash/registry'
 import { ExitCommand } from './slash/exit'
 import { HelpCommand } from './slash/help'
@@ -45,6 +46,7 @@ import { PlanCommand } from './slash/plan'
 import { GoalCommand } from './slash/goal'
 import { IdeCommand } from './slash/ide'
 import { StatusBarCommand } from './slash/statusBar'
+import { PermissionsCommand } from './slash/permissions'
 import { createPluginCommand } from './slash/plugin'
 import { SkillCommand } from './slash/skill'
 import { RecapCommand } from './slash/recap'
@@ -900,7 +902,7 @@ async function runInteractive(): Promise<void> {
     HistoryCommand,
     MemdirCommand, VimCommand, DoctorCommand,
     RewindCommand, TasksCommand, TaskRunCommand, ThemeCommand, StatsCommand, PlanCommand, GoalCommand, IdeCommand,
-    StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
+    PermissionsCommand, StatusBarCommand, SkillCommand, RecapCommand, monitorCommand,
   ].forEach(c => slash.register(c))
   // /plugin slash dispatches to subcommands. Heavy operations
   // (install/update from the marketplace) live as top-level CLI subcommands;
@@ -1039,7 +1041,18 @@ async function runInteractive(): Promise<void> {
   const askUser = (payload: import('./core/permission/bridge').PermissionPayload) =>
     permBridge.ask({ ...payload, suggestedPattern: suggestPattern(payload.call) })
 
-  const permission = new PermissionChecker(() => sessions.active()!.permissionCache, askUser)
+  let activePermissionProfile: ReturnType<typeof resolvePermissionProfile>
+  try {
+    activePermissionProfile = resolvePermissionProfile(config.permissions)
+  } catch (err) {
+    console.error(`[nuka:permissions] ${(err as Error).message}`)
+    process.exit(2)
+  }
+  const permission = new PermissionChecker(
+    () => sessions.active()!.permissionCache,
+    askUser,
+    () => activePermissionProfile,
+  )
 
   // Phase 14d — register core:editor agent before dispatch_agent so it
   // appears in the dispatch_agent description (which snapshots agents.list()).

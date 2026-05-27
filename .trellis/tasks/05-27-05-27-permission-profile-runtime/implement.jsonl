@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Config schema and permission catalog contracts require Zod validation and typed runtime boundaries."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Slash and permission changes must keep lint, bundle, and runtime quality gates runnable."}

@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Verify the permission config surface has schema, load, and runtime tests."}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Verify the slice through focused tests, source typecheck, lint/build, and diff checks."}
