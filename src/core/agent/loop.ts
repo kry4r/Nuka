@@ -50,6 +50,12 @@ import {
 } from '../session/cronPromptQueue'
 import type { WorktreeStore } from '../worktree/store'
 import { resolveToolCwd } from '../worktree/store'
+import {
+  AttemptTimeoutError,
+  RetryError,
+  computeDelay,
+  type RetryOptions,
+} from '../retry'
 
 /**
  * Apply coordinator-mode tool filtering.
@@ -116,6 +122,13 @@ export type RunAgentDeps = {
    *  (agent.tool.start / agent.tool.end / agent.usage) for every tool
    *  call and turn-end usage update. */
   bus?: EventBus
+  /**
+   * Provider stream retry policy. Retries are intentionally limited to
+   * failures before the first provider event in an attempt; once a partial
+   * assistant/tool event has arrived, replaying the request could duplicate
+   * provider-visible side effects.
+   */
+  providerRetry?: Omit<RetryOptions, 'signal' | 'onAttempt'>
   /** Reasoning effort hint forwarded to provider.stream() each turn. */
   effort?: 'low' | 'medium' | 'high'
   /** Optional final provider/model capability filter before each request. */
@@ -252,6 +265,157 @@ function extractToolCalls(m: AssistantMessage): Array<{ id: string; name: string
   )
 }
 
+function messageFromUnknown(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
+type ProviderStreamRequest = Parameters<ReturnType<ProviderResolver['resolveFor']>['provider']['stream']>[0]
+
+type OpenedProviderStream = {
+  first: IteratorResult<ProviderEvent>
+  next: () => Promise<IteratorResult<ProviderEvent>>
+  close: () => Promise<void>
+}
+
+function retryMaxAttempts(retry: RunAgentDeps['providerRetry']): number {
+  if (!retry) return 1
+  const configured = retry.maxAttempts
+  if (configured === undefined || !Number.isFinite(configured)) return 3
+  return Math.max(1, Math.floor(configured))
+}
+
+function providerRetryDelay(retry: RunAgentDeps['providerRetry'], attempt: number): number {
+  return computeDelay({
+    attempt,
+    initialDelayMs: retry?.initialDelayMs ?? 100,
+    maxDelayMs: retry?.maxDelayMs ?? 30_000,
+    backoffFactor: retry?.backoffFactor ?? 2,
+    jitter: retry?.jitter ?? true,
+  })
+}
+
+function abortReasonOf(signal: AbortSignal): unknown {
+  const reason: unknown = (signal as { reason?: unknown }).reason
+  return reason instanceof Error ? reason : new Error('The operation was aborted.')
+}
+
+function sleepInterruptible(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    if (signal.aborted) return Promise.reject(abortReasonOf(signal))
+    return Promise.resolve()
+  }
+  if (signal.aborted) return Promise.reject(abortReasonOf(signal))
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+      reject(abortReasonOf(signal))
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function createLinkedAbortController(signal: AbortSignal): { ac: AbortController; cleanup: () => void } {
+  const ac = new AbortController()
+  if (signal.aborted) {
+    ac.abort(abortReasonOf(signal))
+    return { ac, cleanup: () => undefined }
+  }
+  const onAbort = (): void => ac.abort(abortReasonOf(signal))
+  signal.addEventListener('abort', onAbort, { once: true })
+  return {
+    ac,
+    cleanup: () => signal.removeEventListener('abort', onAbort),
+  }
+}
+
+async function readProviderNext(
+  iterator: AsyncIterator<ProviderEvent>,
+  ac: AbortController,
+  requestAttempt: number,
+  idleTimeoutMs: number | undefined,
+): Promise<IteratorResult<ProviderEvent>> {
+  if (idleTimeoutMs === undefined || idleTimeoutMs <= 0) return iterator.next()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutError = new AttemptTimeoutError(requestAttempt, idleTimeoutMs)
+  try {
+    return await Promise.race([
+      iterator.next(),
+      new Promise<IteratorResult<ProviderEvent>>((_, reject) => {
+        timeout = setTimeout(() => {
+          ac.abort(timeoutError)
+          reject(timeoutError)
+        }, idleTimeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout)
+  }
+}
+
+async function openProviderStream(
+  provider: ReturnType<ProviderResolver['resolveFor']>['provider'],
+  req: ProviderStreamRequest,
+  signal: AbortSignal,
+  retry: RunAgentDeps['providerRetry'],
+  onRetry: (error: unknown, attempt: number, delayMs: number) => void,
+): Promise<OpenedProviderStream> {
+  const maxAttempts = retryMaxAttempts(retry)
+  let lastError: unknown
+  let lastDelayMs = 0
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    if (signal.aborted) throw abortReasonOf(signal)
+    const linked = createLinkedAbortController(signal)
+    let iterator: AsyncIterator<ProviderEvent> | undefined
+    try {
+      iterator = provider.stream(req, linked.ac.signal)[Symbol.asyncIterator]()
+      const activeIterator = iterator
+      const first = await readProviderNext(activeIterator, linked.ac, attempt, retry?.attemptTimeoutMs)
+      return {
+        first,
+        next: () => readProviderNext(activeIterator, linked.ac, attempt, retry?.attemptTimeoutMs),
+        close: async () => {
+          linked.cleanup()
+          if (typeof activeIterator.return === 'function') {
+            await activeIterator.return().catch(() => undefined)
+          }
+        },
+      }
+    } catch (error) {
+      linked.cleanup()
+      if (iterator && typeof iterator.return === 'function') {
+        await iterator.return().catch(() => undefined)
+      }
+      if (signal.aborted) throw abortReasonOf(signal)
+      lastError = error
+      if (attempt >= maxAttempts) {
+        throw new RetryError(error, attempt, lastDelayMs)
+      }
+      const shouldRetry = retry?.shouldRetry ?? (() => true)
+      if (!(await shouldRetry(error, attempt))) {
+        throw new RetryError(error, attempt, lastDelayMs)
+      }
+      const delayMs = providerRetryDelay(retry, attempt)
+      lastDelayMs = delayMs
+      onRetry(error, attempt, delayMs)
+      await sleepInterruptible(delayMs, signal)
+    }
+  }
+
+  throw new RetryError(lastError, maxAttempts, lastDelayMs)
+}
+
 function applyToAssistant(m: AssistantMessage, ev: ProviderEvent): void {
   if (ev.type === 'text_delta') {
     const last = m.content[m.content.length - 1]
@@ -378,21 +542,42 @@ export async function* runAgent(
     const providerMessages = deps.microCompact
       ? microcompactToolResults(session.messages, deps.microCompact).messages
       : session.messages
-    const stream = provider.stream(
-      {
-        model,
-        system,
-        messages: providerMessages,
-        tools: toolSpecs,
-        effort: deps.resolveEffort ? deps.resolveEffort(deps.effort, model) : deps.effort,
-      },
-      signal,
-    )
+    const providerRequest = {
+      model,
+      system,
+      messages: providerMessages,
+      tools: toolSpecs,
+      effort: deps.resolveEffort ? deps.resolveEffort(deps.effort, model) : deps.effort,
+    }
 
     const assistant = emptyAssistant()
-    for await (const ev of stream) {
-      if (ev.type === 'text_delta') yield { type: 'text_delta', text: ev.text }
-      applyToAssistant(assistant, ev)
+    const stream = await openProviderStream(
+      provider,
+      providerRequest,
+      signal,
+      deps.providerRetry,
+      (error, attempt, delayMs) => {
+        deps.bus?.emit('agent', {
+          type: 'agent.provider.retry',
+          sessionId: session.id,
+          providerId: provider.id,
+          model,
+          attempt,
+          delayMs,
+          error: messageFromUnknown(error),
+        })
+      },
+    )
+    let next = stream.first
+    try {
+      while (!next.done) {
+        const ev = next.value
+        if (ev.type === 'text_delta') yield { type: 'text_delta', text: ev.text }
+        applyToAssistant(assistant, ev)
+        next = await stream.next()
+      }
+    } finally {
+      await stream.close()
     }
     // P0 #2 — fire afterAssistantMessage BEFORE the message lands on
     // the transcript so handlers may rewrite the text via

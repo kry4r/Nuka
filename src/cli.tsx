@@ -104,6 +104,7 @@ import { compactSession } from './core/compact/compact'
 import type { AutoCompactSessionAwareOpts } from './core/agent/autoCompact'
 import { globalConfigPath } from './core/config/paths'
 import { microCompactOptionsFromConfig } from './core/config/microCompact'
+import { providerRetryOptionsFromConfig } from './core/config/providerRetry'
 import { resolveEffortForModel } from './core/config/effort'
 import { MACRO_VERSION } from './version'
 import type { Session } from './core/session/types'
@@ -1373,6 +1374,7 @@ async function runInteractive(): Promise<void> {
       persist: sessions.persist,
       autoCompact: autoCompact!,
       microCompact: microCompactOptionsFromConfig(config),
+      providerRetry: providerRetryOptionsFromConfig(config),
       hooks,
       hookRegistry,
       lsp: lspManager,

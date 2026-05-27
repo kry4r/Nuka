@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import os from 'node:os'
 import { loadConfig } from '../../../src/core/config/load'
 import { ConfigSchema } from '../../../src/core/config/schema'
+import { providerRetryOptionsFromConfig } from '../../../src/core/config/providerRetry'
 
 function tmp(): string {
   return mkdtempSync(join(os.tmpdir(), 'nuka-cfg-'))
@@ -116,6 +117,37 @@ recap:
     expect(cfg.compact?.retainedMessageBudget).toBe(8)
   })
 
+  it('loads provider retry and idle-timeout options from project scope', async () => {
+    const home = tmp()
+    const cwd = tmp()
+    mkdirSync(join(cwd, '.nuka'))
+    writeFileSync(
+      join(cwd, '.nuka', 'config.yaml'),
+      `provider:
+  retry:
+    maxAttempts: 2
+    initialDelayMs: 50
+    maxDelayMs: 500
+    backoffFactor: 3
+    jitter: false
+    idleTimeoutMs: 1000
+`,
+    )
+
+    const cfg = await loadConfig({ home, cwd })
+
+    expect(cfg.provider?.retry?.maxAttempts).toBe(2)
+    expect(cfg.provider?.retry?.idleTimeoutMs).toBe(1000)
+    expect(providerRetryOptionsFromConfig(cfg)).toEqual({
+      maxAttempts: 2,
+      initialDelayMs: 50,
+      maxDelayMs: 500,
+      backoffFactor: 3,
+      jitter: false,
+      attemptTimeoutMs: 1000,
+    })
+  })
+
   it('every ConfigSchema top-level key is reachable through loadConfig', async () => {
     // Regression guard: loadConfig enumerates fields explicitly. If a new
     // field is added to ConfigSchema but not to loadConfig's merge object,
@@ -142,6 +174,7 @@ recap:
       recap: 'recap:\n  awayThresholdMinutes: 42\n',
       notices: 'notices:\n  emergency:\n    tip: sentinel\n',
       effort: 'effort: high\n',
+      provider: 'provider:\n  retry:\n    maxAttempts: 2\n',
       locked: 'locked: ["providers.x.apiKey"]\n',
       teamId: 'teamId: sentinel-team\n',
     }

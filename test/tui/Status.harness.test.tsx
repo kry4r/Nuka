@@ -256,6 +256,30 @@ describe('StatusPanel', () => {
     running.unmount()
   })
 
+  it('shows provider retry status without crowding the provider/model label', async () => {
+    const handle = renderWithViewport(
+      <StatusPanel
+        {...baseProps}
+        mode="running"
+        providerName="Xiaomi Mimo"
+        model="mimo-v2-pro"
+        providerRetry={{ attempt: 1, delayMs: 1250 }}
+        layout="compact"
+        iconMode="text"
+      />,
+      { cols: 76, rows: 6 },
+    )
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      const f = handle.lastFrame() ?? ''
+      expect(f).toContain('retry: attempt 2 in 1.3s')
+      expect(f).toContain('Xiaomi Mimo · mimo-v2-pro')
+      expect(f).not.toContain('socket reset')
+    } finally {
+      handle.unmount()
+    }
+  })
+
   it('text mode uses plain labels for non-idle modes', () => {
     const { lastFrame } = render(
       <StatusPanel {...baseProps} mode="running" layout="dense" iconMode="text" />,

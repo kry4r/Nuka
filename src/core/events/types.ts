@@ -15,6 +15,15 @@ export type AgentBusEvent =
   | { type: 'agent.message.assistant'; sessionId: string; text: string }
   | { type: 'agent.usage'; sessionId: string; inputTokens: number; outputTokens: number }
   | {
+      type: 'agent.provider.retry'
+      sessionId: string
+      providerId: string
+      model: string
+      attempt: number
+      delayMs: number
+      error: string
+    }
+  | {
       type: 'agent.subagent.start'
       sessionId: string
       taskId: string

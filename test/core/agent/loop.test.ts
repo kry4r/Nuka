@@ -8,6 +8,7 @@ import { PermissionCache } from '../../../src/core/permission/cache'
 import type { Tool } from '../../../src/core/tools/types'
 import type { AutoCompactSessionAwareOpts as AutoCompactOpts } from '../../../src/core/agent/autoCompact'
 import { MICROCOMPACT_CLEARED_TOOL_RESULT } from '../../../src/core/compact/microCompact'
+import { createEventBus } from '../../../src/core/events/bus'
 
 function stubProvider(scripts: ProviderEvent[][]): LLMProvider {
   let i = 0
@@ -49,6 +50,166 @@ describe('runAgent', () => {
       usage: { inputTokens: 1, outputTokens: 1 },
     })
     expect(session.messages).toHaveLength(2) // user + assistant
+  })
+
+  it('retries provider streams that fail before any event and emits retry lifecycle event', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    let calls = 0
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream() {
+        calls += 1
+        if (calls === 1) throw new Error('socket reset')
+        yield { type: 'text_delta', text: 'recovered' }
+        yield {
+          type: 'message_stop',
+          stopReason: 'end_turn',
+          usage: { inputTokens: 2, outputTokens: 1 },
+        }
+      },
+      async listRemoteModels() { return [] },
+    }
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const bus = createEventBus()
+    const busEvents: unknown[] = []
+    bus.subscribe('agent', (event) => busEvents.push(event))
+
+    const events: unknown[] = []
+    for await (const ev of runAgent(
+      { text: 'hi' },
+      session,
+      {
+        provider: { resolveFor: () => ({ provider, model: 'm' }) } as any,
+        tools,
+        permission,
+        bus,
+        providerRetry: {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+          jitter: false,
+        },
+      } as any,
+      new AbortController().signal,
+    )) events.push(ev)
+
+    expect(calls).toBe(2)
+    expect(events.at(-1)).toMatchObject({ type: 'turn_end', stopReason: 'end_turn' })
+    expect(busEvents).toContainEqual(expect.objectContaining({
+      type: 'agent.provider.retry',
+      sessionId: session.id,
+      providerId: 'p',
+      model: 'm',
+      attempt: 1,
+      delayMs: 0,
+    }))
+  })
+
+  it('retries provider stream creation failures before any event', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    let calls = 0
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      stream() {
+        calls += 1
+        if (calls === 1) throw new Error('connect failed')
+        return (async function* () {
+          yield { type: 'text_delta', text: 'connected' } satisfies ProviderEvent
+          yield {
+            type: 'message_stop',
+            stopReason: 'end_turn',
+            usage: { inputTokens: 2, outputTokens: 1 },
+          } satisfies ProviderEvent
+        })()
+      },
+      async listRemoteModels() { return [] },
+    }
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const bus = createEventBus()
+    const busEvents: unknown[] = []
+    bus.subscribe('agent', (event) => busEvents.push(event))
+
+    const events: unknown[] = []
+    for await (const ev of runAgent(
+      { text: 'hi' },
+      session,
+      {
+        provider: { resolveFor: () => ({ provider, model: 'm' }) } as any,
+        tools,
+        permission,
+        bus,
+        providerRetry: {
+          maxAttempts: 2,
+          initialDelayMs: 0,
+          jitter: false,
+        },
+      } as any,
+      new AbortController().signal,
+    )) events.push(ev)
+
+    expect(calls).toBe(2)
+    expect(events).toContainEqual({ type: 'text_delta', text: 'connected' })
+    expect(busEvents).toContainEqual(expect.objectContaining({
+      type: 'agent.provider.retry',
+      attempt: 1,
+      error: 'connect failed',
+    }))
+  })
+
+  it('does not retry provider streams after a partial event has arrived', async () => {
+    const session = createSession({ providerId: 'p', model: 'm' })
+    let calls = 0
+    const provider: LLMProvider = {
+      id: 'p',
+      format: 'openai',
+      async *stream() {
+        calls += 1
+        yield { type: 'text_delta', text: 'partial' }
+        throw new Error('dropped after partial')
+      },
+      async listRemoteModels() { return [] },
+    }
+    const tools = new ToolRegistry()
+    const permission = new PermissionChecker(() => session.permissionCache, async () => ({ allowed: true }))
+    const bus = createEventBus()
+    const busEvents: unknown[] = []
+    bus.subscribe('agent', (event) => busEvents.push(event))
+
+    const events: unknown[] = []
+    let caught: unknown
+    try {
+      for await (const ev of runAgent(
+        { text: 'hi' },
+        session,
+        {
+          provider: { resolveFor: () => ({ provider, model: 'm' }) } as any,
+          tools,
+          permission,
+          bus,
+          providerRetry: {
+            maxAttempts: 2,
+            initialDelayMs: 0,
+            jitter: false,
+          },
+        },
+        new AbortController().signal,
+      )) events.push(ev)
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toBe('dropped after partial')
+    expect(calls).toBe(1)
+    expect(events).toEqual([{ type: 'text_delta', text: 'partial' }])
+    expect(busEvents.some(event =>
+      typeof event === 'object' &&
+      event !== null &&
+      (event as { type?: unknown }).type === 'agent.provider.retry',
+    )).toBe(false)
   })
 
   it('runs a tool call then continues the loop until text-only turn', async () => {

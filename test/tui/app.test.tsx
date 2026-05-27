@@ -2,8 +2,8 @@ import React from 'react'
 import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, it, expect } from 'vitest'
-import { render } from 'ink-testing-library'
+import { afterEach, describe, it, expect } from 'vitest'
+import { cleanup, render } from 'ink-testing-library'
 import { App, findLatestReadResultId } from '../../src/tui/App'
 import { SessionManager } from '../../src/core/session/manager'
 import { SessionStore } from '../../src/core/session/store'
@@ -12,10 +12,15 @@ import { HelpCommand } from '../../src/slash/help'
 import { PermissionBridge } from '../../src/core/permission/bridge'
 import { appendMessage, createSession } from '../../src/core/session/session'
 import { CompactCommand } from '../../src/slash/compact'
+import { eventBus } from '../../src/core/events/bus'
 import { HistoryCommand } from '../../src/slash/history'
 import { makeUserMessage } from '../../src/core/message/factories'
 
 describe('App', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   it('boots with welcome screen when no messages exist', () => {
     const sessions = new SessionManager()
     sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
@@ -366,6 +371,61 @@ describe('App', () => {
       rmSync(dir, { recursive: true, force: true })
       if (oldPersist === undefined) delete process.env['NUKA_SESSION_PERSIST']
       else process.env['NUKA_SESSION_PERSIST'] = oldPersist
+    }
+  })
+
+  it('shows provider retry events in status without appending transcript noise', async () => {
+    const sessions = new SessionManager()
+    const session = sessions.start({ providerId: 'p', model: 'mimo-v2-pro' })
+    const slash = new SlashRegistry()
+    const providerConfig = {
+      id: 'p',
+      name: 'Xiaomi Mimo',
+      format: 'openai',
+      baseUrl: 'https://ai.example/v1',
+      models: ['mimo-v2-pro'],
+      selectedModel: 'mimo-v2-pro',
+    }
+
+    const { lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        slash={slash}
+        providers={{
+          listProviders: () => [providerConfig],
+          getProviderConfig: () => providerConfig,
+          fetchRemoteModels: async () => [],
+        } as any}
+        config={{ providers: [providerConfig], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      eventBus.emit('agent', {
+        type: 'agent.provider.retry',
+        sessionId: session.id,
+        providerId: 'p',
+        model: 'mimo-v2-pro',
+        attempt: 1,
+        delayMs: 2500,
+        error: 'socket reset',
+      })
+      await new Promise(r => setImmediate(r))
+
+      const f = lastFrame() ?? ''
+      expect(f).toContain('retry: attempt 2 in 2.5s')
+      expect(f).toContain('Xiaomi Mimo · mimo-v2-pro')
+      expect(session.messages).toHaveLength(0)
+    } finally {
+      unmount()
     }
   })
 

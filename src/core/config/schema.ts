@@ -71,6 +71,25 @@ export const SearchSchema = z
   })
   .optional()
 
+export const ProviderRetryConfigSchema = z
+  .object({
+    maxAttempts: z.number().int().positive().optional(),
+    initialDelayMs: z.number().int().nonnegative().optional(),
+    maxDelayMs: z.number().int().nonnegative().optional(),
+    backoffFactor: z.number().positive().optional(),
+    jitter: z.boolean().optional(),
+    idleTimeoutMs: z.number().int().positive().optional(),
+  })
+  .optional()
+export type ProviderRetryConfig = z.infer<typeof ProviderRetryConfigSchema>
+
+export const ProviderRuntimeConfigSchema = z
+  .object({
+    retry: ProviderRetryConfigSchema,
+  })
+  .optional()
+export type ProviderRuntimeConfig = z.infer<typeof ProviderRuntimeConfigSchema>
+
 export const PluginsConfigSchema = z
   .object({
     enabled: z.array(z.string()).optional(),
@@ -202,6 +221,7 @@ export const ConfigSchema = z.object({
   theme: ThemeSchema,
   compact: CompactSchema,
   search: SearchSchema,
+  provider: ProviderRuntimeConfigSchema,
   plugins: PluginsConfigSchema,
   vim: VimConfigSchema,
   rewind: RewindConfigSchema,

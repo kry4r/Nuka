@@ -219,6 +219,7 @@ export async function loadConfig(opts: {
     theme: projectCfg.theme ?? globalCfg.theme,
     compact: projectCfg.compact ?? globalCfg.compact,
     search: projectCfg.search ?? globalCfg.search,
+    provider: projectCfg.provider ?? globalCfg.provider,
     plugins: projectCfg.plugins ?? globalCfg.plugins,
     vim: projectCfg.vim ?? globalCfg.vim,
     rewind: projectCfg.rewind ?? globalCfg.rewind,

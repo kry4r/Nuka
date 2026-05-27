@@ -71,6 +71,7 @@ import { useTerminalSize } from './hooks/useTerminalSize'
 import { truncateByWidth } from '../core/stringWidth'
 import { defaultPalette as P } from './theme'
 import { allowedEffortLevelsForModel } from '../core/config/effort'
+import type { AgentBusEvent } from '../core/events/types'
 
 /**
  * Scan messages (newest first) for the last assistant `dispatch_agent`
@@ -387,12 +388,18 @@ type ManualCompactState =
   | { status: 'done' }
   | { status: 'failed'; message: string }
 
+type ProviderRetryStatus = {
+  attempt: number
+  delayMs: number
+}
+
 export function App(props: AppProps): React.JSX.Element {
   const { exit } = useApp()
   const [session, setSession] = useState<Session>(() => props.sessions.active()!)
   const [input, setInput] = useState('')
   const [messageScrollOffset, setMessageScrollOffset] = useState(0)
   const [manualCompact, setManualCompact] = useState<ManualCompactState | null>(null)
+  const [providerRetry, setProviderRetry] = useState<ProviderRetryStatus | null>(null)
   // Iter MMMM — stable poke callback wired into PromptInput.onUserInput.
   // When props.idleHook is undefined (no provider configured, or under
   // test) `pokeIdle` is a no-op, so PromptInput needs no special-casing.
@@ -478,6 +485,18 @@ export function App(props: AppProps): React.JSX.Element {
   const RESERVED_ROWS = 14
   const conversationAvailableRows = Math.max(8, terminalRows - RESERVED_ROWS)
 
+  useEffect(() => {
+    setProviderRetry(null)
+    return eventBus.subscribe<AgentBusEvent>('agent', event => {
+      if (event.type !== 'agent.provider.retry') return
+      if (event.sessionId !== session.id) return
+      setProviderRetry({
+        attempt: event.attempt,
+        delayMs: event.delayMs,
+      })
+    })
+  }, [session.id])
+
   // Phase 12 M5 — SlashCard cursor (driven by PromptInput keystrokes).
   const [slashCursor, setSlashCursor] = useState(0)
   const pendingAttachments = useRef<string[]>([])
@@ -524,6 +543,13 @@ export function App(props: AppProps): React.JSX.Element {
     signal: AbortSignal,
   ): AsyncIterable<AgentEvent> => props.runAgent(i, session, signal)
   const stream = useAgentStream({ runAgent: runner })
+
+  useEffect(() => {
+    const last = stream.events.at(-1)
+    if (last?.type === 'turn_end' || last?.type === 'error') {
+      setProviderRetry(null)
+    }
+  }, [stream.events])
 
   const handleSlashEffect = useCallback(async (effect: { kind: string }) => {
     if (effect.kind === 'clear-screen') {
@@ -683,6 +709,7 @@ export function App(props: AppProps): React.JSX.Element {
       session.queue.push(text)
       return
     }
+    setProviderRetry(null)
     const sendResult = await stream.send(text, pendingImages.length > 0 ? { images: pendingImages } : undefined)
     if (!sendResult.ok && !sendResult.busy) {
       appendAssistantNotice(`[error]\n${sendResult.error.message}`, 'agent-error')
@@ -1227,6 +1254,7 @@ export function App(props: AppProps): React.JSX.Element {
           startedAt={session.createdAt}
           planMode={session.mode === 'plan'}
           goal={session.goal}
+          providerRetry={providerRetry}
         />
       )}
       </Box>

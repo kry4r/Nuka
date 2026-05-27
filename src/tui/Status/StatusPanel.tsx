@@ -73,6 +73,11 @@ export type StatusPanelProps = {
   planMode?: boolean
   /** Active thread goal, when set through /goal or restored from session meta. */
   goal?: Pick<SessionGoal, 'objective' | 'status'>
+  /** Most recent provider retry event for the active turn. Hidden when unset. */
+  providerRetry?: {
+    attempt: number
+    delayMs: number
+  } | null
 }
 
 function fmtTokens(n: number): string {
@@ -299,7 +304,7 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
     effectiveHidden.add(h === 'cost-time' ? 'cost' : h)
   }
 
-  const visibleIds = ['mode', 'plan', 'cwd', 'model', 'context', 'cost', 'counts', 'goal']
+  const visibleIds = ['mode', 'plan', 'retry', 'cwd', 'model', 'context', 'cost', 'counts', 'goal']
     .filter(id => !effectiveHidden.has(id))
   const showStatusLineRow = !!props.statusLineConfig && !hidden.has('status-line')
 
@@ -356,6 +361,14 @@ export function StatusPanel(props: StatusPanelProps): React.JSX.Element | null {
   const modeText = modeBadge(props.mode, iconMode)
   if (has('mode') && props.mode !== 'idle') detailParts.push({ id: 'mode', text: modeText, compactText: modeText, minimalText: modeText, color: accent })
   if (has('plan') && props.planMode) detailParts.push({ id: 'plan', text: '[PLAN MODE]', compactText: '[PLAN MODE]', minimalText: '[PLAN MODE]', color: warn, bold: true })
+  if (has('retry') && props.providerRetry) {
+    const seconds = props.providerRetry.delayMs / 1000
+    const text = `retry: attempt ${props.providerRetry.attempt + 1} in ${
+      props.providerRetry.delayMs < 1000 ? `${Math.round(props.providerRetry.delayMs)}ms`
+        : `${seconds.toFixed(1)}s`
+    }`
+    detailParts.push({ id: 'retry', text, compactText: text, minimalText: text, color: warn })
+  }
   if (has('model')) {
     detailParts.push({
       id: 'model',
