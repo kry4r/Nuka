@@ -114,6 +114,71 @@ describe('/goal', () => {
     expect(sessions.active()?.goal).toBeUndefined()
   })
 
+  it('edits the current goal objective while preserving status and budget metadata', async () => {
+    const { ctx: c, sessions } = ctx()
+    sessions.setGoal(sessions.active()!.id, {
+      objective: 'old objective',
+      status: 'blocked',
+      tokenBudget: 12000,
+      tokenUsage: 3000,
+      blockedReason: 'waiting on review',
+    })
+
+    const res = await GoalCommand.run('edit new objective', c)
+
+    expect(res).toEqual({
+      type: 'text',
+      text: 'goal: blocked · new objective\nbudget: 3.0k/12.0k tokens\nblocked: waiting on review',
+    })
+    expect(sessions.active()?.goal).toMatchObject({
+      objective: 'new objective',
+      status: 'blocked',
+      tokenBudget: 12000,
+      tokenUsage: 3000,
+      blockedReason: 'waiting on review',
+    })
+  })
+
+  it('sets and clears a token budget through /goal budget', async () => {
+    const { ctx: c, sessions } = ctx()
+    sessions.setGoal(sessions.active()!.id, { objective: 'watch budget' })
+
+    expect(await GoalCommand.run('budget 12500', c)).toEqual({
+      type: 'text',
+      text: 'goal: active · watch budget\nbudget: 0/12.5k tokens',
+    })
+    expect(sessions.active()?.goal?.tokenBudget).toBe(12500)
+
+    expect(await GoalCommand.run('budget clear', c)).toEqual({
+      type: 'text',
+      text: 'goal: active · watch budget',
+    })
+    expect(sessions.active()?.goal?.tokenBudget).toBeUndefined()
+  })
+
+  it('accounts for current session token usage when showing goal budget', async () => {
+    const { ctx: c, sessions } = ctx()
+    const session = sessions.active()!
+    session.totalUsage.inputTokens = 7000
+    session.totalUsage.outputTokens = 6000
+    sessions.setGoal(session.id, {
+      objective: 'finish within budget',
+      tokenBudget: 12000,
+    })
+
+    const res = await GoalCommand.run('', c)
+
+    expect(res.type).toBe('text')
+    if (res.type === 'text') {
+      expect(res.text).toContain('goal: budget_limited · finish within budget')
+      expect(res.text).toContain('budget: 13.0k/12.0k tokens')
+    }
+    expect(sessions.active()?.goal).toMatchObject({
+      status: 'budget_limited',
+      tokenUsage: 13000,
+    })
+  })
+
   it('returns a friendly message when there is no active session', async () => {
     const { ctx: c } = ctx(false)
 

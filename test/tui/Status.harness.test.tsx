@@ -100,6 +100,19 @@ describe('StatusPanel', () => {
     }
   })
 
+  it('renders budget-limited goals with a user-facing label', () => {
+    const { lastFrame } = render(
+      <StatusPanel
+        {...baseProps}
+        goal={{ objective: 'finish within budget', status: 'budget_limited' }}
+        layout="dense"
+      />,
+    )
+    const f = lastFrame() ?? ''
+    expect(f).toContain('budget: finish within budget')
+    expect(f).not.toContain('budget_limited')
+  })
+
   it('preserves the configured provider name in narrow compact layout', async () => {
     const handle = renderWithViewport(
       <StatusPanel

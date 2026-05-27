@@ -1,0 +1,2 @@
+{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Run focused slash/status tests plus type/build/lint gates before commit."}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"Search existing goal/status helpers before adding new helpers."}

@@ -148,7 +148,11 @@ function backgroundCount(tm?: TaskManager): number {
 }
 
 function goalLabel(goal: Pick<SessionGoal, 'objective' | 'status'>): string {
-  const prefix = goal.status === 'active' ? 'goal' : goal.status
+  const prefix =
+    goal.status === 'active' ? 'goal'
+      : goal.status === 'budget_limited' ? 'budget'
+        : goal.status === 'usage_limited' ? 'usage'
+          : goal.status
   return `${prefix}: ${goal.objective}`
 }
 
