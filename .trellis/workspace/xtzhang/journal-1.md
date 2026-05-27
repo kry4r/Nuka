@@ -117,3 +117,40 @@ Implemented Codex-style persisted session history search, added focused core/sla
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Frontend Trellis guidelines
+
+**Date**: 2026-05-27
+**Task**: Frontend Trellis guidelines
+**Branch**: `main`
+
+### Summary
+
+Recorded Nuka-specific frontend, TUI, state, type-safety, and thinking-guide specs, then archived the bootstrap guidelines task.
+
+### Main Changes
+
+- Added project-specific frontend/TUI spec files under `.trellis/spec/frontend/`.
+- Added shared thinking guides under `.trellis/spec/guides/`.
+- Archived the completed `00-bootstrap-guidelines` setup task.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42d7a42` | (see git log) |
+
+### Testing
+
+- [OK] `rg -n "TBD|TODO|placeholder|lorem|fill" .trellis/spec || true` (only legitimate placeholder wording in technical examples)
+- [OK] `git diff --check -- .trellis/spec`
+- [OK] reviewed spec file line counts and populated frontend index/checklist
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
