@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~189 | Active |
+| `journal-1.md` | ~228 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-05-27 | Provider retry status | `b9836b7` | `main` |
 | 5 | 2026-05-27 | TUI diff detail and checkbox rendering | `6e7ba6f` | `main` |
 | 4 | 2026-05-27 | Frontend Trellis guidelines | `42d7a42` | `main` |
 | 3 | 2026-05-27 | Local history search | `2f34612`, `a16b8bf` | `main` |

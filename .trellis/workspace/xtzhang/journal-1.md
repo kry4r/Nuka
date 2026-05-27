@@ -56,7 +56,10 @@ Implemented Nuka-Code-style subagent runtime frontmatter metadata preservation a
 
 ### Main Changes
 
-(Add details)
+- Added `provider.retry` config loading and CLI wiring into `runAgent`.
+- Retried provider stream creation / first-event failures only, with retry events on the agent bus.
+- Rendered active-session retry status in `StatusPanel` / `App` without transcript messages.
+- Added ESLint 9 flat config so `npm run lint` is runnable.
 
 ### Git Commits
 
@@ -67,7 +70,12 @@ Implemented Nuka-Code-style subagent runtime frontmatter metadata preservation a
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] Staged-patch temp worktree: `npm test -- test/core/config/load.test.ts test/core/agent/loop.test.ts test/tui/Status.harness.test.tsx test/tui/app.test.tsx` passed with 4 files / 63 tests.
+- [OK] Staged-patch temp worktree: `npx tsc --noEmit`.
+- [OK] Staged-patch temp worktree: `npm run build`.
+- [OK] Staged-patch temp worktree: `npm run lint` exited 0 with existing warnings.
+- [INFO] Full `npm run typecheck` still fails in `tsconfig.test.json`; the same failures reproduce on `HEAD` baseline before this patch.
+- [OK] `git diff --check` and `git diff --cached --check`.
 
 ### Status
 
@@ -185,6 +193,39 @@ Rendered GFM task-list checkboxes quietly and added a bounded, scrollable Ctrl+O
 - [OK] `npm run lint` with the existing 55 warning baseline.
 - [OK] `npm run build`
 - [OK] `git diff --check` and `git diff --cached --check`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 6: Provider retry status
+
+**Date**: 2026-05-27
+**Task**: Provider retry status
+**Branch**: `main`
+
+### Summary
+
+Added provider retry config, pre-first-event stream retry events, active-session TUI retry status, and ESLint 9 flat config so lint runs.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b9836b7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
 
 ### Status
 
