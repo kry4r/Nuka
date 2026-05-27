@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-05-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~269 | Active |
+| `journal-1.md` | ~310 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-05-27 | Goal budget edit UX | `11e878b` | `main` |
 | 7 | 2026-05-27 | Permission profile runtime | `386c39f` | `main` |
 | 6 | 2026-05-27 | Provider retry status | `b9836b7` | `main` |
 | 5 | 2026-05-27 | TUI diff detail and checkbox rendering | `6e7ba6f` | `main` |

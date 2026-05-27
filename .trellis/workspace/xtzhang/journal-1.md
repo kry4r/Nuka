@@ -256,13 +256,55 @@ Added permission profile config, inheritance, runtime enforcement, /permissions 
 
 ### Main Changes
 
-(Add details)
+- Added `/goal edit <text>` while preserving the current goal's status, blocker, budget, and usage metadata.
+- Added `/goal budget <tokens|clear>` for explicit token-budget management.
+- Made `/goal` account for current session token usage and surface `budget_limited` when active usage exceeds budget.
+- Rendered budget-limited goals in `StatusPanel` as `budget: ...` instead of the raw enum value.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
 | `386c39f` | (see git log) |
+
+### Testing
+
+- [OK] RED check: goal/status tests failed on HEAD with only the new tests applied.
+- [OK] `npm test -- test/slash/goal.test.ts test/tui/Status.harness.test.tsx` passed with 2 files / 26 tests.
+- [OK] `npx tsc --noEmit`
+- [OK] `npm run build`
+- [OK] `npm run lint` exited 0 with the existing 66 warning baseline.
+- [OK] `git diff --check` and `git diff --cached --check`
+- [WARN] `npm run typecheck` still fails in `tsconfig.test.json` on existing unrelated test type debt after source typecheck passes.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 8: Goal budget edit UX
+
+**Date**: 2026-05-27
+**Task**: Goal budget edit UX
+**Branch**: `main`
+
+### Summary
+
+Added /goal edit, /goal budget set/clear, usage-aware budget_limited rendering, and a readable StatusPanel budget label.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `11e878b` | (see git log) |
 
 ### Testing
 
