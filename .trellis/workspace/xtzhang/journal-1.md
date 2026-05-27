@@ -215,13 +215,54 @@ Added provider retry config, pre-first-event stream retry events, active-session
 
 ### Main Changes
 
-(Add details)
+- Added typed permission profile schemas, built-in profiles, inheritance resolution, managed profile refresh, and catalog summaries.
+- Wired active profile resolution into CLI startup and `PermissionChecker`, enforcing deny/allow before cache or prompt.
+- Added `/permissions` audit output and unit coverage for config loading, profile resolution, runtime enforcement, and command rendering.
+- Raised the CLI bundle-size guard to 100 MB per the current startup-size product constraint.
 
 ### Git Commits
 
 | Hash | Message |
 |------|---------|
 | `b9836b7` | (see git log) |
+
+### Testing
+
+- [OK] `npm test -- test/core/permission/profiles.test.ts test/core/permission/checker.test.ts test/core/config/load.test.ts test/slash/permissions.test.ts test/build/bundle-size.test.ts` passed with 5 files / 53 tests.
+- [OK] `npx tsc --noEmit`
+- [OK] `npm run build`
+- [OK] `npm run lint` exited 0 with the existing 66 warning baseline.
+- [OK] `git diff --check` and `git diff --cached --check`
+- [WARN] `npm run typecheck` still fails in `tsconfig.test.json` on existing unrelated test type debt after source typecheck passes.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 7: Permission profile runtime
+
+**Date**: 2026-05-27
+**Task**: Permission profile runtime
+**Branch**: `main`
+
+### Summary
+
+Added permission profile config, inheritance, runtime enforcement, /permissions audit output, and raised the CLI bundle guard to 100MB per current product constraint.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `386c39f` | (see git log) |
 
 ### Testing
 
