@@ -46,6 +46,7 @@ function formatDate(ts: number): string {
 export type SessionListProps = {
   entries: HistoryListEntry[]
   loading: boolean
+  query?: string
   onResume: (id: SessionId) => void
   onDelete: (id: SessionId) => void
   onCancel: () => void
@@ -77,6 +78,14 @@ export function SessionList(props: SessionListProps): React.JSX.Element {
 
   useInput(handler)
 
+  // 4 cols of chrome: border(2) + paddingX(2). Truncate row to fit terminal.
+  const rowWidth = Math.max(20, columns - 4)
+  const query = props.query?.trim() ?? ''
+  const resultWord = props.entries.length === 1 ? 'result' : 'results'
+  const searchSummary = query
+    ? truncateRight(`Search: ${query} · ${props.entries.length} ${resultWord}`, rowWidth)
+    : ''
+
   if (props.loading) {
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
@@ -90,24 +99,25 @@ export function SessionList(props: SessionListProps): React.JSX.Element {
     return (
       <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
         <Text color={P.primary} bold>Session history</Text>
-        <Text color={P.fg}>No past sessions.</Text>
+        {searchSummary && <Text color={P.fg} dimColor>{searchSummary}</Text>}
+        <Text color={P.fg}>{query ? 'No matching sessions.' : 'No past sessions.'}</Text>
         <Text color={P.fg} dimColor>esc to cancel</Text>
       </Box>
     )
   }
 
-  // 4 cols of chrome: border(2) + paddingX(2). Truncate row to fit terminal.
-  const rowWidth = Math.max(20, columns - 4)
-
   return (
     <Box flexDirection="column" borderStyle="round" borderColor={P.primary} paddingX={1}>
       <Text color={P.primary} bold>Session history</Text>
+      {searchSummary && <Text color={P.fg} dimColor>{searchSummary}</Text>}
       {props.entries.map((entry, i) => {
         const arrow = i === cursor ? '\u203a' : ' '
         const idShort = entry.id.slice(0, 8)
         const date = formatDate(entry.updatedAt)
         const preview = entry.preview || '(no preview)'
-        const row = `${arrow} ${idShort}  ${date}  msgs=${entry.messageCount}  ${preview}`
+        const row = query
+          ? `${arrow} ${idShort}  ${preview}`
+          : `${arrow} ${idShort}  ${date}  msgs=${entry.messageCount}  ${preview}`
         return (
           <Text key={entry.id} color={i === cursor ? P.primary : P.fg}>
             {truncateRight(row, rowWidth)}

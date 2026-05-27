@@ -1,13 +1,19 @@
 import React from 'react'
+import { mkdtempSync, rmSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { render } from 'ink-testing-library'
 import { App, findLatestReadResultId } from '../../src/tui/App'
 import { SessionManager } from '../../src/core/session/manager'
+import { SessionStore } from '../../src/core/session/store'
 import { SlashRegistry } from '../../src/slash/registry'
 import { HelpCommand } from '../../src/slash/help'
 import { PermissionBridge } from '../../src/core/permission/bridge'
-import { appendMessage } from '../../src/core/session/session'
+import { appendMessage, createSession } from '../../src/core/session/session'
 import { CompactCommand } from '../../src/slash/compact'
+import { HistoryCommand } from '../../src/slash/history'
+import { makeUserMessage } from '../../src/core/message/factories'
 
 describe('App', () => {
   it('boots with welcome screen when no messages exist', () => {
@@ -251,6 +257,116 @@ describe('App', () => {
     const f = lastFrame() ?? ''
     expect(f).toContain('Nuka · gpt-5.5')
     expect(f).not.toContain('custom-2')
+  })
+
+  it('opens filtered session history from /history query', async () => {
+    const oldPersist = process.env['NUKA_SESSION_PERSIST']
+    process.env['NUKA_SESSION_PERSIST'] = '1'
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'nuka-app-history-'))
+    const store = new SessionStore({ dir })
+    const past = createSession({ providerId: 'p', model: 'm' })
+    past.createdAt = 100
+    past.updatedAt = 100
+    appendMessage(past, makeUserMessage({ text: 'AUTH BUG in app history route' }))
+    await store.appendMessage(past.id, past.messages[0]!)
+    await store.writeMeta(past)
+
+    const sessions = new SessionManager()
+    sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    const slash = new SlashRegistry()
+    slash.register(HistoryCommand)
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        store={store}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      stdin.write('/history auth bug\r')
+      await new Promise(r => setTimeout(r, 50))
+      const frame = lastFrame() ?? ''
+      expect(frame).toContain('History')
+      expect(frame).toContain('Search: auth bug')
+      expect(frame).toContain('AUTH BUG')
+    } finally {
+      unmount()
+      rmSync(dir, { recursive: true, force: true })
+      if (oldPersist === undefined) delete process.env['NUKA_SESSION_PERSIST']
+      else process.env['NUKA_SESSION_PERSIST'] = oldPersist
+    }
+  })
+
+  it('keeps the search query after deleting from filtered history', async () => {
+    const oldPersist = process.env['NUKA_SESSION_PERSIST']
+    process.env['NUKA_SESSION_PERSIST'] = '1'
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'nuka-app-history-'))
+    const store = new SessionStore({ dir })
+    const match = createSession({ providerId: 'p', model: 'm' })
+    match.createdAt = 100
+    match.updatedAt = 100
+    appendMessage(match, makeUserMessage({ text: 'AUTH BUG delete candidate' }))
+    await store.appendMessage(match.id, match.messages[0]!)
+    await store.writeMeta(match)
+    const other = createSession({ providerId: 'p', model: 'm' })
+    other.createdAt = 200
+    other.updatedAt = 200
+    appendMessage(other, makeUserMessage({ text: 'unrelated deployment note' }))
+    await store.appendMessage(other.id, other.messages[0]!)
+    await store.writeMeta(other)
+
+    const sessions = new SessionManager()
+    sessions.start({ providerId: 'p', model: 'claude-sonnet-4-6' })
+    const slash = new SlashRegistry()
+    slash.register(HistoryCommand)
+    const { stdin, lastFrame, unmount } = render(
+      <App
+        sessions={sessions}
+        store={store}
+        slash={slash}
+        providers={{ listProviders: () => [], getProviderConfig: () => undefined, fetchRemoteModels: async () => [] } as any}
+        config={{ providers: [], active: { providerId: 'p' } } as any}
+        runAgent={async function* () { /* no-op */ }}
+        permissionBridge={new PermissionBridge()}
+        onExit={() => {}}
+        onOpenEditor={() => {}}
+        compactSession={async () => {}}
+        cwd="/root/codes/Nuka"
+        gitBranch={{ branch: 'main', dirty: false }}
+        version="0.1.0"
+      />,
+    )
+
+    try {
+      stdin.write('/history auth bug\r')
+      await new Promise(r => setTimeout(r, 50))
+      expect(lastFrame() ?? '').toContain('AUTH BUG delete candidate')
+
+      stdin.write('d')
+      await new Promise(r => setTimeout(r, 50))
+
+      const frame = lastFrame() ?? ''
+      expect(frame).toContain('Search: auth bug')
+      expect(frame).toContain('0 results')
+      expect(frame).toContain('No matching sessions.')
+      expect(frame).not.toContain('unrelated deployment note')
+    } finally {
+      unmount()
+      rmSync(dir, { recursive: true, force: true })
+      if (oldPersist === undefined) delete process.env['NUKA_SESSION_PERSIST']
+      else process.env['NUKA_SESSION_PERSIST'] = oldPersist
+    }
   })
 
   it('Ctrl+O expands and collapses the latest read tool result', async () => {

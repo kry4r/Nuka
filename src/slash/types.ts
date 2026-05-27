@@ -11,7 +11,7 @@ export type DialogDescriptor =
   | { kind: 'settings' }
   | { kind: 'session-picker' }
   // B4 — full session history browser (opened by /history)
-  | { kind: 'history-list' }
+  | { kind: 'history-list'; query?: string }
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
   | { kind: 'message-selector'; messages: import('../core/message/types').AssistantMessage[] }

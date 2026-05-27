@@ -39,6 +39,39 @@ describe('<SessionList>', () => {
     expect(frame).toMatch(/abc12345/)
   })
 
+  it('renders a compact search summary for filtered results', () => {
+    const { lastFrame } = render(
+      <SessionList
+        entries={[e({ preview: 'AUTH BUG in login' }), e({ id: 'def67890' as SessionId, preview: 'auth bug notes' })]}
+        loading={false}
+        query="auth bug"
+        onResume={() => {}}
+        onDelete={() => {}}
+        onCancel={() => {}}
+      />,
+    )
+    const frame = lastFrame() ?? ''
+    expect(frame).toMatch(/Search: auth bug/)
+    expect(frame).toMatch(/2 results/)
+  })
+
+  it('renders an empty filtered state for searches with no matches', () => {
+    const { lastFrame } = render(
+      <SessionList
+        entries={[]}
+        loading={false}
+        query="missing"
+        onResume={() => {}}
+        onDelete={() => {}}
+        onCancel={() => {}}
+      />,
+    )
+    const frame = lastFrame() ?? ''
+    expect(frame).toMatch(/Search: missing/)
+    expect(frame).toMatch(/0 results/)
+    expect(frame).toMatch(/No matching sessions/)
+  })
+
   it('calls onResume with selected id on enter', async () => {
     const onResume = vi.fn()
     const { stdin } = render(
@@ -69,6 +102,22 @@ describe('<SessionList>', () => {
     stdin.write('d')
     await new Promise(r => setTimeout(r, 10))
     expect(onDelete).toHaveBeenCalledWith('xyz')
+  })
+
+  it('calls onCancel on escape', async () => {
+    const onCancel = vi.fn()
+    const { stdin } = render(
+      <SessionList
+        entries={[e({ id: 'xyz' as SessionId })]}
+        loading={false}
+        onResume={() => {}}
+        onDelete={() => {}}
+        onCancel={onCancel}
+      />,
+    )
+    stdin.write('\x1b')
+    await new Promise(r => setTimeout(r, 10))
+    expect(onCancel).toHaveBeenCalledTimes(1)
   })
 
   it('renders loading state', () => {

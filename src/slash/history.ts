@@ -9,17 +9,22 @@ import { isPersistEnabled, PERSIST_ENV } from '../core/session/history/persist'
 
 export const HistoryCommand: SlashCommand = {
   name: 'history',
-  description: 'Browse, resume or delete past sessions',
+  description: 'Browse, search, resume or delete past sessions',
   source: 'builtin',
-  usage: '/history',
-  examples: ['/history'],
-  run: async () => {
+  usage: '/history [query]',
+  args: [{ name: 'query', description: 'Optional text to search across persisted conversations' }],
+  examples: ['/history', '/history auth bug'],
+  run: async (args) => {
     if (!isPersistEnabled(process.env)) {
       return {
         type: 'text',
         text: `Session history is disabled. Set ${PERSIST_ENV}=1 and restart Nuka to enable cross-startup session resume.`,
       }
     }
-    return { type: 'dialog', dialog: { kind: 'history-list' } }
+    const query = args.trim()
+    return {
+      type: 'dialog',
+      dialog: query ? { kind: 'history-list', query } : { kind: 'history-list' },
+    }
   },
 }

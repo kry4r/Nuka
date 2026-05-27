@@ -12,7 +12,7 @@ describe('/history', () => {
     const old = process.env['NUKA_SESSION_PERSIST']
     delete process.env['NUKA_SESSION_PERSIST']
     try {
-      const res = await HistoryCommand.run('', ctx)
+      const res = await HistoryCommand.run('auth bug', ctx)
       expect(res.type).toBe('text')
       if (res.type === 'text') {
         expect(res.text).toMatch(/NUKA_SESSION_PERSIST/)
@@ -34,6 +34,24 @@ describe('/history', () => {
       expect(res.type).toBe('dialog')
       if (res.type === 'dialog') {
         expect(res.dialog.kind).toBe('history-list')
+      }
+    } finally {
+      delete process.env['NUKA_SESSION_PERSIST']
+    }
+  })
+
+  it('carries a trimmed query into the history-list dialog', async () => {
+    process.env['NUKA_SESSION_PERSIST'] = '1'
+    try {
+      const ctx = {
+        sessions: {} as SlashContext['sessions'],
+        providers: {} as SlashContext['providers'],
+        config: {} as SlashContext['config'],
+      } as SlashContext
+      const res = await HistoryCommand.run('  Auth Bug  ', ctx)
+      expect(res.type).toBe('dialog')
+      if (res.type === 'dialog') {
+        expect(res.dialog).toEqual({ kind: 'history-list', query: 'Auth Bug' })
       }
     } finally {
       delete process.env['NUKA_SESSION_PERSIST']

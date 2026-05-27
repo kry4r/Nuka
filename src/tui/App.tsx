@@ -128,7 +128,7 @@ export type SubmenuDescriptor =
   | { kind: 'effort-picker' }
   | { kind: 'session-picker'; metas: SessionMeta[] | 'loading' }
   // B4 — full session history browser (replaces session-picker for /history).
-  | { kind: 'history-list'; entries: HistoryListEntry[] | 'loading' }
+  | { kind: 'history-list'; entries: HistoryListEntry[] | 'loading'; query?: string }
   | { kind: 'onboarding-wizard' }
   | { kind: 'stats' }
   | { kind: 'doctor'; report: import('../core/doctor/run').DoctorReport }
@@ -590,15 +590,16 @@ export function App(props: AppProps): React.JSX.Element {
           if (!props.store) {
             return
           }
+          const query = res.dialog.query?.trim()
           dispatchUI({
             type: 'open-submenu',
-            submenu: { kind: 'history-list', entries: 'loading' },
+            submenu: { kind: 'history-list', entries: 'loading', query },
           })
           const history = new HistoryStore({ store: props.store })
-          const entries = await history.list()
+          const entries = query ? await history.search(query) : await history.list()
           dispatchUI({
             type: 'update-submenu',
-            submenu: { kind: 'history-list', entries },
+            submenu: { kind: 'history-list', entries, query },
           })
         } else {
           dispatchUI({
@@ -1398,6 +1399,7 @@ export function App(props: AppProps): React.JSX.Element {
           <SessionList
             entries={submenu.entries === 'loading' ? [] : submenu.entries}
             loading={submenu.entries === 'loading'}
+            query={submenu.query}
             onResume={async (id: SessionId) => {
               closeSubmenu()
               const resumed = await props.sessions.resume(id)
@@ -1409,9 +1411,9 @@ export function App(props: AppProps): React.JSX.Element {
               const history = new HistoryStore({ store: props.store })
               await history.delete(id)
               // re-load list
-              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries: 'loading' } })
-              const entries = await history.list()
-              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries } })
+              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries: 'loading', query: submenu.query } })
+              const entries = submenu.query ? await history.search(submenu.query) : await history.list()
+              dispatchUI({ type: 'update-submenu', submenu: { kind: 'history-list', entries, query: submenu.query } })
             }}
             onCancel={closeSubmenu}
           />
